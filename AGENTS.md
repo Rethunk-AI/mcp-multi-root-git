@@ -17,7 +17,12 @@
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod `PresetEntrySchema` / `PresetFileSchema` must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
 | [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT` |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` (uses repo-paths + git) |
-| [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — all `addTool` / `addResource` handlers |
+| [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — calls per-surface `register*` below |
+| [`src/server/git-status-tool.ts`](src/server/git-status-tool.ts) | `registerGitStatusTool` — `git_status` |
+| [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `registerGitInventoryTool` — `git_inventory` |
+| [`src/server/git-parity-tool.ts`](src/server/git-parity-tool.ts) | `registerGitParityTool` — `git_parity` |
+| [`src/server/list-presets-tool.ts`](src/server/list-presets-tool.ts) | `registerListPresetsTool` — `list_presets` |
+| [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `registerPresetsResource` — `rethunk-git://presets` resource |
 | [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
 
 ## Changing contracts
