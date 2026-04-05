@@ -412,10 +412,12 @@ function resolvePathForRepo(p: string, gitTop: string): string {
   return isAbsolute(t) ? resolve(t) : resolve(gitTop, t);
 }
 
-function assertRelativePathUnderTop(relPath: string, absResolved: string, gitTop: string): boolean {
-  if (isAbsolute(relPath.trim())) {
-    return true;
-  }
+/** Resolved path must lie inside git toplevel (relative or absolute user input). */
+function assertRelativePathUnderTop(
+  _relPath: string,
+  absResolved: string,
+  gitTop: string,
+): boolean {
   return isStrictlyUnderGitTop(absResolved, gitTop);
 }
 
