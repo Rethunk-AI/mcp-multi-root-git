@@ -1,7 +1,7 @@
 # MCP tools and resources (canonical reference)
 
 Single source of truth for **registered tool ids**, **client naming**, **JSON output shape**, **resource URI**, and **workspace root resolution**.  
-**Install and MCP clients (only canonical location):** [install.md](install.md). **Preset file, dev, CI, publishing:** [HUMANS.md](../HUMANS.md). **Implementation (`src/server.ts`), contract bumps:** [AGENTS.md](../AGENTS.md).
+**Install and MCP clients (only canonical location):** [install.md](install.md). **Preset file, dev, CI, publishing:** [HUMANS.md](../HUMANS.md). **Implementation layout (`src/server/` + entry [`server.ts`](../src/server.ts)), contract bumps:** [AGENTS.md](../AGENTS.md).
 
 ## Naming
 

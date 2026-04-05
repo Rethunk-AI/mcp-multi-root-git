@@ -11,6 +11,6 @@ Read-only **git** tools over MCP (status, multi-root inventory, `HEAD` parity, p
 | **[docs/install.md](docs/install.md)** | Single source for prerequisites, running the package, and every supported MCP client (plus from-source and troubleshooting) |
 | **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, `format` / JSON, resource URI, workspace root resolution (canonical reference) |
 | **[HUMANS.md](HUMANS.md)** | Preset file, dev commands, CI, publishing |
-| **[AGENTS.md](AGENTS.md)** | Contributors: [`src/server.ts`](src/server.ts) map, contract bumps, CI (IDEs that inject this file as project context should not re-link it from rules) |
+| **[AGENTS.md](AGENTS.md)** | Contributors: implementation map ([`src/server/`](src/server/) + entry [`src/server.ts`](src/server.ts)), contract bumps, CI (IDEs that inject this file as project context should not re-link it from rules) |
 
 **Tools at a glance:** see the table in **[docs/mcp-tools.md](docs/mcp-tools.md)**.
