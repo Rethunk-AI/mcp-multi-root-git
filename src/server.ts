@@ -292,6 +292,7 @@ server.addTool({
     "Read-only push-prep inventory: status + ahead/behind vs remote for each listed root. " +
     "Pass `nestedRoots` (paths relative to workspace root) OR a `preset` name that resolves from " +
     `\`.rethunk/git-mcp-presets.json\` at the workspace root. ` +
+    'When `nestedRoots` is omitted or empty, only the workspace git root is listed; when non-empty, only those paths (add "." to include the root). ' +
     "Workspace root defaults to the first MCP root; pass `workspaceRoot` to override.",
   parameters: z.object({
     workspaceRoot: z
@@ -302,7 +303,7 @@ server.addTool({
       .array(z.string())
       .optional()
       .describe(
-        "Paths relative to workspaceRoot to include, in order. Omit to use a preset or just the root itself.",
+        'Paths relative to workspaceRoot to include, in order. If omitted or empty, only the workspace git root is listed. If non-empty, only these paths are listed (add "." yourself if you want the root too).',
       ),
     preset: z
       .string()
@@ -352,7 +353,7 @@ server.addTool({
 
     if (nestedRoots?.length) {
       for (const rel of nestedRoots) {
-        const abs = join(top, rel);
+        const abs = resolve(top, rel);
         if (!gitRevParseGitDir(abs)) {
           sections.push(
             `## ${rel}`,
@@ -366,9 +367,7 @@ server.addTool({
         }
         appendInventorySection(sections, rel, abs, remote, branch);
       }
-    }
-
-    if (!gitRevParseGitDir(top)) {
+    } else if (!gitRevParseGitDir(top)) {
       sections.push(
         `## .`,
         `path: ${top}`,
