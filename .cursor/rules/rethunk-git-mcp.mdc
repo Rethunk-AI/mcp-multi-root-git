@@ -5,11 +5,9 @@ alwaysApply: true
 
 # rethunk-git MCP (this workspace)
 
-This project registers **rethunk-git** via [`.cursor/mcp.json`](.cursor/mcp.json) (local `bun src/server.ts`). Cursor supplies workspace roots at MCP initialize; do not rely on a fixed `cwd` in config.
+Dogfood and all client wiring: **[docs/install.md](../../docs/install.md)** (*From source*, *Cursor*, *Troubleshooting*). Tools / JSON / resources / root resolution: **[docs/mcp-tools.md](../../docs/mcp-tools.md)**. Presets, dev, CI, publish: **[HUMANS.md](../../HUMANS.md)**. Do not restate install or tool tables in this rule.
 
-**Tool / resource reference** — ids, `rethunk-git_*` names, `format` / JSON, resource URI, workspace-root order: **[docs/mcp-tools.md](../../docs/mcp-tools.md)**. **Operator runbook** — install, Cursor `mcp.json`, preset file, dev/CI/publish: **[HUMANS.md](../../HUMANS.md)** (not auto-loaded; open when you need specifics).
-
-**Do not link or re-open `AGENTS.md` from this rule:** Cursor already injects project **AGENTS.md** as agent context. Duplicating pointers here adds noise.
+**Do not link or re-open `AGENTS.md` from this rule:** it is already injected as project agent context when present.
 
 ## When to use it
 
@@ -19,4 +17,4 @@ Prefer **`rethunk-git_git_*`** and **`rethunk-git_list_presets`** over shell **`
 
 Commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when MCP is unavailable after a failed reload.
 
-If tools are missing: **reload MCP** or run **`bun install`** so `bun` resolves for `bun src/server.ts`.
+If tools are missing: reload the MCP connection and follow **[docs/install.md](../../docs/install.md)** — *Troubleshooting* and *From source* (this clone).

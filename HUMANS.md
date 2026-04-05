@@ -1,8 +1,8 @@
 # @rethunk/mcp-multi-root-git — User guide
 
-Read-only **MCP stdio** git tools for any workspace. No `cwd` in MCP config: the client supplies workspace roots at `initialize`.
+Read-only MCP git tools for any workspace. **How the server is installed and wired to clients:** **[docs/install.md](docs/install.md)** only (do not restate that material here).
 
-**Implementation maps, `src/server.ts` symbols, and contract bumps** live in **`AGENTS.md`** at the repository root. In Cursor that file is normally injected as project agent context—use it there; this guide does not repeat those sections.
+**Implementation maps, `src/server.ts` symbols, and contract bumps** live in **`AGENTS.md`** at the repository root. This guide does not repeat those sections.
 
 **Registered tool ids, client naming (`rethunk-git_*`), `format` / JSON envelopes, resource URI, workspace root resolution:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; not duplicated here.
 
@@ -64,51 +64,29 @@ Invalid JSON or schema errors return **`preset_file_invalid`** (not a silent emp
 
 Relative preset paths must stay inside the git toplevel; escapes are rejected.
 
-## Git on PATH
+## `git_not_found`
 
-The server runs **`git`** subprocesses. If `git` is missing or `git --version` fails, tools respond with **`git_not_found`** (JSON), including when reading the presets resource as JSON.
+If **`git`** is missing or not runnable, tools and the presets resource respond with **`git_not_found`**. Prerequisites and `PATH`: **[docs/install.md](docs/install.md)**.
 
 ## Installation
 
-```bash
-npm install -g @rethunk/mcp-multi-root-git
-npx -y @rethunk/mcp-multi-root-git
-bunx @rethunk/mcp-multi-root-git
-```
-
-## Cursor user-level MCP
-
-Add to `~/.cursor/mcp.json` (no `cwd`; Cursor passes workspace roots):
-
-```json
-{
-  "mcpServers": {
-    "rethunk-git": {
-      "command": "npx",
-      "args": ["-y", "@rethunk/mcp-multi-root-git"]
-    }
-  }
-}
-```
-
-With Bun globally: `"command": "bunx"`, `"args": ["@rethunk/mcp-multi-root-git"]`.
+**Package install and MCP clients:** **[docs/install.md](docs/install.md)**.
 
 ## Development
 
-Requires **Bun ≥ 1.3.11** (`packageManager` in `package.json`). Published usage still targets **Node ≥ 22** for `npx` / global installs.
+Requires **Bun ≥ 1.3.11** to build this repository (`packageManager` in `package.json`). **Published runtime** (Node/Bun/Git and how to launch the server): **[docs/install.md](docs/install.md)** — *Prerequisites*.
 
 ```bash
 bun install
 bun run build      # rimraf dist + tsc → dist/server.js only
 bun run check      # Biome
 bun run check:fix  # Biome --write
+bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-push: CI parity)
 ```
 
+**Git hooks:** after `setup-hooks`, **pre-commit** runs `bun run check`; **pre-push** runs `bun install --frozen-lockfile`, `bun run build`, and `bun run check` (same order as CI). Set **`SKIP_GIT_HOOKS=1`** or use **`--no-verify`** to bypass.
+
 **CI:** pull requests run `bun install --frozen-lockfile`, `bun run build`, and `bun run check` (see `.github/workflows/ci.yml`). Match that locally before opening a PR.
-
-### Cursor (this repository)
-
-[`.cursor/mcp.json`](.cursor/mcp.json) runs **rethunk-git** with `bun src/server.ts` (no prior `dist/` build). Reload MCP if tools are missing. [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) is always-on for **when** to use these tools vs shell git; it points at **[docs/mcp-tools.md](docs/mcp-tools.md)** for tool/resource specifics and **this file** for install/presets/dev, and does not duplicate **`AGENTS.md`** (handled by Cursor as project agent instructions).
 
 ## Publishing
 
