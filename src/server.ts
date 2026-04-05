@@ -575,6 +575,24 @@ function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
   return [`## ${e.label}`, `path: ${e.path}`, "```text", lines.join("\n"), "```", ``];
 }
 
+function upstreamNoteFor(ref: string, ahead: string | null, behind: string | null): string {
+  return ahead != null && behind != null
+    ? `tracking ${ref}`
+    : `upstream ${ref} (counts unreadable)`;
+}
+
+async function fetchAheadBehind(
+  absPath: string,
+  upstreamSpec: string,
+): Promise<{ ahead: string | null; behind: string | null }> {
+  const aheadR = await spawnGitAsync(absPath, ["rev-list", "--count", `${upstreamSpec}..HEAD`]);
+  const behindR = await spawnGitAsync(absPath, ["rev-list", "--count", `HEAD..${upstreamSpec}`]);
+  return {
+    ahead: aheadR.ok ? aheadR.stdout.trim() : null,
+    behind: behindR.ok ? behindR.stdout.trim() : null,
+  };
+}
+
 async function collectInventoryEntry(
   label: string,
   absPath: string,
@@ -616,18 +634,8 @@ async function collectInventoryEntry(
         upstreamNote: `(no local ref ${remote}/${branch} or unreadable)`,
       };
     }
-    const aheadR = await spawnGitAsync(absPath, [
-      "rev-list",
-      "--count",
-      `${remote}/${branch}..HEAD`,
-    ]);
-    const behindR = await spawnGitAsync(absPath, [
-      "rev-list",
-      "--count",
-      `HEAD..${remote}/${branch}`,
-    ]);
-    const ahead = aheadR.ok ? aheadR.stdout.trim() : null;
-    const behind = behindR.ok ? behindR.stdout.trim() : null;
+    const ref = `${remote}/${branch}`;
+    const { ahead, behind } = await fetchAheadBehind(absPath, ref);
     return {
       label,
       path: absPath,
@@ -636,13 +644,10 @@ async function collectInventoryEntry(
       detached,
       headAbbrev: headAbbrev || "(unknown)",
       upstreamMode: "fixed",
-      upstreamRef: `${remote}/${branch}`,
+      upstreamRef: ref,
       ahead,
       behind,
-      upstreamNote:
-        ahead != null && behind != null
-          ? `tracking ${remote}/${branch}`
-          : `upstream ${remote}/${branch} (counts unreadable)`,
+      upstreamNote: upstreamNoteFor(ref, ahead, behind),
     };
   }
 
@@ -669,10 +674,7 @@ async function collectInventoryEntry(
 
   const abbrevR = await spawnGitAsync(absPath, ["rev-parse", "--abbrev-ref", "@{u}"]);
   const upstreamRef = abbrevR.ok ? abbrevR.stdout.trim() : "@{u}";
-  const aheadR = await spawnGitAsync(absPath, ["rev-list", "--count", "@{u}..HEAD"]);
-  const behindR = await spawnGitAsync(absPath, ["rev-list", "--count", "HEAD..@{u}"]);
-  const ahead = aheadR.ok ? aheadR.stdout.trim() : null;
-  const behind = behindR.ok ? behindR.stdout.trim() : null;
+  const { ahead, behind } = await fetchAheadBehind(absPath, "@{u}");
 
   return {
     label,
@@ -685,10 +687,7 @@ async function collectInventoryEntry(
     upstreamRef,
     ahead,
     behind,
-    upstreamNote:
-      ahead != null && behind != null
-        ? `tracking ${upstreamRef}`
-        : `upstream ${upstreamRef} (counts unreadable)`,
+    upstreamNote: upstreamNoteFor(upstreamRef, ahead, behind),
   };
 }
 
