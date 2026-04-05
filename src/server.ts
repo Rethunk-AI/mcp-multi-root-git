@@ -82,6 +82,12 @@ type GitPathState = "unknown" | "ok" | "missing";
 
 let gitPathState: GitPathState = "unknown";
 
+const GIT_NOT_FOUND_BODY: Record<string, unknown> = {
+  error: "git_not_found",
+  message:
+    "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
+};
+
 function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } {
   if (gitPathState === "ok") {
     return { ok: true };
@@ -89,11 +95,7 @@ function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } 
   if (gitPathState === "missing") {
     return {
       ok: false,
-      body: {
-        error: "git_not_found",
-        message:
-          "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
-      },
+      body: GIT_NOT_FOUND_BODY,
     };
   }
   const r = spawnSync("git", ["--version"], { encoding: "utf8" });
@@ -101,11 +103,7 @@ function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } 
     gitPathState = "missing";
     return {
       ok: false,
-      body: {
-        error: "git_not_found",
-        message:
-          "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
-      },
+      body: GIT_NOT_FOUND_BODY,
     };
   }
   gitPathState = "ok";
