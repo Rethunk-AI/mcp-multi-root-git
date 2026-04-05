@@ -15,6 +15,15 @@ MCP clients expose these as `{serverName}_{toolName}` (e.g. `rethunk-git_git_sta
 
 Optional `format: "json"` on each tool returns structured JSON instead of markdown.
 
+### JSON responses and stability
+
+Every JSON string returned by a tool (including error-only responses) ends with a **`rethunkGitMcp`** object:
+
+- **`jsonFormatVersion`**: `"1"` for this response shape; bump only when field names or nesting change in a breaking way.
+- **`packageVersion`**: value from this server’s `package.json` at runtime.
+
+Tool-specific payloads (for example `groups`, `inventories`, `parity`, `roots`) are stable within a given `jsonFormatVersion`. When using presets, successful loads may also include **`presetSchemaVersion`** on the preset file (`"1"` when set explicitly in JSON).
+
 ## Resource
 
 | URI | Purpose |
@@ -41,14 +50,34 @@ Then call tools with `"preset": "push-prep"` instead of passing paths inline. Us
 
 When several MCP file roots exist and you pass a `preset` name, the server picks the first root whose git toplevel loads a preset file containing that name. If that preset entry includes `workspaceRootHint`, only MCP roots whose path basename (or suffix) matches the hint are considered.
 
-**This file is not part of the npm package.** Each repo that needs named presets commits its own file.
+Each consuming repo commits its own **`.rethunk/git-mcp-presets.json`**. The **JSON Schema** for that file ships with this package as **`git-mcp-presets.schema.json`** (also at the repo root here) so editors can validate it.
+
+Point VS Code / Cursor at the schema, for example:
+
+```json
+{
+  "$schema": "./node_modules/@rethunk/mcp-multi-root-git/git-mcp-presets.schema.json",
+  "schemaVersion": "1",
+  "presets": {
+    "push-prep": {
+      "nestedRoots": ["packages/a"],
+      "parityPairs": []
+    }
+  }
+}
+```
+
+**Layouts supported:**
+
+1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }` — use `schemaVersion` `"1"` with the published schema.
+2. **Legacy map:** `{ "<preset-name>": { ... }, ... }` with optional top-level `"schemaVersion"` and `"$schema"` (meta keys are ignored for preset names).
 
 Invalid JSON or schema errors in an existing preset file are returned as structured tool errors (`preset_file_invalid`) instead of a silent empty result.
 
-### Schema
+### Schema (quick reference)
 
 ```jsonc
-// .rethunk/git-mcp-presets.json
+// .rethunk/git-mcp-presets.json — preset entry shape
 {
   "<preset-name>": {
     "nestedRoots": ["<relative-path>", ...],   // git_inventory (optional; merge with presetMerge)
@@ -61,6 +90,8 @@ Invalid JSON or schema errors in an existing preset file are returned as structu
 ```
 
 Paths in presets are resolved under the git toplevel; relative paths that escape the repository are rejected.
+
+The server requires a working **`git`** on `PATH` (`git --version`); otherwise tools respond with `git_not_found` in JSON (or the same payload when clients read resources as JSON).
 
 ## Installation
 
@@ -104,10 +135,12 @@ Requires **Bun ≥ 1.3.11** (see `packageManager` in `package.json`). The publis
 
 ```bash
 bun install
-bun run build      # tsc → dist/
+bun run build      # rimraf dist + tsc → dist/server.js only (no .map / .d.ts)
 bun run check      # Biome lint + format check
 bun run check:fix  # Auto-fix Biome issues
 ```
+
+Pull requests run **`bun install --frozen-lockfile`**, **`bun run build`**, and **`bun run check`** via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ### Cursor (project MCP)
 

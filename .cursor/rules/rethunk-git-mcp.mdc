@@ -21,3 +21,5 @@ This project registers **rethunk-git** via [`.cursor/mcp.json`](.cursor/mcp.json
 - One-off commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when the MCP server is unavailable after a failed reload.
 
 If MCP tools are missing from the session, remind the user to **reload MCP** or run **`bun install`** so `bun` resolves.
+
+JSON tool results (including errors) include **`rethunkGitMcp.jsonFormatVersion`** (`"1"`) and **`packageVersion`**; treat `jsonFormatVersion` as the stability boundary for parsed fields. Preset files can use **`git-mcp-presets.schema.json`** from the package for `$schema` validation. The server needs **`git` on PATH**.
