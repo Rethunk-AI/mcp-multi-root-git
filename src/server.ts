@@ -947,8 +947,12 @@ server.addTool({
       }
 
       const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
+      let nestedRootsTruncated = false;
+      let nestedRootsOmittedCount = 0;
       if (nestedRoots && nestedRoots.length > maxRoots) {
+        nestedRootsOmittedCount = nestedRoots.length - maxRoots;
         nestedRoots = nestedRoots.slice(0, maxRoots);
+        nestedRootsTruncated = true;
       }
 
       const headerNote = useFixed
@@ -1035,6 +1039,7 @@ server.addTool({
         allJson.push({
           workspace_root: top,
           ...(presetSchemaVersion !== undefined ? { presetSchemaVersion } : {}),
+          ...(nestedRootsTruncated ? { nestedRootsTruncated: true, nestedRootsOmittedCount } : {}),
           upstream: useFixed
             ? { mode: "fixed", remote: fixedRemote, branch: fixedBranch }
             : { mode: "auto" },
@@ -1048,6 +1053,12 @@ server.addTool({
           headerNote,
           "",
         ];
+        if (nestedRootsTruncated) {
+          sections.push(
+            `nested_roots_truncated: ${nestedRootsOmittedCount} path(s) not listed (maxRoots=${maxRoots})`,
+            "",
+          );
+        }
         for (const e of entries) {
           sections.push(...buildInventorySectionMarkdown(e));
         }
