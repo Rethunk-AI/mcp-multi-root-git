@@ -51,6 +51,8 @@ Then call tools with `"preset": "push-prep"` instead of passing paths inline.
 npm install -g @rethunk/mcp-multi-root-git
 # or use via npx (no install required):
 npx -y @rethunk/mcp-multi-root-git
+# with Bun (no install required):
+bunx @rethunk/mcp-multi-root-git
 ```
 
 ## Cursor user-level MCP config
@@ -68,6 +70,8 @@ Add to `~/.cursor/mcp.json` (no `cwd` needed — Cursor supplies workspace roots
 }
 ```
 
+If you use Bun globally, you can set `"command": "bunx"` and `"args": ["@rethunk/mcp-multi-root-git"]` instead of `npx`.
+
 ## Workspace root resolution
 
 1. Explicit `workspaceRoot` arg in the tool call (overrides everything).
@@ -78,18 +82,20 @@ When a client sends multiple roots, the first valid `file://` root wins. Documen
 
 ## Development
 
-Requires **Node ≥ 22**. Develop on **Node 24**.
+Requires **Bun ≥ 1.3.11** (see `packageManager` in `package.json`). The published package still runs under **Node ≥ 22** for `npx` and global npm installs.
 
 ```bash
-npm install
-npm run build      # tsc → dist/
-npm run check      # Biome lint + format check
-npm run check:fix  # Auto-fix Biome issues
+bun install
+bun run build      # tsc → dist/
+bun run check      # Biome lint + format check
+bun run check:fix  # Auto-fix Biome issues
 ```
 
 ## Publishing
 
 ```bash
-npm run prepublishOnly  # build + check
-npm publish             # publishes @rethunk/mcp-multi-root-git@1.0.0
+bun run prepublishOnly  # build + check
+bun publish             # publishes @rethunk/mcp-multi-root-git
 ```
+
+`npm publish` still works if you prefer it, as long as `dist/` is built and checks pass.
