@@ -1,0 +1,58 @@
+{
+  "name": "@rethunk/mcp-multi-root-git",
+  "version": "1.0.0",
+  "description": "MCP stdio server: multi-root git status, inventory, and HEAD parity checks. Generic tools usable by any workspace.",
+  "type": "module",
+  "private": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "@rethunk/mcp-multi-root-git": "dist/server.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "prepublishOnly": "npm run build && npm run check"
+  },
+  "keywords": [
+    "mcp",
+    "git",
+    "multi-root",
+    "model-context-protocol",
+    "stdio"
+  ],
+  "author": "Rethunk-AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rethunk-AI/mcp-multi-root-git.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rethunk-AI/mcp-multi-root-git/issues"
+  },
+  "homepage": "https://github.com/Rethunk-AI/mcp-multi-root-git#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "fastmcp": "^3.35.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@types/node": "^22.0.0",
+    "typescript": "^6.0.2"
+  }
+}
