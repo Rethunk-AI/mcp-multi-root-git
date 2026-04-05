@@ -9,8 +9,7 @@
     "node": ">=22.0.0"
   },
   "files": [
-    "dist/server.js",
-    "dist/repo-paths.js",
+    "dist",
     "git-mcp-presets.schema.json",
     "docs/install.md",
     "docs/mcp-tools.md",

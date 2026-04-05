@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FastMCP } from "fastmcp";
@@ -12,31 +12,7 @@ import {
   isStrictlyUnderGitTop,
   resolvePathForRepo,
 } from "./repo-paths.js";
-
-// ---------------------------------------------------------------------------
-// Package version (read from package.json next to dist/ or src/)
-// ---------------------------------------------------------------------------
-
-function readPackageVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const pkgPath = join(here, "..", "package.json");
-  try {
-    const j = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string };
-    return j.version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
-}
-
-/** FastMCP types require major.minor.patch; strip prerelease suffixes from package.json. */
-function readMcpServerVersion(): `${number}.${number}.${number}` {
-  const raw = readPackageVersion().trim();
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(raw);
-  if (m?.[1] !== undefined && m[2] !== undefined && m[3] !== undefined) {
-    return `${m[1]}.${m[2]}.${m[3]}` as `${number}.${number}.${number}`;
-  }
-  return "0.0.0";
-}
+import { jsonRespond, readMcpServerVersion, spreadDefined, spreadWhen } from "./server/json.js";
 
 // ---------------------------------------------------------------------------
 // Preset file schema
@@ -72,8 +48,6 @@ const MAX_INVENTORY_ROOTS_DEFAULT = 64;
 /** Parallel git subprocesses for inventory rows and git_status submodule rows. */
 const GIT_SUBPROCESS_PARALLELISM = 4;
 
-const MCP_JSON_FORMAT_VERSION = "1" as const;
-
 // ---------------------------------------------------------------------------
 // Git on PATH (lazy probe)
 // ---------------------------------------------------------------------------
@@ -108,36 +82,6 @@ function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } 
   }
   gitPathState = "ok";
   return { ok: true };
-}
-
-function jsonRespond(body: Record<string, unknown>): string {
-  return JSON.stringify(
-    {
-      ...body,
-      rethunkGitMcp: {
-        jsonFormatVersion: MCP_JSON_FORMAT_VERSION,
-        packageVersion: readPackageVersion(),
-      },
-    },
-    null,
-    2,
-  );
-}
-
-/** Spread into an object literal only when `cond` is true; otherwise `{}`. */
-function spreadWhen<T extends Record<string, unknown>>(
-  cond: boolean,
-  fields: T,
-): T | Record<string, never> {
-  return cond ? fields : {};
-}
-
-/** Spread `{ [key]: value }` only when `value` is not `undefined`. */
-function spreadDefined<K extends string, V>(
-  key: K,
-  value: V | undefined,
-): Record<K, V> | Record<string, never> {
-  return spreadWhen(value !== undefined, { [key]: value } as Record<K, V>);
 }
 
 // ---------------------------------------------------------------------------

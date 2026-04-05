@@ -78,7 +78,7 @@ Requires **Bun ≥ 1.3.11** to build this repository (`packageManager` in `packa
 
 ```bash
 bun install
-bun run build      # rimraf dist + tsc → dist/server.js only
+bun run build      # rimraf dist + tsc → dist/server.js, dist/server/*.js, dist/repo-paths.js
 bun run check      # Biome
 bun run check:fix  # Biome --write
 bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-push: CI parity)
@@ -95,4 +95,4 @@ bun run prepublishOnly  # build + check + test
 bun publish
 ```
 
-`npm publish` works if `dist/` is built and checks pass.
+`npm publish` works if `dist/` is built and checks pass. **`package.json` `files` includes the whole `dist/` directory** so every emitted chunk the entry imports is packed; if you add new `src/server/*.ts` modules, `tsc` will emit matching `dist/server/*.js` files—do not narrow `files` back to a single `server.js` or installs will break.
