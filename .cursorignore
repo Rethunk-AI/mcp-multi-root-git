@@ -1,0 +1,4 @@
+# Build output and dependencies — not useful for AI context
+dist/
+node_modules/
+
