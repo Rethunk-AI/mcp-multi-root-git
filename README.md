@@ -91,6 +91,10 @@ bun run check      # Biome lint + format check
 bun run check:fix  # Auto-fix Biome issues
 ```
 
+### Cursor (project MCP)
+
+This repo includes [`.cursor/mcp.json`](.cursor/mcp.json), which starts **rethunk-git** with `bun src/server.ts` (no `dist/` build required for the editor). Open the workspace in Cursor, then **reload MCP** (Command Palette → “MCP: Reload Servers” or equivalent) if the tools do not appear. Agents in this project are guided by [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) to prefer **`rethunk-git_git_*`** tools for workspace git queries.
+
 ## Publishing
 
 ```bash
