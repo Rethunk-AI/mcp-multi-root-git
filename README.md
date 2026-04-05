@@ -37,7 +37,7 @@ Then call tools with `"preset": "push-prep"` instead of passing paths inline.
 // .rethunk/git-mcp-presets.json
 {
   "<preset-name>": {
-    "nestedRoots": ["<relative-path>", ...],   // for git_inventory
+    "nestedRoots": ["<relative-path>", ...],   // git_inventory: only these paths (include "." for repo root)
     "parityPairs": [                             // for git_parity
       { "left": "<rel>", "right": "<rel>", "label": "<display>" }
     ]
