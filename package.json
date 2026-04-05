@@ -11,6 +11,8 @@
   "files": [
     "dist/server.js",
     "git-mcp-presets.schema.json",
+    "AGENTS.md",
+    "HUMANS.md",
     "README.md",
     "LICENSE"
   ],

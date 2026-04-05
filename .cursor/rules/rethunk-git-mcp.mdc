@@ -7,19 +7,14 @@ alwaysApply: true
 
 This project registers **rethunk-git** via [`.cursor/mcp.json`](.cursor/mcp.json) (local `bun src/server.ts`). Cursor supplies workspace roots at MCP initialize; do not rely on a fixed `cwd` in config.
 
+**Full tool list, arguments, JSON shape, presets, and root-resolution order:** **[HUMANS.md](../../HUMANS.md)** and **[AGENTS.md](../../AGENTS.md)**.
+
 ## When to use it
 
-- Before describing repo or multi-root git state, or when batching commits across paths, call **MCP tools** instead of shell `git status`, `git log`, or ad-hoc loops:
-  - **`rethunk-git_git_status`** — root + submodule-style sweep (`allWorkspaceRoots`, `rootIndex`, optional `format: "json"`)
-  - **`rethunk-git_git_inventory`** — status and ahead/behind per root (default upstream `@{u}`; pass `remote`+`branch` together for fixed tracking; `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`)
-  - **`rethunk-git_git_parity`** — compare `HEAD` across path pairs (`pairs`, `preset`, `presetMerge`, `format`)
-  - **`rethunk-git_list_presets`** — discover `.rethunk/git-mcp-presets.json` entries and validation errors
-- Resource **`rethunk-git://presets`** — JSON view of presets at the resolved git toplevel when clients support MCP resources
+Prefer **`rethunk-git_git_*`** (and **`rethunk-git_list_presets`**) over shell **`git status`** / ad-hoc loops when describing multi-root or preset-driven git state. Resource **`rethunk-git://presets`** when the client supports MCP resources.
 
 ## When shell git is still fine
 
-- One-off commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when the MCP server is unavailable after a failed reload.
+Commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when MCP is unavailable after a failed reload.
 
-If MCP tools are missing from the session, remind the user to **reload MCP** or run **`bun install`** so `bun` resolves.
-
-JSON tool results (including errors) include **`rethunkGitMcp.jsonFormatVersion`** (`"1"`) and **`packageVersion`**; treat `jsonFormatVersion` as the stability boundary for parsed fields. Preset files can use **`git-mcp-presets.schema.json`** from the package for `$schema` validation. The server needs **`git` on PATH**.
+If tools are missing: **reload MCP** or run **`bun install`** so `bun` resolves for `bun src/server.ts`.
