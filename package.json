@@ -10,6 +10,7 @@
   },
   "files": [
     "dist/server.js",
+    "dist/repo-paths.js",
     "git-mcp-presets.schema.json",
     "docs/install.md",
     "docs/mcp-tools.md",
@@ -30,7 +31,8 @@
     "build": "rimraf dist && tsc",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "prepublishOnly": "bun run build && bun run check",
+    "test": "bun test src/",
+    "prepublishOnly": "bun run build && bun run check && bun run test",
     "setup-hooks": "git config core.hooksPath .githooks"
   },
   "keywords": [

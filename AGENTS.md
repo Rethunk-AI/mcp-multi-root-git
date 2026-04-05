@@ -27,11 +27,11 @@
 
 ## Validation and CI
 
-Local: `bun run build` (`rimraf dist && tsc`), `bun run check` (Biome). Same commands run in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) with `bun install --frozen-lockfile`.
+Local: `bun run build` (`rimraf dist && tsc`), `bun run check` (Biome), `bun run test` (`bun test` for [`src/repo-paths.test.ts`](src/repo-paths.test.ts)). CI runs the same after `bun install --frozen-lockfile` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 Optional [`.githooks/`](.githooks): run **`bun run setup-hooks`** once per clone (`core.hooksPath` → `.githooks`). **pre-commit** = `check`; **pre-push** = frozen install + build + check. See [HUMANS.md](HUMANS.md) Development.
 
-There is no `test` script yet; rely on build + Biome for regressions unless you add tests.
+Path confinement helpers live in [`src/repo-paths.ts`](src/repo-paths.ts); extend tests when changing that logic.
 
 ## Repository MCP entry (contributors)
 

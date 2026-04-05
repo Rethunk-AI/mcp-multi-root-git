@@ -23,3 +23,6 @@ jobs:
 
       - name: Lint and format check
         run: bun run check
+
+      - name: Unit tests
+        run: bun run test

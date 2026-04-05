@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FastMCP } from "fastmcp";
 import { z } from "zod";
+
+import {
+  assertRelativePathUnderTop,
+  isStrictlyUnderGitTop,
+  resolvePathForRepo,
+} from "./repo-paths.js";
 
 // ---------------------------------------------------------------------------
 // Package version (read from package.json next to dist/ or src/)
@@ -385,40 +391,6 @@ function mergePairs<T extends { left: string; right: string; label?: string }>(
   const b = inline ?? [];
   if (a.length === 0 && b.length === 0) return undefined;
   return [...a, ...b];
-}
-
-// ---------------------------------------------------------------------------
-// Path safety (relative paths must stay under git toplevel)
-// ---------------------------------------------------------------------------
-
-function realPathOrSelf(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-}
-
-function isStrictlyUnderGitTop(absPath: string, gitTop: string): boolean {
-  const absR = realPathOrSelf(resolve(absPath));
-  const topR = realPathOrSelf(resolve(gitTop));
-  const rel = relative(topR, absR);
-  if (rel === "") return true;
-  return !rel.startsWith("..") && !isAbsolute(rel);
-}
-
-function resolvePathForRepo(p: string, gitTop: string): string {
-  const t = p.trim();
-  return isAbsolute(t) ? resolve(t) : resolve(gitTop, t);
-}
-
-/** Resolved path must lie inside git toplevel (relative or absolute user input). */
-function assertRelativePathUnderTop(
-  _relPath: string,
-  absResolved: string,
-  gitTop: string,
-): boolean {
-  return isStrictlyUnderGitTop(absResolved, gitTop);
 }
 
 // ---------------------------------------------------------------------------
