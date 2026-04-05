@@ -27,6 +27,8 @@ Every JSON string returned by a tool (including errors) ends with a **`rethunkGi
 
 Payload keys (e.g. `groups`, `inventories`, `parity`, `roots`) are stable within a given `jsonFormatVersion`. Preset-related responses may include **`presetSchemaVersion`**.
 
+For **`git_inventory`** with `format: "json"`, each object inside **`inventories`** may include **`nestedRootsTruncated`** (boolean) and **`nestedRootsOmittedCount`** (number) when **`nestedRoots`** was longer than **`maxRoots`**.
+
 **When to bump `jsonFormatVersion` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*.
 
 ## Resource
