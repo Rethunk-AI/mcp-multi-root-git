@@ -86,9 +86,22 @@ bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-pu
 
 **Git hooks:** after `setup-hooks`, **pre-commit** runs `bun run check`; **pre-push** runs `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test` (same order as CI). Set **`SKIP_GIT_HOOKS=1`** or use **`--no-verify`** to bypass.
 
-**CI:** pull requests run `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test` (see `.github/workflows/ci.yml`). Match that locally before opening a PR.
+**CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test`. A follow-up job **`prerelease-pack`** builds the same tree and runs **`npm pack`**, then uploads a **prerelease `.tgz` artifact** (named with the commit SHA) you can download from the workflow run’s **Artifacts** section (retention 90 days). Match the check job locally before opening a PR.
 
 ## Publishing
+
+### npm (production) — version tags only
+
+Releases to [npmjs](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml) when you push a **semver git tag** `vX.Y.Z` that **exactly matches** `version` in `package.json` (e.g. tag `v1.2.3` and `"version": "1.2.3"`).
+
+1. Bump **`package.json` `version`**, commit on `main`.
+2. Create and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+
+The workflow runs build, check, and tests, publishes with **`npm publish`**, then creates a **GitHub Release** for that tag and attaches the same **`.tgz`** as a downloadable asset.
+
+**Repository secret:** add **`NPM_TOKEN`** (granular npm access token with publish permission for `@rethunk/mcp-multi-root-git` or the scope). Without it, the publish step fails.
+
+### Local publish (maintainers)
 
 ```bash
 bun run prepublishOnly  # build + check + test
