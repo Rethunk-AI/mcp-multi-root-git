@@ -449,6 +449,24 @@ function hasGitMetadata(dir: string): boolean {
   return existsSync(join(dir, ".git"));
 }
 
+/** Conservative checks for remote/branch strings passed into git rev-parse / rev-list argv. */
+function isSafeGitUpstreamToken(s: string): boolean {
+  const t = s.trim();
+  if (t.length === 0 || t.length > 256) return false;
+  if (t.includes("..")) return false;
+  if (t.startsWith("-")) return false;
+  if (t.includes("@")) return false;
+  const forbidden = new Set("{}[]~^:?*\\".split(""));
+  for (let i = 0; i < t.length; i++) {
+    const ch = t.charAt(i);
+    const c = ch.charCodeAt(0);
+    if (c < 32 || c === 127) return false;
+    if (/\s/.test(ch)) return false;
+    if (forbidden.has(ch)) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Async pool for parallel git (inventory)
 // ---------------------------------------------------------------------------
@@ -855,6 +873,17 @@ server.addTool({
       });
     }
     const useFixed = hasRemote && hasBranch;
+    if (useFixed) {
+      const r = String(fixedRemote).trim();
+      const b = String(fixedBranch).trim();
+      if (!isSafeGitUpstreamToken(r) || !isSafeGitUpstreamToken(b)) {
+        return jsonRespond({
+          error: "invalid_remote_or_branch",
+          message:
+            "remote and branch must be plain tokens: no whitespace, control characters, `@`, `..`, leading `-`, or git rev metacharacters like `^ : ? * [ ] { } ~ \\`.",
+        });
+      }
+    }
 
     const allJson: {
       workspace_root: string;
