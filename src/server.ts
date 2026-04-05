@@ -265,6 +265,29 @@ function resolveRootsForPreset(
   return resolveWorkspaceRoots(server, args);
 }
 
+type GitAndRootsResult =
+  | { ok: true; roots: string[] }
+  | { ok: false; error: Record<string, unknown> };
+
+/** `gateGit` plus workspace / preset root resolution; shared tool and resource prelude. */
+function requireGitAndRoots(
+  server: FastMCP,
+  args: RootPick,
+  presetName: string | undefined,
+): GitAndRootsResult {
+  const gg = gateGit();
+  if (!gg.ok) {
+    return { ok: false, error: gg.body };
+  }
+  const rootsRes = presetName
+    ? resolveRootsForPreset(server, args, presetName)
+    : resolveWorkspaceRoots(server, args);
+  if (!rootsRes.ok) {
+    return { ok: false, error: rootsRes.error };
+  }
+  return { ok: true, roots: rootsRes.roots };
+}
+
 // ---------------------------------------------------------------------------
 // Preset file loader
 // ---------------------------------------------------------------------------
@@ -812,21 +835,16 @@ server.addTool({
       .describe("When true (default), include submodule paths listed in .gitmodules."),
   }),
   execute: async (args) => {
-    const gg = gateGit();
-    if (!gg.ok) {
-      return jsonRespond(gg.body);
-    }
-
-    const rootsRes = resolveWorkspaceRoots(server, args);
-    if (!rootsRes.ok) {
-      return jsonRespond(rootsRes.error);
+    const pre = requireGitAndRoots(server, args, undefined);
+    if (!pre.ok) {
+      return jsonRespond(pre.error);
     }
 
     type RepoRow = { label: string; path: string; statusText: string; ok: boolean };
     type Group = { mcpRoot: string; repos: RepoRow[] };
     const groups: Group[] = [];
 
-    for (const rootInput of rootsRes.roots) {
+    for (const rootInput of pre.roots) {
       const repos: RepoRow[] = [];
       const top = gitTopLevel(rootInput);
       if (!top) {
@@ -942,16 +960,9 @@ server.addTool({
       .describe("Max nested roots to process (cap)."),
   }),
   execute: async (args) => {
-    const gg = gateGit();
-    if (!gg.ok) {
-      return jsonRespond(gg.body);
-    }
-
-    const rootsRes = args.preset
-      ? resolveRootsForPreset(server, args, args.preset)
-      : resolveWorkspaceRoots(server, args);
-    if (!rootsRes.ok) {
-      return jsonRespond(rootsRes.error);
+    const pre = requireGitAndRoots(server, args, args.preset);
+    if (!pre.ok) {
+      return jsonRespond(pre.error);
     }
 
     const fixedRemote = args.remote;
@@ -986,7 +997,7 @@ server.addTool({
 
     const mdChunks: string[] = [];
 
-    for (const workspaceRoot of rootsRes.roots) {
+    for (const workspaceRoot of pre.roots) {
       const top = gitTopLevel(workspaceRoot);
       if (!top) {
         const err = { error: "not_a_git_repository", path: workspaceRoot };
@@ -1162,16 +1173,9 @@ server.addTool({
     presetMerge: z.boolean().optional().default(false),
   }),
   execute: async (args) => {
-    const gg = gateGit();
-    if (!gg.ok) {
-      return jsonRespond(gg.body);
-    }
-
-    const rootsRes = args.preset
-      ? resolveRootsForPreset(server, args, args.preset)
-      : resolveWorkspaceRoots(server, args);
-    if (!rootsRes.ok) {
-      return jsonRespond(rootsRes.error);
+    const pre = requireGitAndRoots(server, args, args.preset);
+    if (!pre.ok) {
+      return jsonRespond(pre.error);
     }
 
     const results: {
@@ -1192,7 +1196,7 @@ server.addTool({
 
     const mdParts: string[] = [];
 
-    for (const workspaceRoot of rootsRes.roots) {
+    for (const workspaceRoot of pre.roots) {
       const top = gitTopLevel(workspaceRoot);
       if (!top) {
         const errPayload = { error: "not_a_git_repository", path: workspaceRoot };
@@ -1340,14 +1344,9 @@ server.addTool({
     format: true,
   }),
   execute: async (args) => {
-    const gg = gateGit();
-    if (!gg.ok) {
-      return jsonRespond(gg.body);
-    }
-
-    const rootsRes = resolveWorkspaceRoots(server, args);
-    if (!rootsRes.ok) {
-      return jsonRespond(rootsRes.error);
+    const pre = requireGitAndRoots(server, args, undefined);
+    if (!pre.ok) {
+      return jsonRespond(pre.error);
     }
 
     const out: {
@@ -1365,7 +1364,7 @@ server.addTool({
       error?: Record<string, unknown>;
     }[] = [];
 
-    for (const ws of rootsRes.roots) {
+    for (const ws of pre.roots) {
       const top = gitTopLevel(ws);
       const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
       if (!top) {
@@ -1467,16 +1466,11 @@ server.addResource({
   name: "git-mcp-presets",
   mimeType: "application/json",
   async load() {
-    const gg = gateGit();
-    if (!gg.ok) {
-      return { text: jsonRespond(gg.body) };
+    const pre = requireGitAndRoots(server, {}, undefined);
+    if (!pre.ok) {
+      return { text: jsonRespond(pre.error) };
     }
-
-    const rootsRes = resolveWorkspaceRoots(server, {});
-    if (!rootsRes.ok) {
-      return { text: jsonRespond(rootsRes.error) };
-    }
-    const ws = rootsRes.roots[0];
+    const ws = pre.roots[0];
     if (!ws) {
       return { text: jsonRespond({ error: "no_workspace_root" }) };
     }
