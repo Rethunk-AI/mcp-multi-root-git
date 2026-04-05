@@ -1,0 +1,21 @@
+---
+description: Use the rethunk-git MCP server for git workspace queries in this repo
+alwaysApply: true
+---
+
+# rethunk-git MCP (this workspace)
+
+This project registers **rethunk-git** via [`.cursor/mcp.json`](.cursor/mcp.json) (local `bun src/server.ts`). Cursor supplies workspace roots at MCP initialize; do not rely on a fixed `cwd` in config.
+
+## When to use it
+
+- Before describing repo or multi-root git state, or when batching commits across paths, call **MCP tools** instead of shell `git status`, `git log`, or ad-hoc loops:
+  - **`rethunk-git_git_status`** — root + submodule-style sweep
+  - **`rethunk-git_git_inventory`** — status and ahead/behind per root (pass `nestedRoots` when this repo grows subpackages)
+  - **`rethunk-git_git_parity`** — compare `HEAD` across path pairs when needed
+
+## When shell git is still fine
+
+- One-off commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when the MCP server is unavailable after a failed reload.
+
+If MCP tools are missing from the session, remind the user to **reload MCP** or run **`bun install`** so `bun` resolves.
