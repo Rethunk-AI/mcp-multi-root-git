@@ -125,7 +125,7 @@ function jsonRespond(body: Record<string, unknown>): string {
 }
 
 /** Spread into an object literal only when `cond` is true; otherwise `{}`. */
-function optionalFields<T extends Record<string, unknown>>(
+function spreadWhen<T extends Record<string, unknown>>(
   cond: boolean,
   fields: T,
 ): T | Record<string, never> {
@@ -137,7 +137,7 @@ function spreadDefined<K extends string, V>(
   key: K,
   value: V | undefined,
 ): Record<K, V> | Record<string, never> {
-  return value !== undefined ? ({ [key]: value } as Record<K, V>) : {};
+  return spreadWhen(value !== undefined, { [key]: value } as Record<K, V>);
 }
 
 // ---------------------------------------------------------------------------
@@ -1129,7 +1129,7 @@ server.addTool({
         allJson.push({
           workspace_root: top,
           ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
-          ...optionalFields(nestedRootsTruncated, {
+          ...spreadWhen(nestedRootsTruncated, {
             nestedRootsTruncated: true,
             nestedRootsOmittedCount,
           }),
