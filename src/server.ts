@@ -765,7 +765,15 @@ server.addTool({
       if (includeSubmodules) {
         const rels = parseGitSubmodulePaths(top);
         const subRows = await asyncPool(rels, GIT_SUBPROCESS_PARALLELISM, async (rel) => {
-          const subPath = join(top, rel);
+          const subPath = resolve(join(top, rel));
+          if (!isStrictlyUnderGitTop(subPath, top)) {
+            return {
+              label: rel,
+              path: subPath,
+              statusText: "(submodule path escapes repository — rejected)",
+              ok: false,
+            };
+          }
           if (!hasGitMetadata(subPath)) {
             return {
               label: rel,
