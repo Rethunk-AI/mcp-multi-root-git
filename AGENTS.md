@@ -21,6 +21,7 @@
 
 ## Changing contracts
 
+- **Documentation layout:** do not add top-of-file **banner** paragraphs (bold blocks such as “Canonical doc for… / link here only”) to `docs/install.md` or other shipped docs. Use normal titles, TOC, and cross-links from README / this file / HUMANS.
 - **`rethunkGitMcp.jsonFormatVersion`:** bump **`MCP_JSON_FORMAT_VERSION`** and document the migration in this file and in [docs/mcp-tools.md](docs/mcp-tools.md) when JSON field names or nesting change incompatibly.
 - **Preset file:** keep **`splitPresetFileRaw`** + Zod parsing aligned with **`git-mcp-presets.schema.json`**; update the schema when adding keys or shapes.
 - **Public tool surface:** if you add/rename tools, update [docs/mcp-tools.md](docs/mcp-tools.md) and [README.md](README.md) if the landing page still mentions tools; update [docs/install.md](docs/install.md) if install or client-specific wiring changes — **never** copy install steps into other docs; update [.cursor/rules/rethunk-git-mcp.mdc](.cursor/rules/rethunk-git-mcp.mdc) only if *when-to-use MCP vs shell* wording must change (that rule links `docs/install.md`, [HUMANS.md](HUMANS.md), and `docs/mcp-tools.md` without duplicating them).
