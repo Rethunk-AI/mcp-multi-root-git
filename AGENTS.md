@@ -1,23 +1,24 @@
 # AGENTS.md — LLM and developer onboarding
 
-**Scope:** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) is a single-file MCP **stdio** server: source [`src/server.ts`](src/server.ts), build output [`dist/server.js`](dist/server.js) (see `package.json` `bin` / `exports`).
+**Scope:** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) is an MCP **stdio** server: entry [`src/server.ts`](src/server.ts) (FastMCP + `registerRethunkGitTools`), supporting modules under [`src/server/`](src/server/), build output [`dist/server.js`](dist/server.js) (see `package.json` `bin` / `exports`; publish ships the full `dist/` tree).
 
 **Operators and integrators:** **[docs/install.md](docs/install.md)** is the **only** place for prerequisites, how to launch the server, and per-client MCP configuration — do not duplicate that in README, HUMANS, rules, or here. Preset file, dev workflow, CI, and publishing: **[HUMANS.md](HUMANS.md)**.
 
 **Tool ids, client naming, `format` / JSON envelopes, resource URI, workspace root order:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; do not duplicate those tables in this file or HUMANS.
 
-## Implementation map ([`src/server.ts`](src/server.ts))
+## Implementation map
 
-| Area | Symbols / notes |
+| File | Symbols / notes |
 |------|-------------------|
-| Package / MCP meta | `readPackageVersion()`, `FastMCP` constructor `version` |
-| JSON stability | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `spreadWhen`, `spreadDefined` — every tool JSON body ends with `rethunkGitMcp` |
-| Git on PATH | `gateGit()` — lazy `git --version`; `gitPathState`; `GIT_NOT_FOUND_BODY` |
-| MCP roots | `uriToPath`, `listFileRoots`, `resolveWorkspaceRoots`, `resolveRootsForPreset`, `requireGitAndRoots`; FastMCP `roots: { enabled: true }` — session roots only (client wiring: [docs/install.md](docs/install.md)) |
-| Presets | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod `PresetEntrySchema` / `PresetFileSchema` must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
-| Path safety | `resolvePathForRepo`, `assertRelativePathUnderTop`, `validateRepoPath`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
-| Sync git | `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata` |
-| Async / parallel | `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`; `gitStatusSnapshotAsync`, `gitStatusFailText`, `gitStatusShortBranchAsync`, `collectInventoryEntry`, `fetchAheadBehind`, `upstreamNoteFor`, `makeSkipEntry` |
+| [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
+| [`src/server/json.ts`](src/server/json.ts) | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `spreadWhen`, `spreadDefined` — every tool JSON body ends with `rethunkGitMcp` |
+| [`src/server/git.ts`](src/server/git.ts) | `gateGit()` — lazy `git --version`; `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`; `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`; `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
+| [`src/server/roots.ts`](src/server/roots.ts) | `uriToPath`, `listFileRoots`, `pathMatchesWorkspaceRootHint`, `resolveWorkspaceRoots`, `resolveRootsForPreset`, `requireGitAndRoots` — session roots only (client wiring: [docs/install.md](docs/install.md)) |
+| [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod `PresetEntrySchema` / `PresetFileSchema` must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
+| [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT` |
+| [`src/server/inventory.ts`](src/server/inventory.ts) | `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` (uses repo-paths + git) |
+| [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — all `addTool` / `addResource` handlers |
+| [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
 
 ## Changing contracts
 
