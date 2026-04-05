@@ -11,13 +11,13 @@
 | Area | Symbols / notes |
 |------|-------------------|
 | Package / MCP meta | `readPackageVersion()`, `FastMCP` constructor `version` |
-| JSON stability | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `optionalFields`, `spreadDefined` — every tool JSON body ends with `rethunkGitMcp` |
+| JSON stability | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `spreadWhen`, `spreadDefined` — every tool JSON body ends with `rethunkGitMcp` |
 | Git on PATH | `gateGit()` — lazy `git --version`; `gitPathState`; `GIT_NOT_FOUND_BODY` |
 | MCP roots | `uriToPath`, `listFileRoots`, `resolveWorkspaceRoots`, `resolveRootsForPreset`, `requireGitAndRoots`; FastMCP `roots: { enabled: true }` — session roots only (client wiring: [docs/install.md](docs/install.md)) |
 | Presets | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod `PresetEntrySchema` / `PresetFileSchema` must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
 | Path safety | `resolvePathForRepo`, `assertRelativePathUnderTop`, `validateRepoPath`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
 | Sync git | `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata` |
-| Async / parallel | `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`; `gitStatusShortBranchAsync`, `collectInventoryEntry`, `fetchAheadBehind`, `upstreamNoteFor`, `makeSkipEntry` |
+| Async / parallel | `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`; `gitStatusSnapshotAsync`, `gitStatusFailText`, `gitStatusShortBranchAsync`, `collectInventoryEntry`, `fetchAheadBehind`, `upstreamNoteFor`, `makeSkipEntry` |
 
 ## Changing contracts
 
