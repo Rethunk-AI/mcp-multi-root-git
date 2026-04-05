@@ -552,6 +552,28 @@ type InventoryEntryJson = {
   skipReason?: string;
 };
 
+function makeSkipEntry(
+  label: string,
+  abs: string,
+  upstreamMode: "auto" | "fixed",
+  skipReason: string,
+): InventoryEntryJson {
+  return {
+    label,
+    path: abs,
+    branchStatus: "",
+    shortStatus: "",
+    detached: false,
+    headAbbrev: "",
+    upstreamMode,
+    upstreamRef: null,
+    ahead: null,
+    behind: null,
+    upstreamNote: "",
+    skipReason,
+  };
+}
+
 function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
   if (e.skipReason) {
     return [`## ${e.label}`, `path: ${e.path}`, "```text", e.skipReason, "```", ``];
@@ -989,37 +1011,20 @@ server.addTool({
         for (const rel of nestedRoots) {
           const abs = resolvePathForRepo(rel, top);
           if (!assertRelativePathUnderTop(rel, abs, top)) {
-            entries.push({
-              label: rel,
-              path: abs,
-              branchStatus: "",
-              shortStatus: "",
-              detached: false,
-              headAbbrev: "",
-              upstreamMode: useFixed ? "fixed" : "auto",
-              upstreamRef: null,
-              ahead: null,
-              behind: null,
-              upstreamNote: "",
-              skipReason: "(path escapes git toplevel — rejected)",
-            });
+            entries.push(
+              makeSkipEntry(
+                rel,
+                abs,
+                useFixed ? "fixed" : "auto",
+                "(path escapes git toplevel — rejected)",
+              ),
+            );
             continue;
           }
           if (!gitRevParseGitDir(abs)) {
-            entries.push({
-              label: rel,
-              path: abs,
-              branchStatus: "",
-              shortStatus: "",
-              detached: false,
-              headAbbrev: "",
-              upstreamMode: useFixed ? "fixed" : "auto",
-              upstreamRef: null,
-              ahead: null,
-              behind: null,
-              upstreamNote: "",
-              skipReason: "(not a git work tree — skip)",
-            });
+            entries.push(
+              makeSkipEntry(rel, abs, useFixed ? "fixed" : "auto", "(not a git work tree — skip)"),
+            );
             continue;
           }
           jobs.push({ label: rel, abs });
@@ -1034,20 +1039,14 @@ server.addTool({
         );
         entries.push(...computed);
       } else if (!gitRevParseGitDir(top)) {
-        entries.push({
-          label: ".",
-          path: top,
-          branchStatus: "",
-          shortStatus: "",
-          detached: false,
-          headAbbrev: "",
-          upstreamMode: useFixed ? "fixed" : "auto",
-          upstreamRef: null,
-          ahead: null,
-          behind: null,
-          upstreamNote: "",
-          skipReason: "(not a git work tree — unexpected)",
-        });
+        entries.push(
+          makeSkipEntry(
+            ".",
+            top,
+            useFixed ? "fixed" : "auto",
+            "(not a git work tree — unexpected)",
+          ),
+        );
       } else {
         const one = await collectInventoryEntry(
           ".",
