@@ -2,30 +2,9 @@
 
 Read-only **MCP stdio** git tools for any workspace. No `cwd` in MCP config: the client supplies workspace roots at `initialize`.
 
-For **LLM/developer onboarding**, implementation maps, and contract-change rules, see **[AGENTS.md](AGENTS.md)**.
+**Implementation maps, `src/server.ts` symbols, and contract bumps** live in **`AGENTS.md`** at the repository root. In Cursor that file is normally injected as project agent context—use it there; this guide does not repeat those sections.
 
-## Tools
-
-MCP clients expose tools as `{serverName}_{toolName}` (e.g. `rethunk-git_git_status` when the server is registered as `rethunk-git`). Registered short ids:
-
-| Registered id   | Purpose |
-|-----------------|---------|
-| `git_status`    | `git status --short -b` per MCP root + optional submodules; `allWorkspaceRoots` / `rootIndex` |
-| `git_inventory` | Status + ahead/behind per root; default upstream is each repo's `@{u}`; set both `remote` and `branch` for a fixed pair |
-| `git_parity`    | Compare `git rev-parse HEAD` for left/right path pairs |
-| `list_presets`  | List preset names and counts from `.rethunk/git-mcp-presets.json` (invalid JSON/schema surface as errors) |
-
-Pass **`format: "json"`** on a tool for structured JSON instead of markdown.
-
-### JSON responses (summary)
-
-Every JSON string from a tool (including errors) includes a trailing **`rethunkGitMcp`** object with **`jsonFormatVersion`** (`"1"`) and **`packageVersion`**. Payloads such as `groups`, `inventories`, `parity`, and `roots` are stable for that version. Preset-driven responses may include **`presetSchemaVersion`**. When to bump versions or rename fields is documented in **[AGENTS.md](AGENTS.md)**.
-
-## Resource
-
-| URI | Purpose |
-|-----|---------|
-| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors) |
+**Registered tool ids, client naming (`rethunk-git_*`), `format` / JSON envelopes, resource URI, workspace root resolution:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; not duplicated here.
 
 ## Workspace preset file
 
@@ -114,15 +93,6 @@ Add to `~/.cursor/mcp.json` (no `cwd`; Cursor passes workspace roots):
 
 With Bun globally: `"command": "bunx"`, `"args": ["@rethunk/mcp-multi-root-git"]`.
 
-## Workspace root resolution
-
-1. Explicit **`workspaceRoot`** on the tool call (highest priority).
-2. **`rootIndex`** (0-based) — one `file://` MCP root when several exist.
-3. **`allWorkspaceRoots`: true** — every `file://` root; markdown sections separated by `---`, or combined JSON.
-4. **`preset`** set and multiple roots — root whose git toplevel defines that preset (respecting **`workspaceRootHint`**).
-5. Otherwise the first `file://` root from MCP **`initialize`** / **`roots/list_changed`**.
-6. **`process.cwd()`** if no file roots (e.g. CI with explicit `workspaceRoot`).
-
 ## Development
 
 Requires **Bun ≥ 1.3.11** (`packageManager` in `package.json`). Published usage still targets **Node ≥ 22** for `npx` / global installs.
@@ -138,7 +108,7 @@ bun run check:fix  # Biome --write
 
 ### Cursor (this repository)
 
-[`.cursor/mcp.json`](.cursor/mcp.json) runs **rethunk-git** with `bun src/server.ts` (no prior `dist/` build). Reload MCP if tools are missing. Agent behavior in this workspace: [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) (short nudge; details in **AGENTS.md**).
+[`.cursor/mcp.json`](.cursor/mcp.json) runs **rethunk-git** with `bun src/server.ts` (no prior `dist/` build). Reload MCP if tools are missing. [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) is always-on for **when** to use these tools vs shell git; it points at **[docs/mcp-tools.md](docs/mcp-tools.md)** for tool/resource specifics and **this file** for install/presets/dev, and does not duplicate **`AGENTS.md`** (handled by Cursor as project agent instructions).
 
 ## Publishing
 

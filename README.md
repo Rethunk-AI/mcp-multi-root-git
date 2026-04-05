@@ -8,18 +8,8 @@ MCP **stdio** server: read-only **git** tools (status, multi-root inventory, `HE
 
 | Doc | Audience |
 |-----|----------|
-| **[HUMANS.md](HUMANS.md)** | Install (`npx` / `bunx`), Cursor `mcp.json`, presets, workspace roots, JSON output summary, dev commands, CI, publishing |
-| **[AGENTS.md](AGENTS.md)** | LLMs and contributors: [`src/server.ts`](src/server.ts) map, tool/resource ids, contract bumps, CI, Cursor layout |
+| **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, `format` / JSON, resource URI, workspace root resolution (canonical reference) |
+| **[HUMANS.md](HUMANS.md)** | Install (`npx` / `bunx`), Cursor `mcp.json`, preset file, dev commands, CI, publishing (not auto-loaded in Cursor—open when needed) |
+| **[AGENTS.md](AGENTS.md)** | Contributors: [`src/server.ts`](src/server.ts) map, contract bumps, CI. In Cursor, typically **project agent context** (rules should not re-link it). |
 
-## Tools (skim)
-
-Clients expose `{serverName}_{toolName}` (e.g. `rethunk-git_git_status`). Short ids:
-
-| id | One-line |
-|----|----------|
-| `git_status` | Status + submodules per MCP root |
-| `git_inventory` | Status + ahead/behind vs `@{u}` or fixed remote/branch |
-| `git_parity` | Compare `HEAD` across path pairs |
-| `list_presets` | List / validate `.rethunk/git-mcp-presets.json` |
-
-Details, **`format: "json"`**, resource URI, and **`rethunkGitMcp`** stability fields: **[HUMANS.md](HUMANS.md)**.
+**Tools at a glance:** see the table in **[docs/mcp-tools.md](docs/mcp-tools.md)**.
