@@ -508,14 +508,6 @@ function gitRevParseGitDir(cwd: string): boolean {
   return r.status === 0;
 }
 
-async function gitStatusShortBranchAsync(cwd: string): Promise<{ ok: boolean; text: string }> {
-  const r = await spawnGitAsync(cwd, ["status", "--short", "-b"]);
-  if (!r.ok) {
-    return { ok: false, text: (r.stderr || r.stdout || "git status failed").trim() };
-  }
-  return { ok: true, text: r.stdout.trimEnd() };
-}
-
 function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text: string } {
   const r = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd,
@@ -607,6 +599,33 @@ function spawnGitAsync(
   });
 }
 
+function gitStatusFailText(r: { stderr: string; stdout: string }): string {
+  return (r.stderr || r.stdout || "git status failed").trim();
+}
+
+async function gitStatusSnapshotAsync(cwd: string): Promise<{
+  branchLine: string;
+  shortLine: string;
+  branchOk: boolean;
+  shortOk: boolean;
+}> {
+  const [br, sh] = await Promise.all([
+    spawnGitAsync(cwd, ["status", "--short", "-b"]),
+    spawnGitAsync(cwd, ["status", "--short"]),
+  ]);
+  return {
+    branchOk: br.ok,
+    shortOk: sh.ok,
+    branchLine: br.ok ? br.stdout.trimEnd() : gitStatusFailText(br),
+    shortLine: sh.ok ? sh.stdout.trimEnd() : gitStatusFailText(sh),
+  };
+}
+
+async function gitStatusShortBranchAsync(cwd: string): Promise<{ ok: boolean; text: string }> {
+  const s = await gitStatusSnapshotAsync(cwd);
+  return { ok: s.branchOk, text: s.branchLine };
+}
+
 type InventoryEntryJson = {
   label: string;
   path: string;
@@ -691,17 +710,13 @@ async function collectInventoryEntry(
   fixedRemote: string | undefined,
   fixedBranch: string | undefined,
 ): Promise<InventoryEntryJson> {
-  const brP = spawnGitAsync(absPath, ["status", "--short", "-b"]);
-  const shP = spawnGitAsync(absPath, ["status", "--short"]);
-  const headP = spawnGitAsync(absPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  const [br, sh, headR] = await Promise.all([brP, shP, headP]);
+  const [snap, headR] = await Promise.all([
+    gitStatusSnapshotAsync(absPath),
+    spawnGitAsync(absPath, ["rev-parse", "--abbrev-ref", "HEAD"]),
+  ]);
 
-  const branchStatus = br.ok
-    ? br.stdout.trimEnd()
-    : (br.stderr || br.stdout || "git status failed").trim();
-  const shortStatus = sh.ok
-    ? sh.stdout.trimEnd()
-    : (sh.stderr || sh.stdout || "git status failed").trim();
+  const branchStatus = snap.branchLine;
+  const shortStatus = snap.shortLine;
   const headAbbrev = headR.ok ? headR.stdout.trim() : "";
   const detached = !headR.ok || headAbbrev === "HEAD" || headAbbrev.endsWith("/HEAD");
 
