@@ -53,7 +53,62 @@ type PresetFile = z.infer<typeof PresetFileSchema>;
 const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
 
 const MAX_INVENTORY_ROOTS_DEFAULT = 64;
-const INVENTORY_PARALLELISM = 4;
+/** Parallel git subprocesses for inventory rows and git_status submodule rows. */
+const GIT_SUBPROCESS_PARALLELISM = 4;
+
+const MCP_JSON_FORMAT_VERSION = "1" as const;
+
+// ---------------------------------------------------------------------------
+// Git on PATH (lazy probe)
+// ---------------------------------------------------------------------------
+
+type GitPathState = "unknown" | "ok" | "missing";
+
+let gitPathState: GitPathState = "unknown";
+
+function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } {
+  if (gitPathState === "ok") {
+    return { ok: true };
+  }
+  if (gitPathState === "missing") {
+    return {
+      ok: false,
+      body: {
+        error: "git_not_found",
+        message:
+          "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
+      },
+    };
+  }
+  const r = spawnSync("git", ["--version"], { encoding: "utf8" });
+  if (r.status !== 0) {
+    gitPathState = "missing";
+    return {
+      ok: false,
+      body: {
+        error: "git_not_found",
+        message:
+          "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
+      },
+    };
+  }
+  gitPathState = "ok";
+  return { ok: true };
+}
+
+function jsonRespond(body: Record<string, unknown>): string {
+  return JSON.stringify(
+    {
+      ...body,
+      rethunkGitMcp: {
+        jsonFormatVersion: MCP_JSON_FORMAT_VERSION,
+        packageVersion: readPackageVersion(),
+      },
+    },
+    null,
+    2,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Workspace / MCP roots
@@ -172,9 +227,41 @@ type PresetLoadFail =
   | { ok: false; reason: "invalid_json"; message: string }
   | { ok: false; reason: "schema"; issues: z.ZodIssue[] };
 
-type PresetLoadOk = { ok: true; data: PresetFile };
+type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
 
 type PresetLoadResult = PresetLoadOk | PresetLoadFail;
+
+/**
+ * Supports:
+ * - Wrapped: `{ "schemaVersion": "1", "presets": { "name": { ... } } }`
+ * - Legacy: `{ "name": { ... }, ... }` with optional top-level `schemaVersion` / `$schema` (editor hints).
+ */
+function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: string } {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("invalid_root");
+  }
+  const o = raw as Record<string, unknown>;
+  if (
+    "presets" in o &&
+    o.presets !== null &&
+    typeof o.presets === "object" &&
+    !Array.isArray(o.presets)
+  ) {
+    const sv = o.schemaVersion;
+    return {
+      mapRaw: o.presets,
+      schemaVersion: typeof sv === "string" ? sv : undefined,
+    };
+  }
+  const rest: Record<string, unknown> = { ...o };
+  const sv = rest.schemaVersion;
+  delete rest.schemaVersion;
+  delete rest.$schema;
+  return {
+    mapRaw: rest,
+    schemaVersion: typeof sv === "string" ? sv : undefined,
+  };
+}
 
 function loadPresetsFromGitTop(gitTop: string): PresetLoadResult {
   const presetPath = join(gitTop, PRESET_FILE_PATH);
@@ -188,11 +275,24 @@ function loadPresetsFromGitTop(gitTop: string): PresetLoadResult {
     const message = e instanceof Error ? e.message : String(e);
     return { ok: false, reason: "invalid_json", message };
   }
-  const parsed = PresetFileSchema.safeParse(raw);
+  let mapRaw: unknown;
+  let schemaVersion: string | undefined;
+  try {
+    const s = splitPresetFileRaw(raw);
+    mapRaw = s.mapRaw;
+    schemaVersion = s.schemaVersion;
+  } catch {
+    return {
+      ok: false,
+      reason: "invalid_json",
+      message: "Preset file root must be a JSON object",
+    };
+  }
+  const parsed = PresetFileSchema.safeParse(mapRaw);
   if (!parsed.success) {
     return { ok: false, reason: "schema", issues: parsed.error.issues };
   }
-  return { ok: true, data: parsed.data };
+  return { ok: true, data: parsed.data, schemaVersion };
 }
 
 function presetLoadErrorPayload(gitTop: string, fail: PresetLoadFail): Record<string, unknown> {
@@ -214,7 +314,7 @@ function presetLoadErrorPayload(gitTop: string, fail: PresetLoadFail): Record<st
 function getPresetEntry(
   gitTop: string,
   presetName: string,
-): { entry: PresetEntry } | { error: Record<string, unknown> } {
+): { entry: PresetEntry; presetSchemaVersion?: string } | { error: Record<string, unknown> } {
   const loaded = loadPresetsFromGitTop(gitTop);
   if (!loaded.ok) {
     if (loaded.reason === "missing") {
@@ -239,7 +339,7 @@ function getPresetEntry(
       },
     };
   }
-  return { entry };
+  return { entry, presetSchemaVersion: loaded.schemaVersion };
 }
 
 function mergeNestedRoots(
@@ -323,13 +423,9 @@ function gitRevParseGitDir(cwd: string): boolean {
   return r.status === 0;
 }
 
-function gitStatusShortBranch(cwd: string): { ok: boolean; text: string } {
-  const r = spawnSync("git", ["status", "--short", "-b"], {
-    cwd,
-    encoding: "utf8",
-    maxBuffer: 10_000_000,
-  });
-  if (r.status !== 0) {
+async function gitStatusShortBranchAsync(cwd: string): Promise<{ ok: boolean; text: string }> {
+  const r = await spawnGitAsync(cwd, ["status", "--short", "-b"]);
+  if (!r.ok) {
     return { ok: false, text: (r.stderr || r.stdout || "git status failed").trim() };
   }
   return { ok: true, text: r.stdout.trimEnd() };
@@ -615,9 +711,14 @@ server.addTool({
       .describe("When true (default), include submodule paths listed in .gitmodules."),
   }),
   execute: async (args) => {
+    const gg = gateGit();
+    if (!gg.ok) {
+      return jsonRespond(gg.body);
+    }
+
     const rootsRes = resolveWorkspaceRoots(server, args);
     if (!rootsRes.ok) {
-      return JSON.stringify(rootsRes.error, null, 2);
+      return jsonRespond(rootsRes.error);
     }
 
     type RepoRow = { label: string; path: string; statusText: string; ok: boolean };
@@ -639,30 +740,31 @@ server.addTool({
       }
 
       const includeSubmodules = args.includeSubmodules !== false;
-      const meta = gitStatusShortBranch(top);
+      const meta = await gitStatusShortBranchAsync(top);
       repos.push({ label: ".", path: top, statusText: meta.text, ok: meta.ok });
 
       if (includeSubmodules) {
-        for (const rel of parseGitSubmodulePaths(top)) {
+        const rels = parseGitSubmodulePaths(top);
+        const subRows = await asyncPool(rels, GIT_SUBPROCESS_PARALLELISM, async (rel) => {
           const subPath = join(top, rel);
           if (!hasGitMetadata(subPath)) {
-            repos.push({
+            return {
               label: rel,
               path: subPath,
               statusText: "(no .git — submodule not checked out?)",
               ok: false,
-            });
-            continue;
+            };
           }
-          const st = gitStatusShortBranch(subPath);
-          repos.push({ label: rel, path: subPath, statusText: st.text, ok: st.ok });
-        }
+          const st = await gitStatusShortBranchAsync(subPath);
+          return { label: rel, path: subPath, statusText: st.text, ok: st.ok };
+        });
+        repos.push(...subRows);
       }
       groups.push({ mcpRoot: rootInput, repos });
     }
 
     if (args.format === "json") {
-      return JSON.stringify({ groups }, null, 2);
+      return jsonRespond({ groups });
     }
 
     const sections: string[] = ["# Multi-root git status", ""];
@@ -731,11 +833,16 @@ server.addTool({
       .describe("Max nested roots to process (cap)."),
   }),
   execute: async (args) => {
+    const gg = gateGit();
+    if (!gg.ok) {
+      return jsonRespond(gg.body);
+    }
+
     const rootsRes = args.preset
       ? resolveRootsForPreset(server, args, args.preset)
       : resolveWorkspaceRoots(server, args);
     if (!rootsRes.ok) {
-      return JSON.stringify(rootsRes.error, null, 2);
+      return jsonRespond(rootsRes.error);
     }
 
     const fixedRemote = args.remote;
@@ -743,20 +850,16 @@ server.addTool({
     const hasRemote = fixedRemote !== undefined && fixedRemote.trim() !== "";
     const hasBranch = fixedBranch !== undefined && fixedBranch.trim() !== "";
     if (hasRemote !== hasBranch) {
-      return JSON.stringify(
-        {
-          error: "remote_branch_mismatch",
-          message:
-            "Set both `remote` and `branch` for fixed upstream, or omit both for auto `@{u}`.",
-        },
-        null,
-        2,
-      );
+      return jsonRespond({
+        error: "remote_branch_mismatch",
+        message: "Set both `remote` and `branch` for fixed upstream, or omit both for auto `@{u}`.",
+      });
     }
     const useFixed = hasRemote && hasBranch;
 
     const allJson: {
       workspace_root: string;
+      presetSchemaVersion?: string;
       upstream: { mode: "auto" | "fixed"; remote?: string; branch?: string };
       entries: InventoryEntryJson[];
     }[] = [];
@@ -793,18 +896,20 @@ server.addTool({
             ],
           });
         } else {
-          mdChunks.push(`# Git inventory`, "", JSON.stringify(err, null, 2), "");
+          mdChunks.push(`# Git inventory`, "", jsonRespond(err), "");
         }
         continue;
       }
 
       let nestedRoots: string[] | undefined = args.nestedRoots;
+      let presetSchemaVersion: string | undefined;
 
       if (args.preset) {
         const got = getPresetEntry(top, args.preset);
         if ("error" in got) {
-          return JSON.stringify(got.error, null, 2);
+          return jsonRespond(got.error);
         }
+        presetSchemaVersion = got.presetSchemaVersion;
         const fromPreset = got.entry.nestedRoots;
         if (args.presetMerge) {
           nestedRoots = mergeNestedRoots(fromPreset, nestedRoots);
@@ -864,7 +969,7 @@ server.addTool({
           }
           jobs.push({ label: rel, abs });
         }
-        const computed = await asyncPool(jobs, INVENTORY_PARALLELISM, (j) =>
+        const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, (j) =>
           collectInventoryEntry(
             j.label,
             j.abs,
@@ -901,6 +1006,7 @@ server.addTool({
       if (args.format === "json") {
         allJson.push({
           workspace_root: top,
+          ...(presetSchemaVersion !== undefined ? { presetSchemaVersion } : {}),
           upstream: useFixed
             ? { mode: "fixed", remote: fixedRemote, branch: fixedBranch }
             : { mode: "auto" },
@@ -922,7 +1028,7 @@ server.addTool({
     }
 
     if (args.format === "json") {
-      return JSON.stringify({ inventories: allJson }, null, 2);
+      return jsonRespond({ inventories: allJson });
     }
     return mdChunks.join("\n\n---\n\n");
   },
@@ -950,16 +1056,22 @@ server.addTool({
     presetMerge: z.boolean().optional().default(false),
   }),
   execute: async (args) => {
+    const gg = gateGit();
+    if (!gg.ok) {
+      return jsonRespond(gg.body);
+    }
+
     const rootsRes = args.preset
       ? resolveRootsForPreset(server, args, args.preset)
       : resolveWorkspaceRoots(server, args);
     if (!rootsRes.ok) {
-      return JSON.stringify(rootsRes.error, null, 2);
+      return jsonRespond(rootsRes.error);
     }
 
     type Pair = { left: string; right: string; label?: string };
     const results: {
       workspace_root: string;
+      presetSchemaVersion?: string;
       status: "OK" | "MISMATCH";
       pairs: {
         label: string;
@@ -978,7 +1090,8 @@ server.addTool({
     for (const workspaceRoot of rootsRes.roots) {
       const top = gitTopLevel(workspaceRoot);
       if (!top) {
-        const err = JSON.stringify({ error: "not_a_git_repository", path: workspaceRoot }, null, 2);
+        const errPayload = { error: "not_a_git_repository", path: workspaceRoot };
+        const err = jsonRespond(errPayload);
         if (args.format === "json") {
           results.push({
             workspace_root: workspaceRoot,
@@ -992,11 +1105,13 @@ server.addTool({
       }
 
       let pairs: Pair[] | undefined = args.pairs;
+      let parityPresetSchemaVersion: string | undefined;
       if (args.preset) {
         const got = getPresetEntry(top, args.preset);
         if ("error" in got) {
-          return JSON.stringify(got.error, null, 2);
+          return jsonRespond(got.error);
         }
+        parityPresetSchemaVersion = got.presetSchemaVersion;
         const fromPreset = got.entry.parityPairs as Pair[] | undefined;
         if (args.presetMerge) {
           pairs = mergePairs(fromPreset, pairs);
@@ -1006,14 +1121,10 @@ server.addTool({
       }
 
       if (!pairs?.length) {
-        return JSON.stringify(
-          {
-            error: "no_pairs",
-            message: "Pass `pairs` directly or a `preset` with parityPairs (or presetMerge).",
-          },
-          null,
-          2,
-        );
+        return jsonRespond({
+          error: "no_pairs",
+          message: "Pass `pairs` directly or a `preset` with parityPairs (or presetMerge).",
+        });
       }
 
       let allOk = true;
@@ -1077,6 +1188,9 @@ server.addTool({
 
       results.push({
         workspace_root: top,
+        ...(parityPresetSchemaVersion !== undefined
+          ? { presetSchemaVersion: parityPresetSchemaVersion }
+          : {}),
         status: allOk ? "OK" : "MISMATCH",
         pairs: pairResults,
       });
@@ -1109,7 +1223,7 @@ server.addTool({
     }
 
     if (args.format === "json") {
-      return JSON.stringify({ parity: results }, null, 2);
+      return jsonRespond({ parity: results });
     }
     return mdParts.join("\n\n---\n\n");
   },
@@ -1130,9 +1244,14 @@ server.addTool({
     format: true,
   }),
   execute: async (args) => {
+    const gg = gateGit();
+    if (!gg.ok) {
+      return jsonRespond(gg.body);
+    }
+
     const rootsRes = resolveWorkspaceRoots(server, args);
     if (!rootsRes.ok) {
-      return JSON.stringify(rootsRes.error, null, 2);
+      return jsonRespond(rootsRes.error);
     }
 
     const out: {
@@ -1140,6 +1259,7 @@ server.addTool({
       gitTop: string | null;
       presetFile: string;
       fileExists: boolean;
+      presetSchemaVersion?: string;
       presets: {
         name: string;
         nestedRootsCount: number;
@@ -1196,12 +1316,15 @@ server.addTool({
         gitTop: top,
         presetFile,
         fileExists: true,
+        ...(loaded.schemaVersion !== undefined
+          ? { presetSchemaVersion: loaded.schemaVersion }
+          : {}),
         presets,
       });
     }
 
     if (args.format === "json") {
-      return JSON.stringify({ roots: out }, null, 2);
+      return jsonRespond({ roots: out });
     }
     const lines: string[] = ["# Git MCP presets", ""];
     for (const row of out) {
@@ -1222,6 +1345,9 @@ server.addTool({
       if (row.presets.length === 0) {
         lines.push("(empty preset file)", "");
         continue;
+      }
+      if (row.presetSchemaVersion !== undefined) {
+        lines.push(`preset_schema_version: ${row.presetSchemaVersion}`, "");
       }
       for (const p of row.presets) {
         lines.push(
@@ -1244,41 +1370,45 @@ server.addResource({
   name: "git-mcp-presets",
   mimeType: "application/json",
   async load() {
+    const gg = gateGit();
+    if (!gg.ok) {
+      return { text: jsonRespond(gg.body) };
+    }
+
     const rootsRes = resolveWorkspaceRoots(server, {});
     if (!rootsRes.ok) {
-      return { text: JSON.stringify(rootsRes.error, null, 2) };
+      return { text: jsonRespond(rootsRes.error) };
     }
     const ws = rootsRes.roots[0];
     if (!ws) {
-      return { text: JSON.stringify({ error: "no_workspace_root" }, null, 2) };
+      return { text: jsonRespond({ error: "no_workspace_root" }) };
     }
     const top = gitTopLevel(ws);
     if (!top) {
-      return { text: JSON.stringify({ error: "not_a_git_repository", path: ws }, null, 2) };
+      return { text: jsonRespond({ error: "not_a_git_repository", path: ws }) };
     }
     const loaded = loadPresetsFromGitTop(top);
     if (!loaded.ok) {
       if (loaded.reason === "missing") {
         return {
-          text: JSON.stringify(
-            { presetFile: join(top, PRESET_FILE_PATH), fileExists: false, presets: {} },
-            null,
-            2,
-          ),
+          text: jsonRespond({
+            presetFile: join(top, PRESET_FILE_PATH),
+            fileExists: false,
+            presets: {},
+          }),
         };
       }
-      return { text: JSON.stringify(presetLoadErrorPayload(top, loaded), null, 2) };
+      return { text: jsonRespond(presetLoadErrorPayload(top, loaded)) };
     }
     return {
-      text: JSON.stringify(
-        {
-          presetFile: join(top, PRESET_FILE_PATH),
-          fileExists: true,
-          presets: loaded.data,
-        },
-        null,
-        2,
-      ),
+      text: jsonRespond({
+        presetFile: join(top, PRESET_FILE_PATH),
+        fileExists: true,
+        ...(loaded.schemaVersion !== undefined
+          ? { presetSchemaVersion: loaded.schemaVersion }
+          : {}),
+        presets: loaded.data,
+      }),
     };
   },
 });
