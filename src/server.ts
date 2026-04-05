@@ -134,6 +134,25 @@ function listFileRoots(server: FastMCP): string[] {
   return paths;
 }
 
+/** Basename or trailing path segment; compares using normalized slashes so Windows backslashes match. */
+function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
+  const h = hint.trim();
+  if (!h) return true;
+  if (basename(rootPath) === h) return true;
+  const absRoot = resolve(rootPath);
+  if (absRoot === h) return true;
+  try {
+    if (isAbsolute(h) && resolve(h) === absRoot) return true;
+  } catch {
+    /* invalid absolute hint */
+  }
+  const normRoot = absRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normHint = h.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
+  if (!normHint) return true;
+  if (normRoot === normHint) return true;
+  return normRoot.endsWith(`/${normHint}`);
+}
+
 type RootPick = {
   workspaceRoot?: string;
   rootIndex?: number;
@@ -205,9 +224,7 @@ function resolveRootsForPreset(
     if (!entry) continue;
     const hint = entry.workspaceRootHint?.trim();
     if (hint) {
-      const base = basename(r);
-      const matchesHint = base === hint || r.endsWith(`/${hint}`) || r === hint;
-      if (!matchesHint) continue;
+      if (!pathMatchesWorkspaceRootHint(r, hint)) continue;
     }
     matches.push(r);
   }
