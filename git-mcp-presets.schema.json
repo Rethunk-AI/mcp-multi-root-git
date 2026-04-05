@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Rethunk-AI/mcp-multi-root-git/main/git-mcp-presets.schema.json",
+  "title": "rethunk-git MCP preset file",
+  "description": "Schema for .rethunk/git-mcp-presets.json (at the git repository root). Supports a wrapped layout with an explicit presets object, or a legacy flat map of preset name to entry.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "description": "JSON Schema $schema pointer for editor validation."
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1",
+          "description": "File format version; use 1 for this schema."
+        },
+        "presets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/presetEntry"
+          },
+          "description": "Named preset entries for git_inventory / git_parity."
+        }
+      },
+      "required": ["presets"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1",
+          "description": "Optional file format version when using the flat preset map."
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/presetEntry"
+      },
+      "minProperties": 1
+    }
+  ],
+  "$defs": {
+    "presetEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nestedRoots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths relative to the git toplevel, in order, for git_inventory."
+        },
+        "parityPairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "left": { "type": "string" },
+              "right": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "required": ["left", "right"]
+          },
+          "description": "Path pairs for git_parity (paths relative to git toplevel unless absolute)."
+        },
+        "workspaceRootHint": {
+          "type": "string",
+          "description": "When multiple MCP file roots exist, restrict preset resolution to a root matching this basename or path suffix."
+        }
+      }
+    }
+  }
+}
