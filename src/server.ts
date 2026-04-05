@@ -422,6 +422,48 @@ function validateRepoPath(rel: string, gitTop: string): { abs: string; underTop:
   return { abs, underTop: assertRelativePathUnderTop(rel, abs, gitTop) };
 }
 
+type ParityPair = { left: string; right: string; label?: string };
+
+function applyPresetNestedRoots(
+  gitTop: string,
+  presetName: string,
+  presetMerge: boolean,
+  inlineNestedRoots: string[] | undefined,
+):
+  | { ok: true; nestedRoots: string[] | undefined; presetSchemaVersion?: string }
+  | { ok: false; error: Record<string, unknown> } {
+  const got = getPresetEntry(gitTop, presetName);
+  if ("error" in got) return { ok: false, error: got.error };
+  const fromPreset = got.entry.nestedRoots;
+  let nestedRoots: string[] | undefined = inlineNestedRoots;
+  if (presetMerge) {
+    nestedRoots = mergeNestedRoots(fromPreset, nestedRoots);
+  } else if (!nestedRoots?.length) {
+    nestedRoots = fromPreset;
+  }
+  return { ok: true, nestedRoots, presetSchemaVersion: got.presetSchemaVersion };
+}
+
+function applyPresetParityPairs(
+  gitTop: string,
+  presetName: string,
+  presetMerge: boolean,
+  inlinePairs: ParityPair[] | undefined,
+):
+  | { ok: true; pairs: ParityPair[] | undefined; presetSchemaVersion?: string }
+  | { ok: false; error: Record<string, unknown> } {
+  const got = getPresetEntry(gitTop, presetName);
+  if ("error" in got) return { ok: false, error: got.error };
+  const fromPreset = got.entry.parityPairs;
+  let pairs: ParityPair[] | undefined = inlinePairs;
+  if (presetMerge) {
+    pairs = mergePairs(fromPreset, pairs);
+  } else if (!pairs?.length) {
+    pairs = fromPreset;
+  }
+  return { ok: true, pairs, presetSchemaVersion: got.presetSchemaVersion };
+}
+
 // ---------------------------------------------------------------------------
 // Git helpers (sync — used where async batching not needed)
 // ---------------------------------------------------------------------------
@@ -983,17 +1025,12 @@ server.addTool({
       let presetSchemaVersion: string | undefined;
 
       if (args.preset) {
-        const got = getPresetEntry(top, args.preset);
-        if ("error" in got) {
-          return jsonRespond(got.error);
+        const applied = applyPresetNestedRoots(top, args.preset, args.presetMerge, nestedRoots);
+        if (!applied.ok) {
+          return jsonRespond(applied.error);
         }
-        presetSchemaVersion = got.presetSchemaVersion;
-        const fromPreset = got.entry.nestedRoots;
-        if (args.presetMerge) {
-          nestedRoots = mergeNestedRoots(fromPreset, nestedRoots);
-        } else if (!nestedRoots?.length) {
-          nestedRoots = fromPreset;
-        }
+        nestedRoots = applied.nestedRoots;
+        presetSchemaVersion = applied.presetSchemaVersion;
       }
 
       const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
@@ -1137,7 +1174,6 @@ server.addTool({
       return jsonRespond(rootsRes.error);
     }
 
-    type Pair = { left: string; right: string; label?: string };
     const results: {
       workspace_root: string;
       presetSchemaVersion?: string;
@@ -1173,20 +1209,15 @@ server.addTool({
         continue;
       }
 
-      let pairs: Pair[] | undefined = args.pairs;
+      let pairs: ParityPair[] | undefined = args.pairs;
       let parityPresetSchemaVersion: string | undefined;
       if (args.preset) {
-        const got = getPresetEntry(top, args.preset);
-        if ("error" in got) {
-          return jsonRespond(got.error);
+        const applied = applyPresetParityPairs(top, args.preset, args.presetMerge, pairs);
+        if (!applied.ok) {
+          return jsonRespond(applied.error);
         }
-        parityPresetSchemaVersion = got.presetSchemaVersion;
-        const fromPreset = got.entry.parityPairs as Pair[] | undefined;
-        if (args.presetMerge) {
-          pairs = mergePairs(fromPreset, pairs);
-        } else if (!pairs?.length) {
-          pairs = fromPreset;
-        }
+        pairs = applied.pairs;
+        parityPresetSchemaVersion = applied.presetSchemaVersion;
       }
 
       if (!pairs?.length) {
