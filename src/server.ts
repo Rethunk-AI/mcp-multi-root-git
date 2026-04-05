@@ -28,6 +28,16 @@ function readPackageVersion(): string {
   }
 }
 
+/** FastMCP types require major.minor.patch; strip prerelease suffixes from package.json. */
+function readMcpServerVersion(): `${number}.${number}.${number}` {
+  const raw = readPackageVersion().trim();
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(raw);
+  if (m?.[1] !== undefined && m[2] !== undefined && m[3] !== undefined) {
+    return `${m[1]}.${m[2]}.${m[3]}` as `${number}.${number}.${number}`;
+  }
+  return "0.0.0";
+}
+
 // ---------------------------------------------------------------------------
 // Preset file schema
 // ---------------------------------------------------------------------------
@@ -699,7 +709,7 @@ const WorkspacePickSchema = z.object({
 
 const server = new FastMCP({
   name: "rethunk-git",
-  version: readPackageVersion() as `${number}.${number}.${number}`,
+  version: readMcpServerVersion(),
   roots: { enabled: true },
 });
 
