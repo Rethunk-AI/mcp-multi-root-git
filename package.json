@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "bin": {
-    "@rethunk/mcp-multi-root-git": "dist/server.js"
+    "mcp-multi-root-git": "dist/server.js"
   },
   "exports": {
     ".": {
