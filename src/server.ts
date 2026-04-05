@@ -417,6 +417,11 @@ function mergePairs<T extends { left: string; right: string; label?: string }>(
   return [...a, ...b];
 }
 
+function validateRepoPath(rel: string, gitTop: string): { abs: string; underTop: boolean } {
+  const abs = resolvePathForRepo(rel, gitTop);
+  return { abs, underTop: assertRelativePathUnderTop(rel, abs, gitTop) };
+}
+
 // ---------------------------------------------------------------------------
 // Git helpers (sync — used where async batching not needed)
 // ---------------------------------------------------------------------------
@@ -1009,8 +1014,8 @@ server.addTool({
       if (nestedRoots?.length) {
         const jobs: { label: string; abs: string }[] = [];
         for (const rel of nestedRoots) {
-          const abs = resolvePathForRepo(rel, top);
-          if (!assertRelativePathUnderTop(rel, abs, top)) {
+          const { abs, underTop } = validateRepoPath(rel, top);
+          if (!underTop) {
             entries.push(
               makeSkipEntry(
                 rel,
@@ -1195,33 +1200,31 @@ server.addTool({
       const pairResults: (typeof results)[0]["pairs"] = [];
 
       for (const pair of pairs) {
-        const pathA = resolvePathForRepo(pair.left, top);
-        const pathB = resolvePathForRepo(pair.right, top);
-        const underA = assertRelativePathUnderTop(pair.left, pathA, top);
-        const underB = assertRelativePathUnderTop(pair.right, pathB, top);
+        const pa = validateRepoPath(pair.left, top);
+        const pb = validateRepoPath(pair.right, top);
         const label = pair.label ?? `${pair.left} / ${pair.right}`;
 
-        if (!underA || !underB) {
+        if (!pa.underTop || !pb.underTop) {
           allOk = false;
           pairResults.push({
             label,
-            leftPath: pathA,
-            rightPath: pathB,
+            leftPath: pa.abs,
+            rightPath: pb.abs,
             match: false,
             error: "path escapes git toplevel — rejected",
           });
           continue;
         }
 
-        const ha = gitRevParseHead(pathA);
-        const hb = gitRevParseHead(pathB);
+        const ha = gitRevParseHead(pa.abs);
+        const hb = gitRevParseHead(pb.abs);
 
         if (!ha.ok || !hb.ok) {
           allOk = false;
           pairResults.push({
             label,
-            leftPath: pathA,
-            rightPath: pathB,
+            leftPath: pa.abs,
+            rightPath: pb.abs,
             match: false,
             error: [!ha.ok ? `left: ${ha.text}` : "", !hb.ok ? `right: ${hb.text}` : ""]
               .filter(Boolean)
@@ -1233,8 +1236,8 @@ server.addTool({
           allOk = false;
           pairResults.push({
             label,
-            leftPath: pathA,
-            rightPath: pathB,
+            leftPath: pa.abs,
+            rightPath: pb.abs,
             match: false,
             leftSha: ha.sha,
             rightSha: hb.sha,
@@ -1242,8 +1245,8 @@ server.addTool({
         } else {
           pairResults.push({
             label,
-            leftPath: pathA,
-            rightPath: pathB,
+            leftPath: pa.abs,
+            rightPath: pb.abs,
             match: true,
             sha: ha.sha,
           });
