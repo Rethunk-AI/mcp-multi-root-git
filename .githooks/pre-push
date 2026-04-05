@@ -12,3 +12,4 @@ fi
 bun install --frozen-lockfile
 bun run build
 bun run check
+bun run test

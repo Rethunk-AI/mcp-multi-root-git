@@ -84,14 +84,14 @@ bun run check:fix  # Biome --write
 bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-push: CI parity)
 ```
 
-**Git hooks:** after `setup-hooks`, **pre-commit** runs `bun run check`; **pre-push** runs `bun install --frozen-lockfile`, `bun run build`, and `bun run check` (same order as CI). Set **`SKIP_GIT_HOOKS=1`** or use **`--no-verify`** to bypass.
+**Git hooks:** after `setup-hooks`, **pre-commit** runs `bun run check`; **pre-push** runs `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test` (same order as CI). Set **`SKIP_GIT_HOOKS=1`** or use **`--no-verify`** to bypass.
 
-**CI:** pull requests run `bun install --frozen-lockfile`, `bun run build`, and `bun run check` (see `.github/workflows/ci.yml`). Match that locally before opening a PR.
+**CI:** pull requests run `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test` (see `.github/workflows/ci.yml`). Match that locally before opening a PR.
 
 ## Publishing
 
 ```bash
-bun run prepublishOnly  # build + check
+bun run prepublishOnly  # build + check + test
 bun publish
 ```
 
