@@ -1,6 +1,6 @@
 # @rethunk/mcp-multi-root-git
 
-MCP stdio server providing three read-only git tools for any workspace. No `cwd` in MCP config — workspace root comes from the client's MCP roots (provided at `initialize`).
+MCP stdio server providing read-only git tools for any workspace. No `cwd` in MCP config — workspace root comes from the client's MCP roots (provided at `initialize`).
 
 ## Tools
 
@@ -8,13 +8,22 @@ MCP clients expose these as `{serverName}_{toolName}` (e.g. `rethunk-git_git_sta
 
 | Registered id   | Purpose |
 |-----------------|---------|
-| `git_status`    | `git status --short -b` for workspace root + optional submodules |
-| `git_inventory` | Status + ahead/behind per listed root; ordered for push prep |
+| `git_status`    | `git status --short -b` per MCP root + optional submodules; supports `allWorkspaceRoots` / `rootIndex` |
+| `git_inventory` | Status + ahead/behind per listed root; default upstream is each repo's `@{u}`; set both `remote` and `branch` for a fixed pair |
 | `git_parity`    | Compare `git rev-parse HEAD` for left/right path pairs |
+| `list_presets`  | List preset names and counts from `.rethunk/git-mcp-presets.json` (surfaces invalid JSON / schema errors) |
+
+Optional `format: "json"` on each tool returns structured JSON instead of markdown.
+
+## Resource
+
+| URI | Purpose |
+|-----|---------|
+| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors) |
 
 ## Workspace preset file
 
-For multi-root repos, commit a file at **`.rethunk/git-mcp-presets.json`** in your workspace root:
+For multi-root repos, commit a file at **`.rethunk/git-mcp-presets.json`** at the **git repository root** (same directory as `.git`):
 
 ```json
 {
@@ -22,14 +31,19 @@ For multi-root repos, commit a file at **`.rethunk/git-mcp-presets.json`** in yo
     "nestedRoots": ["path/to/package-a", "path/to/package-b"],
     "parityPairs": [
       { "left": "core/packages/shared", "right": "edge/packages/shared", "label": "shared" }
-    ]
+    ],
+    "workspaceRootHint": "my-repo"
   }
 }
 ```
 
-Then call tools with `"preset": "push-prep"` instead of passing paths inline.
+Then call tools with `"preset": "push-prep"` instead of passing paths inline. Use `presetMerge: true` on `git_inventory` or `git_parity` to combine preset paths/pairs with inline `nestedRoots` / `pairs`.
+
+When several MCP file roots exist and you pass a `preset` name, the server picks the first root whose git toplevel loads a preset file containing that name. If that preset entry includes `workspaceRootHint`, only MCP roots whose path basename (or suffix) matches the hint are considered.
 
 **This file is not part of the npm package.** Each repo that needs named presets commits its own file.
+
+Invalid JSON or schema errors in an existing preset file are returned as structured tool errors (`preset_file_invalid`) instead of a silent empty result.
 
 ### Schema
 
@@ -37,13 +51,16 @@ Then call tools with `"preset": "push-prep"` instead of passing paths inline.
 // .rethunk/git-mcp-presets.json
 {
   "<preset-name>": {
-    "nestedRoots": ["<relative-path>", ...],   // git_inventory: only these paths (include "." for repo root)
-    "parityPairs": [                             // for git_parity
+    "nestedRoots": ["<relative-path>", ...],   // git_inventory (optional; merge with presetMerge)
+    "parityPairs": [                             // git_parity
       { "left": "<rel>", "right": "<rel>", "label": "<display>" }
-    ]
+    ],
+    "workspaceRootHint": "<basename-or-suffix>"  // optional; multi-root MCP disambiguation
   }
 }
 ```
+
+Paths in presets are resolved under the git toplevel; relative paths that escape the repository are rejected.
 
 ## Installation
 
@@ -75,10 +92,11 @@ If you use Bun globally, you can set `"command": "bunx"` and `"args": ["@rethunk
 ## Workspace root resolution
 
 1. Explicit `workspaceRoot` arg in the tool call (overrides everything).
-2. First `file://` root from the MCP `initialize` / `roots/list_changed` (Cursor, Claude Desktop, etc. send these automatically).
-3. `process.cwd()` as a last resort (useful in CI and test harnesses that pass explicit `workspaceRoot`).
-
-When a client sends multiple roots, the first valid `file://` root wins. Document tie-breaking in your own skill if you need a different policy.
+2. `rootIndex` (0-based) selects a single `file://` MCP root when multiple exist.
+3. `allWorkspaceRoots: true` runs the tool for every `file://` root and aggregates (markdown sections separated by `---`, or JSON arrays).
+4. If `preset` is set and multiple MCP roots exist, the server selects a root whose git toplevel defines that preset (respecting `workspaceRootHint` when present).
+5. Otherwise the first `file://` root from MCP `initialize` / `roots/list_changed`.
+6. `process.cwd()` as a last resort when no file roots exist (useful in CI and test harnesses that pass explicit `workspaceRoot`).
 
 ## Development
 

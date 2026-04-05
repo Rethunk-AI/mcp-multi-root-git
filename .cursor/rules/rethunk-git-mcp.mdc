@@ -10,9 +10,11 @@ This project registers **rethunk-git** via [`.cursor/mcp.json`](.cursor/mcp.json
 ## When to use it
 
 - Before describing repo or multi-root git state, or when batching commits across paths, call **MCP tools** instead of shell `git status`, `git log`, or ad-hoc loops:
-  - **`rethunk-git_git_status`** — root + submodule-style sweep
-  - **`rethunk-git_git_inventory`** — status and ahead/behind per root (pass `nestedRoots` when this repo grows subpackages)
-  - **`rethunk-git_git_parity`** — compare `HEAD` across path pairs when needed
+  - **`rethunk-git_git_status`** — root + submodule-style sweep (`allWorkspaceRoots`, `rootIndex`, optional `format: "json"`)
+  - **`rethunk-git_git_inventory`** — status and ahead/behind per root (default upstream `@{u}`; pass `remote`+`branch` together for fixed tracking; `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`)
+  - **`rethunk-git_git_parity`** — compare `HEAD` across path pairs (`pairs`, `preset`, `presetMerge`, `format`)
+  - **`rethunk-git_list_presets`** — discover `.rethunk/git-mcp-presets.json` entries and validation errors
+- Resource **`rethunk-git://presets`** — JSON view of presets at the resolved git toplevel when clients support MCP resources
 
 ## When shell git is still fine
 
