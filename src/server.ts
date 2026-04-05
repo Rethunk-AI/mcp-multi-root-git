@@ -124,6 +124,22 @@ function jsonRespond(body: Record<string, unknown>): string {
   );
 }
 
+/** Spread into an object literal only when `cond` is true; otherwise `{}`. */
+function optionalFields<T extends Record<string, unknown>>(
+  cond: boolean,
+  fields: T,
+): T | Record<string, never> {
+  return cond ? fields : {};
+}
+
+/** Spread `{ [key]: value }` only when `value` is not `undefined`. */
+function spreadDefined<K extends string, V>(
+  key: K,
+  value: V | undefined,
+): Record<K, V> | Record<string, never> {
+  return value !== undefined ? ({ [key]: value } as Record<K, V>) : {};
+}
+
 // ---------------------------------------------------------------------------
 // Workspace / MCP roots
 // ---------------------------------------------------------------------------
@@ -1046,8 +1062,11 @@ server.addTool({
       if (args.format === "json") {
         allJson.push({
           workspace_root: top,
-          ...(presetSchemaVersion !== undefined ? { presetSchemaVersion } : {}),
-          ...(nestedRootsTruncated ? { nestedRootsTruncated: true, nestedRootsOmittedCount } : {}),
+          ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
+          ...optionalFields(nestedRootsTruncated, {
+            nestedRootsTruncated: true,
+            nestedRootsOmittedCount,
+          }),
           upstream: useFixed
             ? { mode: "fixed", remote: fixedRemote, branch: fixedBranch }
             : { mode: "auto" },
@@ -1235,9 +1254,7 @@ server.addTool({
 
       results.push({
         workspace_root: top,
-        ...(parityPresetSchemaVersion !== undefined
-          ? { presetSchemaVersion: parityPresetSchemaVersion }
-          : {}),
+        ...spreadDefined("presetSchemaVersion", parityPresetSchemaVersion),
         status: allOk ? "OK" : "MISMATCH",
         pairs: pairResults,
       });
@@ -1356,16 +1373,17 @@ server.addTool({
         name,
         nestedRootsCount: e.nestedRoots?.length ?? 0,
         parityPairsCount: e.parityPairs?.length ?? 0,
-        ...(e.workspaceRootHint ? { workspaceRootHint: e.workspaceRootHint } : {}),
+        ...spreadDefined(
+          "workspaceRootHint",
+          e.workspaceRootHint ? e.workspaceRootHint : undefined,
+        ),
       }));
       out.push({
         workspaceRoot: ws,
         gitTop: top,
         presetFile,
         fileExists: true,
-        ...(loaded.schemaVersion !== undefined
-          ? { presetSchemaVersion: loaded.schemaVersion }
-          : {}),
+        ...spreadDefined("presetSchemaVersion", loaded.schemaVersion),
         presets,
       });
     }
@@ -1451,9 +1469,7 @@ server.addResource({
       text: jsonRespond({
         presetFile: join(top, PRESET_FILE_PATH),
         fileExists: true,
-        ...(loaded.schemaVersion !== undefined
-          ? { presetSchemaVersion: loaded.schemaVersion }
-          : {}),
+        ...spreadDefined("presetSchemaVersion", loaded.schemaVersion),
         presets: loaded.data,
       }),
     };
