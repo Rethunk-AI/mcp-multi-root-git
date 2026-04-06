@@ -7,6 +7,7 @@ This package is an MCP **stdio** server. The client starts the process and passe
 ## Table of contents
 
 - [Prerequisites](#prerequisites)
+- [GitHub Packages](#github-packages)
 - [Ways to run the binary](#ways-to-run-the-binary)
 - [Configuration shape (stdio)](#configuration-shape-stdio)
 - [Cursor](#cursor)
@@ -22,9 +23,31 @@ This package is an MCP **stdio** server. The client starts the process and passe
 - **Git** on `PATH` (`git --version`). The server shells out to `git`; if it is missing, tools return `git_not_found`.
 - **Node.js ≥ 22** if you use **`npx`**, or **Bun** if you use **`bunx`** / **`bun`** (see `package.json` `engines` / `packageManager`).
 
+## GitHub Packages
+
+Every **version tag** on this repo is published to the **GitHub npm registry** as **`@rethunk-ai/mcp-multi-root-git`** (scope matches the GitHub org). The **npmjs** package name **`@rethunk/mcp-multi-root-git`** is updated **manually** by maintainers and may lag; prefer GitHub Packages for CI-aligned installs.
+
+1. Create a [GitHub personal access token](https://github.com/settings/tokens) with at least **`read:packages`** (and **`repo`** if the package were private).
+2. In **`~/.npmrc`** or the project **`.npmrc`** (do not commit secrets):
+
+   ```ini
+   @rethunk-ai:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=YOUR_TOKEN_HERE
+   ```
+
+3. Install or run, for example:
+
+   ```bash
+   npx -y @rethunk-ai/mcp-multi-root-git
+   ```
+
+   Or **`bunx @rethunk-ai/mcp-multi-root-git`** with the same registry configuration for that scope.
+
+**`$schema` in preset JSON:** point at the copy under **`node_modules/@rethunk-ai/mcp-multi-root-git/git-mcp-presets.schema.json`** when you install from GitHub Packages; use **`@rethunk/mcp-multi-root-git/...`** when installing from npmjs.
+
 ## Ways to run the binary
 
-Use any of these from a terminal to confirm the package runs (each starts the stdio server until EOF):
+Use any of these from a terminal to confirm the package runs (each starts the stdio server until EOF). **npmjs** name:
 
 ```bash
 npx -y @rethunk/mcp-multi-root-git
@@ -32,7 +55,14 @@ bunx @rethunk/mcp-multi-root-git
 npm install -g @rethunk/mcp-multi-root-git && mcp-multi-root-git
 ```
 
-Published entrypoint: **`dist/server.js`** (see npm `bin` / `exports`). Clients typically invoke **`npx`** or **`bunx`** so a global install is optional.
+**GitHub Packages** name (after configuring **`.npmrc`** as in [GitHub Packages](#github-packages)):
+
+```bash
+npx -y @rethunk-ai/mcp-multi-root-git
+bunx @rethunk-ai/mcp-multi-root-git
+```
+
+Published entrypoint: **`dist/server.js`** (see `bin` / `exports`). Clients typically invoke **`npx`** or **`bunx`** so a global install is optional.
 
 ## Configuration shape (stdio)
 

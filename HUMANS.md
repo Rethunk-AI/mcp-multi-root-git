@@ -43,6 +43,8 @@ With **multiple MCP file roots**, the server picks a root whose git toplevel def
 }
 ```
 
+If you installed from **GitHub Packages**, use **`./node_modules/@rethunk-ai/mcp-multi-root-git/git-mcp-presets.schema.json`** in **`$schema`** instead (see [docs/install.md](docs/install.md#github-packages)).
+
 **Layouts:**
 
 1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }`.
@@ -90,22 +92,24 @@ bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-pu
 
 ## Publishing
 
-### npm (production) — version tags only
+### GitHub (automated) — version tags only
 
-Releases to [npmjs](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml) when you push a **semver git tag** `vX.Y.Z` that **exactly matches** `version` in `package.json` (e.g. tag `v1.2.3` and `"version": "1.2.3"`).
+Tag pushes run [`.github/workflows/release.yml`](.github/workflows/release.yml): build, check, tests, then:
 
-1. Bump **`package.json` `version`**, commit on `main`.
-2. Create and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+1. **`npm pack`** using the committed **`package.json`** name [`@rethunk/mcp-multi-root-git`](https://github.com/Rethunk-AI/mcp-multi-root-git) — tarball attached to a **GitHub Release** for that tag.
+2. **GitHub Packages** (npm registry): the workflow temporarily rewrites the package **name** to **`@rethunk-ai/mcp-multi-root-git`** (required scope for org `Rethunk-AI` on GitHub) and runs **`npm publish`** to **`https://npm.pkg.github.com`** with **`GITHUB_TOKEN`** (`packages: write`). No npmjs token is used in CI.
 
-The workflow runs build, check, and tests, publishes with **`npm publish`**, then creates a **GitHub Release** for that tag and attaches the same **`.tgz`** as a downloadable asset.
+Prerequisite: push a **semver git tag** `vX.Y.Z` that **exactly matches** `version` in `package.json` (e.g. `v1.2.3` and `"version": "1.2.3"`).
 
-**Repository secret:** add **`NPM_TOKEN`** (granular npm access token with publish permission for `@rethunk/mcp-multi-root-git` or the scope). Without it, the publish step fails.
+### npmjs (manual) — maintainers only
 
-### Local publish (maintainers)
+npmjs no longer fits an unattended CI publish flow for this org; **do not** rely on automation to [npmjs](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git). To publish the **same** package name consumers already use (**`@rethunk/mcp-multi-root-git`**):
 
-```bash
-bun run prepublishOnly  # build + check + test
-bun publish
-```
+1. On a clean checkout at the release commit (usually **`main`** after bumping version), run **`bun run prepublishOnly`** (or `bun run build && bun run check && bun run test`).
+2. Log in to the public registry once per machine: **`npm login`** (or `npm adduser`) so **`npm whoami`** shows the account that owns **`@rethunk`** on npmjs.
+3. Ensure **`package.json`** still has **`"name": "@rethunk/mcp-multi-root-git"`** and **`publishConfig.access`** is **`"public"`** (no **`publishConfig.registry`** pointing at GitHub — leave default registry for npmjs).
+4. Publish: **`npm publish --access public`** (runs **`prepublishOnly`** again unless you pass **`--ignore-scripts`** after you already verified locally).
 
-`npm publish` works if `dist/` is built and checks pass. **`package.json` `files` includes the whole `dist/` directory** so every emitted chunk the entry imports is packed; if you add new `src/server/*.ts` modules, `tsc` will emit matching `dist/server/*.js` files—do not narrow `files` back to a single `server.js` or installs will break.
+**`package.json` `files`** must keep the whole **`dist/`** directory so every emitted chunk the entry imports is packed; if you add new `src/server/*.ts` modules, `tsc` emits matching **`dist/server/*.js`** files — do not narrow **`files`** back to a single **`server.js`** or installs break.
+
+**Preset `$schema`:** after **`npm install`**, the schema path is under **`node_modules/@rethunk/mcp-multi-root-git/`** for npmjs, or **`node_modules/@rethunk-ai/mcp-multi-root-git/`** when installing from GitHub Packages — adjust **`$schema`** accordingly (see [docs/install.md](docs/install.md)).

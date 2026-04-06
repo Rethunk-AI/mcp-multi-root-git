@@ -34,7 +34,7 @@
 
 ## Validation and CI
 
-Local: `bun run build` (`rimraf dist && tsc`), `bun run check` (Biome), `bun run test` (`bun test` for [`src/repo-paths.test.ts`](src/repo-paths.test.ts)). GitHub Actions runs the same after `bun install --frozen-lockfile` on PRs and `main` ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), then uploads a **prerelease `npm pack` artifact**. Pushes of tag **`v*.*.*`** matching `package.json` `version` run [`.github/workflows/release.yml`](.github/workflows/release.yml) (npm publish + GitHub Release); see [HUMANS.md](HUMANS.md) Publishing.
+Local: `bun run build` (`rimraf dist && tsc`), `bun run check` (Biome), `bun run test` (`bun test` for [`src/repo-paths.test.ts`](src/repo-paths.test.ts)). GitHub Actions runs the same after `bun install --frozen-lockfile` on PRs and `main` ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), then uploads a **prerelease `npm pack` artifact**. Pushes of tag **`v*.*.*`** matching `package.json` `version` run [`.github/workflows/release.yml`](.github/workflows/release.yml) (**GitHub Packages** npm publish under **`@rethunk-ai/mcp-multi-root-git`** + **GitHub Release** with tarball); **npmjs** is manual only — see [HUMANS.md](HUMANS.md) Publishing.
 
 Optional [`.githooks/`](.githooks): run **`bun run setup-hooks`** once per clone (`core.hooksPath` → `.githooks`). **pre-commit** = `check`; **pre-push** = frozen install + build + check. See [HUMANS.md](HUMANS.md) Development.
 
