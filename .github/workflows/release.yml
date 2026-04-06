@@ -17,14 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+      - name: Assert Node.js version
+        run: node -e "const v=+process.version.slice(1).split('.')[0]; if(v<22)process.exit(1)"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

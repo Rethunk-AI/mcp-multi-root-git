@@ -86,7 +86,7 @@ bun run setup-hooks   # once per clone: use .githooks (pre-commit: check; pre-pu
 
 **Git hooks:** after `setup-hooks`, **pre-commit** runs `bun run check`; **pre-push** runs `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test` (same order as CI). Set **`SKIP_GIT_HOOKS=1`** or use **`--no-verify`** to bypass.
 
-**CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test`. A follow-up job **`prerelease-pack`** builds the same tree and runs **`npm pack`**, then uploads a **prerelease `.tgz` artifact** (named with the commit SHA) you can download from the workflow run’s **Artifacts** section (retention 90 days). Match the check job locally before opening a PR.
+**CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`: **`actions/setup-node` with Node 24** (minimum 22 asserted), then `bun install --frozen-lockfile`, `bun run build`, `bun run check`, and `bun run test`. A follow-up job **`prerelease-pack`** builds the same tree and runs **`npm pack`**, then uploads a **prerelease `.tgz` artifact** (named with the commit SHA) you can download from the workflow run’s **Artifacts** section (retention 90 days). Match the check job locally before opening a PR.
 
 ## Publishing
 
