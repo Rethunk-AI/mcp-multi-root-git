@@ -94,17 +94,7 @@ export function isSafeGitUpstreamToken(s: string): boolean {
   const t = s.trim();
   if (t.length === 0 || t.length > 256) return false;
   if (t.includes("..")) return false;
-  if (t.startsWith("-")) return false;
-  if (t.includes("@")) return false;
-  const forbidden = new Set("{}[]~^:?*\\".split(""));
-  for (let i = 0; i < t.length; i++) {
-    const ch = t.charAt(i);
-    const c = ch.charCodeAt(0);
-    if (c < 32 || c === 127) return false;
-    if (/\s/.test(ch)) return false;
-    if (forbidden.has(ch)) return false;
-  }
-  return true;
+  return /^(?!-)[A-Za-z0-9_./+-]+$/.test(t);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,9 +112,7 @@ export async function asyncPool<T, R>(
     for (;;) {
       const i = next++;
       if (i >= items.length) break;
-      const item = items[i];
-      if (item === undefined) break;
-      results[i] = await fn(item);
+      results[i] = await fn(items[i]!);
     }
   }
   const n = Math.min(Math.max(1, concurrency), Math.max(1, items.length));
@@ -163,16 +151,16 @@ export async function gitStatusSnapshotAsync(cwd: string): Promise<{
   branchOk: boolean;
   shortOk: boolean;
 }> {
-  const [br, sh] = await Promise.all([
-    spawnGitAsync(cwd, ["status", "--short", "-b"]),
-    spawnGitAsync(cwd, ["status", "--short"]),
-  ]);
-  return {
-    branchOk: br.ok,
-    shortOk: sh.ok,
-    branchLine: br.ok ? br.stdout.trimEnd() : gitStatusFailText(br),
-    shortLine: sh.ok ? sh.stdout.trimEnd() : gitStatusFailText(sh),
-  };
+  const r = await spawnGitAsync(cwd, ["status", "--short", "-b"]);
+  if (!r.ok) {
+    const text = gitStatusFailText(r);
+    return { branchOk: false, shortOk: false, branchLine: text, shortLine: text };
+  }
+  const full = r.stdout.trimEnd();
+  const nl = full.indexOf("\n");
+  const branchLine = full;
+  const shortLine = nl >= 0 ? full.slice(nl + 1) : "";
+  return { branchOk: true, shortOk: true, branchLine, shortLine };
 }
 
 export async function gitStatusShortBranchAsync(

@@ -81,9 +81,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       }
       const useFixed = hasRemote && hasBranch;
       if (useFixed) {
-        const r = String(fixedRemote).trim();
-        const b = String(fixedBranch).trim();
-        if (!isSafeGitUpstreamToken(r) || !isSafeGitUpstreamToken(b)) {
+        if (!isSafeGitUpstreamToken(fixedRemote!.trim()) || !isSafeGitUpstreamToken(fixedBranch!.trim())) {
           return jsonRespond({
             error: "invalid_remote_or_branch",
             message:
@@ -113,22 +111,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
                 remote: fixedRemote,
                 branch: fixedBranch,
               },
-              entries: [
-                {
-                  label: workspaceRoot,
-                  path: workspaceRoot,
-                  branchStatus: "",
-                  shortStatus: "",
-                  detached: false,
-                  headAbbrev: "",
-                  upstreamMode: useFixed ? "fixed" : "auto",
-                  upstreamRef: null,
-                  ahead: null,
-                  behind: null,
-                  upstreamNote: "",
-                  skipReason: JSON.stringify(err),
-                },
-              ],
+              entries: [makeSkipEntry(workspaceRoot, workspaceRoot, useFixed ? "fixed" : "auto", JSON.stringify(err))],
             });
           } else {
             mdChunks.push(`# Git inventory`, "", jsonRespond(err), "");

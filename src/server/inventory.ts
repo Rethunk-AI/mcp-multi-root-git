@@ -68,10 +68,36 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
   return [`## ${e.label}`, `path: ${e.path}`, "```text", lines.join("\n"), "```", ``];
 }
 
-function upstreamNoteFor(ref: string, ahead: string | null, behind: string | null): string {
-  return ahead != null && behind != null
-    ? `tracking ${ref}`
-    : `upstream ${ref} (counts unreadable)`;
+function upstreamNoteFor(ref: string, hasCounts: boolean): string {
+  return hasCounts ? `tracking ${ref}` : `upstream ${ref} (counts unreadable)`;
+}
+
+function buildEntry(params: {
+  label: string;
+  absPath: string;
+  branchStatus: string;
+  shortStatus: string;
+  detached: boolean;
+  headAbbrev: string;
+  upstreamMode: "auto" | "fixed";
+  upstreamRef: string | null;
+  ahead: string | null;
+  behind: string | null;
+  upstreamNote: string;
+}): InventoryEntryJson {
+  return {
+    label: params.label,
+    path: params.absPath,
+    branchStatus: params.branchStatus,
+    shortStatus: params.shortStatus,
+    detached: params.detached,
+    headAbbrev: params.headAbbrev || "(unknown)",
+    upstreamMode: params.upstreamMode,
+    upstreamRef: params.upstreamRef,
+    ahead: params.ahead,
+    behind: params.behind,
+    upstreamNote: params.upstreamNote,
+  };
 }
 
 export async function collectInventoryEntry(
@@ -89,81 +115,53 @@ export async function collectInventoryEntry(
   const shortStatus = snap.shortLine;
   const headAbbrev = headR.ok ? headR.stdout.trim() : "";
   const detached = !headR.ok || headAbbrev === "HEAD" || headAbbrev.endsWith("/HEAD");
+  const base = { label, absPath, branchStatus, shortStatus, detached, headAbbrev };
 
-  const useFixed = fixedRemote !== undefined && fixedBranch !== undefined;
-
-  if (useFixed) {
-    const remote = fixedRemote;
-    const branch = fixedBranch;
-    const verify = await spawnGitAsync(absPath, ["rev-parse", "--verify", `${remote}/${branch}`]);
+  if (fixedRemote !== undefined && fixedBranch !== undefined) {
+    const ref = `${fixedRemote}/${fixedBranch}`;
+    const verify = await spawnGitAsync(absPath, ["rev-parse", "--verify", ref]);
     if (!verify.ok) {
-      return {
-        label,
-        path: absPath,
-        branchStatus,
-        shortStatus,
-        detached,
-        headAbbrev: headAbbrev || "(unknown)",
+      return buildEntry({
+        ...base,
         upstreamMode: "fixed",
-        upstreamRef: `${remote}/${branch}`,
+        upstreamRef: ref,
         ahead: null,
         behind: null,
-        upstreamNote: `(no local ref ${remote}/${branch} or unreadable)`,
-      };
+        upstreamNote: `(no local ref ${ref} or unreadable)`,
+      });
     }
-    const ref = `${remote}/${branch}`;
     const { ahead, behind } = await fetchAheadBehind(absPath, ref);
-    return {
-      label,
-      path: absPath,
-      branchStatus,
-      shortStatus,
-      detached,
-      headAbbrev: headAbbrev || "(unknown)",
+    return buildEntry({
+      ...base,
       upstreamMode: "fixed",
       upstreamRef: ref,
       ahead,
       behind,
-      upstreamNote: upstreamNoteFor(ref, ahead, behind),
-    };
+      upstreamNote: upstreamNoteFor(ref, ahead != null && behind != null),
+    });
   }
 
   const upVerify = await spawnGitAsync(absPath, ["rev-parse", "--verify", "@{u}"]);
   if (!upVerify.ok) {
-    let note = "no upstream configured";
-    if (detached) {
-      note = "detached HEAD — no upstream";
-    }
-    return {
-      label,
-      path: absPath,
-      branchStatus,
-      shortStatus,
-      detached,
-      headAbbrev: headAbbrev || "(unknown)",
+    return buildEntry({
+      ...base,
       upstreamMode: "auto",
       upstreamRef: null,
       ahead: null,
       behind: null,
-      upstreamNote: note,
-    };
+      upstreamNote: detached ? "detached HEAD — no upstream" : "no upstream configured",
+    });
   }
 
   const abbrevR = await spawnGitAsync(absPath, ["rev-parse", "--abbrev-ref", "@{u}"]);
   const upstreamRef = abbrevR.ok ? abbrevR.stdout.trim() : "@{u}";
   const { ahead, behind } = await fetchAheadBehind(absPath, "@{u}");
-
-  return {
-    label,
-    path: absPath,
-    branchStatus,
-    shortStatus,
-    detached,
-    headAbbrev: headAbbrev || "(unknown)",
+  return buildEntry({
+    ...base,
     upstreamMode: "auto",
     upstreamRef,
     ahead,
     behind,
-    upstreamNote: upstreamNoteFor(upstreamRef, ahead, behind),
-  };
+    upstreamNote: upstreamNoteFor(upstreamRef, ahead != null && behind != null),
+  });
 }

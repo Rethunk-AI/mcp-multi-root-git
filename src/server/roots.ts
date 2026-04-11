@@ -1,4 +1,4 @@
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { FastMCP } from "fastmcp";
@@ -30,19 +30,13 @@ export function listFileRoots(server: FastMCP): string[] {
 export function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
   const h = hint.trim();
   if (!h) return true;
-  if (basename(rootPath) === h) return true;
   const absRoot = resolve(rootPath);
-  if (absRoot === h) return true;
-  try {
-    if (isAbsolute(h) && resolve(h) === absRoot) return true;
-  } catch {
-    /* invalid absolute hint */
-  }
   const normRoot = absRoot.replace(/\\/g, "/").replace(/\/+$/, "");
   const normHint = h.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
   if (!normHint) return true;
   if (normRoot === normHint) return true;
-  return normRoot.endsWith(`/${normHint}`);
+  if (normRoot.endsWith(`/${normHint}`)) return true;
+  return basename(rootPath) === h;
 }
 
 export type RootPick = {
@@ -60,31 +54,19 @@ export function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveR
     return { ok: true, roots: [resolve(args.workspaceRoot.trim())] };
   }
   const fileRoots = listFileRoots(server);
+  const fallback: ResolveRootsResult = { ok: true, roots: [process.cwd()] };
   if (args.allWorkspaceRoots) {
-    if (fileRoots.length === 0) {
-      return { ok: true, roots: [process.cwd()] };
-    }
-    return { ok: true, roots: fileRoots };
+    return fileRoots.length === 0 ? fallback : { ok: true, roots: fileRoots };
   }
   if (args.rootIndex != null) {
     const r = fileRoots[args.rootIndex];
     if (!r) {
-      return {
-        ok: false,
-        error: {
-          error: "root_index_out_of_range",
-          rootIndex: args.rootIndex,
-          rootCount: fileRoots.length,
-        },
-      };
+      return { ok: false, error: { error: "root_index_out_of_range", rootIndex: args.rootIndex, rootCount: fileRoots.length } };
     }
     return { ok: true, roots: [r] };
   }
   const primary = fileRoots[0];
-  if (primary !== undefined) {
-    return { ok: true, roots: [primary] };
-  }
-  return { ok: true, roots: [process.cwd()] };
+  return primary !== undefined ? { ok: true, roots: [primary] } : fallback;
 }
 
 /**

@@ -124,11 +124,12 @@ export function presetLoadErrorPayload(
 export function getPresetEntry(
   gitTop: string,
   presetName: string,
-): { entry: PresetEntry; presetSchemaVersion?: string } | { error: Record<string, unknown> } {
+): { ok: true; entry: PresetEntry; presetSchemaVersion?: string } | { ok: false; error: Record<string, unknown> } {
   const loaded = loadPresetsFromGitTop(gitTop);
   if (!loaded.ok) {
     if (loaded.reason === "missing") {
       return {
+        ok: false,
         error: {
           error: "preset_not_found",
           preset: presetName,
@@ -137,11 +138,12 @@ export function getPresetEntry(
         },
       };
     }
-    return { error: presetLoadErrorPayload(gitTop, loaded) };
+    return { ok: false, error: presetLoadErrorPayload(gitTop, loaded) };
   }
   const entry = loaded.data[presetName];
   if (!entry) {
     return {
+      ok: false,
       error: {
         error: "preset_not_found",
         preset: presetName,
@@ -149,7 +151,7 @@ export function getPresetEntry(
       },
     };
   }
-  return { entry, presetSchemaVersion: loaded.schemaVersion };
+  return { ok: true, entry, presetSchemaVersion: loaded.schemaVersion };
 }
 
 export function mergeNestedRoots(
@@ -191,7 +193,7 @@ export function applyPresetNestedRoots(
   | { ok: true; nestedRoots: string[] | undefined; presetSchemaVersion?: string }
   | { ok: false; error: Record<string, unknown> } {
   const got = getPresetEntry(gitTop, presetName);
-  if ("error" in got) return { ok: false, error: got.error };
+  if (!got.ok) return { ok: false, error: got.error };
   const fromPreset = got.entry.nestedRoots;
   let nestedRoots: string[] | undefined = inlineNestedRoots;
   if (presetMerge) {
@@ -211,7 +213,7 @@ export function applyPresetParityPairs(
   | { ok: true; pairs: ParityPair[] | undefined; presetSchemaVersion?: string }
   | { ok: false; error: Record<string, unknown> } {
   const got = getPresetEntry(gitTop, presetName);
-  if ("error" in got) return { ok: false, error: got.error };
+  if (!got.ok) return { ok: false, error: got.error };
   const fromPreset = got.entry.parityPairs;
   let pairs: ParityPair[] | undefined = inlinePairs;
   if (presetMerge) {
