@@ -2,6 +2,14 @@
 
 Read-only MCP git tools for any workspace. **How the server is installed and wired to clients:** **[docs/install.md](docs/install.md)** only (do not restate that material here).
 
+## Badges
+
+[![Release](https://github.com/Rethunk-AI/mcp-multi-root-git/actions/workflows/release.yml/badge.svg)](https://github.com/Rethunk-AI/mcp-multi-root-git/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/Rethunk-AI/mcp-multi-root-git?logo=github&label=release)](https://github.com/Rethunk-AI/mcp-multi-root-git/releases/latest)
+[![npm downloads](https://img.shields.io/npm/dm/%40rethunk%2Fmcp-multi-root-git.svg?label=npm%20downloads)](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git)
+[![GitHub Packages](https://img.shields.io/badge/github%20packages-%40rethunk--ai%2Fmcp--multi--root--git-24292f?logo=github)](https://github.com/Rethunk-AI/mcp-multi-root-git/packages)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://github.com/Rethunk-AI/mcp-multi-root-git/blob/main/package.json)
+
 **Implementation map (modules under `src/server/`, entry `src/server.ts`), symbols, and contract bumps** live in **`AGENTS.md`** at the repository root. This guide does not repeat those sections.
 
 **Registered tool ids, client naming (`rethunk-git_*`), `format` / JSON envelopes, resource URI, workspace root resolution:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; not duplicated here.

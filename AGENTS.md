@@ -1,5 +1,7 @@
 # AGENTS.md — LLM and developer onboarding
 
+Note for IDEs that inject this file as project context: do not re-link it from rules.
+
 **Scope:** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) is an MCP **stdio** server: entry [`src/server.ts`](src/server.ts) (FastMCP + `registerRethunkGitTools`), supporting modules under [`src/server/`](src/server/), build output [`dist/server.js`](dist/server.js) (see `package.json` `bin` / `exports`; publish ships the full `dist/` tree).
 
 **Operators and integrators:** **[docs/install.md](docs/install.md)** is the **only** place for prerequisites, how to launch the server, and per-client MCP configuration — do not duplicate that in README, HUMANS, rules, or here. Preset file, dev workflow, CI, and publishing: **[HUMANS.md](HUMANS.md)**.
