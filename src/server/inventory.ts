@@ -43,8 +43,9 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
   } else if (e.upstreamNote) {
     lines.push(`upstream: ${e.upstreamNote}`);
   }
-  if (lines.length === 1 && !lines[0]!.includes("\n")) {
-    return ["", header, lines[0]!];
+  const single = lines.length === 1 ? lines[0] : undefined;
+  if (single !== undefined && !single.includes("\n")) {
+    return ["", header, single];
   }
   return ["", header, "```text", lines.join("\n"), "```"];
 }

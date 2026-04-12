@@ -42,23 +42,27 @@ export function registerGitInventoryTool(server: FastMCP): void {
         return jsonRespond(pre.error);
       }
 
-      const fixedRemote = args.remote;
-      const fixedBranch = args.branch;
-      const hasRemote = fixedRemote !== undefined && fixedRemote.trim() !== "";
-      const hasBranch = fixedBranch !== undefined && fixedBranch.trim() !== "";
+      const rawRemote = args.remote?.trim();
+      const rawBranch = args.branch?.trim();
+      const hasRemote = rawRemote !== undefined && rawRemote !== "";
+      const hasBranch = rawBranch !== undefined && rawBranch !== "";
       if (hasRemote !== hasBranch) {
         return jsonRespond({ error: "remote_branch_mismatch" });
       }
-      const useFixed = hasRemote && hasBranch;
-      if (useFixed) {
-        if (
-          !isSafeGitUpstreamToken(fixedRemote!.trim()) ||
-          !isSafeGitUpstreamToken(fixedBranch!.trim())
-        ) {
+
+      type Upstream =
+        | { mode: "fixed"; remote: string; branch: string }
+        | { mode: "auto"; remote?: undefined; branch?: undefined };
+
+      let upstream: Upstream = { mode: "auto" };
+      if (hasRemote && hasBranch && rawRemote && rawBranch) {
+        if (!isSafeGitUpstreamToken(rawRemote) || !isSafeGitUpstreamToken(rawBranch)) {
           return jsonRespond({ error: "invalid_remote_or_branch" });
         }
+        upstream = { mode: "fixed", remote: rawRemote, branch: rawBranch };
       }
-      const upstreamMode: "auto" | "fixed" = useFixed ? "fixed" : "auto";
+
+      const useFixed = upstream.mode === "fixed";
 
       const allJson: {
         workspace_root: string;
@@ -76,17 +80,9 @@ export function registerGitInventoryTool(server: FastMCP): void {
           if (args.format === "json") {
             allJson.push({
               workspace_root: workspaceRoot,
-              ...(useFixed
-                ? {
-                    upstream: {
-                      mode: "fixed" as const,
-                      remote: fixedRemote!,
-                      branch: fixedBranch!,
-                    },
-                  }
-                : {}),
+              ...(upstream.mode === "fixed" ? { upstream } : {}),
               entries: [
-                makeSkipEntry(workspaceRoot, workspaceRoot, upstreamMode, JSON.stringify(err)),
+                makeSkipEntry(workspaceRoot, workspaceRoot, upstream.mode, JSON.stringify(err)),
               ],
             });
           } else {
@@ -117,7 +113,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
         }
 
         const headerNote = useFixed
-          ? `upstream (fixed): ${fixedRemote}/${fixedBranch}`
+          ? `upstream (fixed): ${upstream.remote}/${upstream.branch}`
           : "upstream: @{u}";
 
         const entries: InventoryEntryJson[] = [];
@@ -128,34 +124,26 @@ export function registerGitInventoryTool(server: FastMCP): void {
             const { abs, underTop } = validateRepoPath(rel, top);
             if (!underTop) {
               entries.push(
-                makeSkipEntry(rel, abs, upstreamMode, "(path escapes git toplevel — rejected)"),
+                makeSkipEntry(rel, abs, upstream.mode, "(path escapes git toplevel — rejected)"),
               );
               continue;
             }
             if (!gitRevParseGitDir(abs)) {
-              entries.push(makeSkipEntry(rel, abs, upstreamMode, "(not a git work tree — skip)"));
+              entries.push(makeSkipEntry(rel, abs, upstream.mode, "(not a git work tree — skip)"));
               continue;
             }
             jobs.push({ label: rel, abs });
           }
           const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, (j) =>
-            collectInventoryEntry(
-              j.label,
-              j.abs,
-              useFixed ? fixedRemote : undefined,
-              useFixed ? fixedBranch : undefined,
-            ),
+            collectInventoryEntry(j.label, j.abs, upstream.remote, upstream.branch),
           );
           entries.push(...computed);
         } else if (!gitRevParseGitDir(top)) {
-          entries.push(makeSkipEntry(".", top, upstreamMode, "(not a git work tree — unexpected)"));
-        } else {
-          const one = await collectInventoryEntry(
-            ".",
-            top,
-            useFixed ? fixedRemote : undefined,
-            useFixed ? fixedBranch : undefined,
+          entries.push(
+            makeSkipEntry(".", top, upstream.mode, "(not a git work tree — unexpected)"),
           );
+        } else {
+          const one = await collectInventoryEntry(".", top, upstream.remote, upstream.branch);
           entries.push(one);
         }
 
@@ -167,15 +155,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
               nestedRootsTruncated: true,
               nestedRootsOmittedCount,
             }),
-            ...(useFixed
-              ? {
-                  upstream: {
-                    mode: "fixed" as const,
-                    remote: fixedRemote!,
-                    branch: fixedBranch!,
-                  },
-                }
-              : {}),
+            ...(upstream.mode === "fixed" ? { upstream } : {}),
             entries,
           });
         } else {

@@ -110,7 +110,9 @@ export async function asyncPool<T, R>(
     for (;;) {
       const i = next++;
       if (i >= items.length) break;
-      results[i] = await fn(items[i]!);
+      const item = items[i];
+      if (item === undefined) break;
+      results[i] = await fn(item);
     }
   }
   const n = Math.min(Math.max(1, concurrency), Math.max(1, items.length));
