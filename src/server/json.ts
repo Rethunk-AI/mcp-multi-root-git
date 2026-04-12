@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const MCP_JSON_FORMAT_VERSION = "1" as const;
+export const MCP_JSON_FORMAT_VERSION = "2" as const;
 
 export function readPackageVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -26,13 +26,7 @@ export function readMcpServerVersion(): `${number}.${number}.${number}` {
 }
 
 export function jsonRespond(body: Record<string, unknown>): string {
-  return JSON.stringify({
-    ...body,
-    rethunkGitMcp: {
-      jsonFormatVersion: MCP_JSON_FORMAT_VERSION,
-      packageVersion: readPackageVersion(),
-    },
-  });
+  return JSON.stringify(body);
 }
 
 /** Spread into an object literal only when `cond` is true; otherwise `{}`. */

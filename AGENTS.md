@@ -13,7 +13,7 @@ Note for IDEs that inject this file as project context: do not re-link it from r
 | File | Symbols / notes |
 |------|-------------------|
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
-| [`src/server/json.ts`](src/server/json.ts) | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `spreadWhen`, `spreadDefined` — every tool JSON body ends with `rethunkGitMcp` |
+| [`src/server/json.ts`](src/server/json.ts) | `MCP_JSON_FORMAT_VERSION`, `jsonRespond()`, `spreadWhen`, `spreadDefined` — tool JSON is minified payload only (no envelope since v2) |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit()` — lazy `git --version`; `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`; `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`; `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
 | [`src/server/roots.ts`](src/server/roots.ts) | `uriToPath`, `listFileRoots`, `pathMatchesWorkspaceRootHint`, `resolveWorkspaceRoots`, `resolveRootsForPreset`, `requireGitAndRoots` — session roots only (client wiring: [docs/install.md](docs/install.md)) |
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod `PresetEntrySchema` / `PresetFileSchema` must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
@@ -30,7 +30,7 @@ Note for IDEs that inject this file as project context: do not re-link it from r
 ## Changing contracts
 
 - **Documentation layout:** do not add top-of-file **banner** paragraphs (bold blocks such as “Canonical doc for… / link here only”) to `docs/install.md` or other shipped docs. Use normal titles, TOC, and cross-links from README / this file / HUMANS.
-- **`rethunkGitMcp.jsonFormatVersion`:** bump **`MCP_JSON_FORMAT_VERSION`** and document the migration in this file and in [docs/mcp-tools.md](docs/mcp-tools.md) when JSON field names or nesting change incompatibly.
+- **`MCP_JSON_FORMAT_VERSION`:** bump the constant and document the migration here and in [docs/mcp-tools.md](docs/mcp-tools.md) when JSON field names, nesting, or emitted-fields change incompatibly. Current value: **`"2"`** (v2 removed the `rethunkGitMcp` envelope; payloads are minified).
 - **Preset file:** keep **`splitPresetFileRaw`** + Zod parsing aligned with **`git-mcp-presets.schema.json`**; update the schema when adding keys or shapes.
 - **Public tool surface:** if you add/rename tools, update [docs/mcp-tools.md](docs/mcp-tools.md) and [README.md](README.md) if the landing page still mentions tools; update [docs/install.md](docs/install.md) if install or client-specific wiring changes — **never** copy install steps into other docs; update [.cursor/rules/rethunk-git-mcp.mdc](.cursor/rules/rethunk-git-mcp.mdc) only if *when-to-use MCP vs shell* wording must change (that rule links `docs/install.md`, [HUMANS.md](HUMANS.md), and `docs/mcp-tools.md` without duplicating them).
 

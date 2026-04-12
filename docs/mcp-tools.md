@@ -20,12 +20,7 @@ Pass **`format: "json"`** on any tool for structured JSON instead of markdown (d
 
 ## JSON responses
 
-Every JSON string returned by a tool (including errors) ends with a **`rethunkGitMcp`** object:
-
-- **`jsonFormatVersion`**: `"1"` for the current response shape.
-- **`packageVersion`**: from the running server’s `package.json`.
-
-Payload keys (e.g. `groups`, `inventories`, `parity`, `roots`) are stable within a given `jsonFormatVersion`. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"2"`** (envelope removed); server + format version are discoverable via MCP `initialize`. Payload keys (e.g. `groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
 For **`git_inventory`** with `format: "json"`, each object inside **`inventories`** may include **`nestedRootsTruncated`** (boolean) and **`nestedRootsOmittedCount`** (number) when **`nestedRoots`** was longer than **`maxRoots`**.
 
@@ -35,7 +30,7 @@ For **`git_inventory`** with `format: "json"`, each object inside **`inventories
 
 | URI | Purpose |
 |-----|---------|
-| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors; same `rethunkGitMcp` envelope pattern as tools). |
+| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors). |
 
 ## Workspace root resolution
 
