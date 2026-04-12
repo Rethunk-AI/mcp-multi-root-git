@@ -32,23 +32,21 @@ export function makeSkipEntry(
 }
 
 export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
+  const header = `## ${e.label} — ${e.path}`;
   if (e.skipReason) {
-    return [`## ${e.label}`, `path: ${e.path}`, "```text", e.skipReason, "```", ``];
+    return ["", header, e.skipReason];
   }
-  const lines: string[] = [];
-  lines.push(e.branchStatus || "(clean)");
-  lines.push("");
-  if (e.detached) {
-    lines.push("branch: (detached HEAD)");
-    lines.push("");
-  }
+  const lines: string[] = [e.branchStatus || "(clean)"];
+  if (e.detached) lines.push("detached HEAD");
   if (e.ahead !== undefined && e.behind !== undefined && e.upstreamRef) {
-    lines.push(`ahead_of_${e.upstreamRef.replace(/\//g, "_")}: ${e.ahead}`);
-    lines.push(`behind_${e.upstreamRef.replace(/\//g, "_")}: ${e.behind}`);
+    lines.push(`${e.upstreamRef}: ahead ${e.ahead}, behind ${e.behind}`);
   } else if (e.upstreamNote) {
     lines.push(`upstream: ${e.upstreamNote}`);
   }
-  return [`## ${e.label}`, `path: ${e.path}`, "```text", lines.join("\n"), "```", ``];
+  if (lines.length === 1 && !lines[0]!.includes("\n")) {
+    return ["", header, lines[0]!];
+  }
+  return ["", header, "```text", lines.join("\n"), "```"];
 }
 
 function upstreamNoteFor(ref: string, hasCounts: boolean): string {
