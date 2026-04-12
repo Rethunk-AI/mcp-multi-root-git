@@ -21,11 +21,7 @@ export function registerGitStatusTool(server: FastMCP): void {
     name: "git_status",
     description: "Read-only `git status --short -b` per root + submodules. See docs/mcp-tools.md.",
     parameters: WorkspacePickSchema.extend({
-      includeSubmodules: z
-        .boolean()
-        .optional()
-        .default(true)
-        .describe("Include .gitmodules paths (default true)."),
+      includeSubmodules: z.boolean().optional().default(true),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);

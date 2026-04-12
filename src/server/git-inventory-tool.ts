@@ -25,15 +25,15 @@ export function registerGitInventoryTool(server: FastMCP): void {
     name: "git_inventory",
     description: "Read-only status + ahead/behind per root. See docs/mcp-tools.md.",
     parameters: WorkspacePickSchema.extend({
-      nestedRoots: z.array(z.string()).optional().describe("Paths relative to git toplevel."),
-      preset: z.string().optional().describe("Named preset from .rethunk/git-mcp-presets.json."),
+      nestedRoots: z.array(z.string()).optional(),
+      preset: z.string().optional(),
       presetMerge: z
         .boolean()
         .optional()
         .default(false)
-        .describe("Merge nestedRoots with preset instead of replacing."),
-      remote: z.string().optional().describe("Fixed upstream remote (pair with `branch`)."),
-      branch: z.string().optional().describe("Fixed upstream branch (pair with `remote`)."),
+        .describe("Merge with preset instead of replacing."),
+      remote: z.string().optional().describe("Pair with `branch`."),
+      branch: z.string().optional().describe("Pair with `remote`."),
       maxRoots: z
         .number()
         .int()
