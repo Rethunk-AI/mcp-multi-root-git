@@ -6,14 +6,14 @@ export const MAX_INVENTORY_ROOTS_DEFAULT = 64;
 export type InventoryEntryJson = {
   label: string;
   path: string;
-  branchStatus: string;
-  detached: boolean;
-  headAbbrev: string;
   upstreamMode: "auto" | "fixed";
-  upstreamRef: string | null;
-  ahead: string | null;
-  behind: string | null;
-  upstreamNote: string;
+  branchStatus?: string;
+  detached?: true;
+  headAbbrev?: string;
+  upstreamRef?: string;
+  ahead?: string;
+  behind?: string;
+  upstreamNote?: string;
   skipReason?: string;
 };
 
@@ -28,19 +28,7 @@ export function makeSkipEntry(
   upstreamMode: "auto" | "fixed",
   skipReason: string,
 ): InventoryEntryJson {
-  return {
-    label,
-    path: abs,
-    branchStatus: "",
-    detached: false,
-    headAbbrev: "",
-    upstreamMode,
-    upstreamRef: null,
-    ahead: null,
-    behind: null,
-    upstreamNote: "",
-    skipReason,
-  };
+  return { label, path: abs, upstreamMode, skipReason };
 }
 
 export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
@@ -54,10 +42,10 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
     lines.push("branch: (detached HEAD)");
     lines.push("");
   }
-  if (e.ahead != null && e.behind != null && e.upstreamRef) {
+  if (e.ahead !== undefined && e.behind !== undefined && e.upstreamRef) {
     lines.push(`ahead_of_${e.upstreamRef.replace(/\//g, "_")}: ${e.ahead}`);
     lines.push(`behind_${e.upstreamRef.replace(/\//g, "_")}: ${e.behind}`);
-  } else {
+  } else if (e.upstreamNote) {
     lines.push(`upstream: ${e.upstreamNote}`);
   }
   return [`## ${e.label}`, `path: ${e.path}`, "```text", lines.join("\n"), "```", ``];
@@ -79,18 +67,19 @@ function buildEntry(params: {
   behind: string | null;
   upstreamNote: string;
 }): InventoryEntryJson {
-  return {
+  const out: InventoryEntryJson = {
     label: params.label,
     path: params.absPath,
-    branchStatus: params.branchStatus,
-    detached: params.detached,
-    headAbbrev: params.headAbbrev || "(unknown)",
     upstreamMode: params.upstreamMode,
-    upstreamRef: params.upstreamRef,
-    ahead: params.ahead,
-    behind: params.behind,
-    upstreamNote: params.upstreamNote,
   };
+  if (params.branchStatus) out.branchStatus = params.branchStatus;
+  if (params.detached) out.detached = true;
+  if (params.headAbbrev) out.headAbbrev = params.headAbbrev;
+  if (params.upstreamRef !== null) out.upstreamRef = params.upstreamRef;
+  if (params.ahead !== null) out.ahead = params.ahead;
+  if (params.behind !== null) out.behind = params.behind;
+  if (params.upstreamNote) out.upstreamNote = params.upstreamNote;
+  return out;
 }
 
 export async function collectInventoryEntry(
