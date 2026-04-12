@@ -87,20 +87,18 @@ export function registerGitStatusTool(server: FastMCP): void {
         return jsonRespond({ groups });
       }
 
-      const sections: string[] = ["# Multi-root git status", ""];
+      const sections: string[] = [groups.length > 1 ? "# Multi-root git status" : "# Git status"];
       for (const g of groups) {
         if (groups.length > 1) {
-          sections.push(`### MCP root: ${g.mcpRoot}`, "");
+          sections.push("", `### MCP root: ${g.mcpRoot}`);
         }
         for (const row of g.repos) {
-          sections.push(
-            `## ${row.label}`,
-            `path: ${row.path}`,
-            "```text",
-            row.statusText || "(empty)",
-            "```",
-            ``,
-          );
+          const body = row.statusText || "(clean)";
+          if (body.includes("\n")) {
+            sections.push("", `## ${row.label} — ${row.path}`, "```text", body, "```");
+          } else {
+            sections.push("", `## ${row.label} — ${row.path}`, body);
+          }
         }
       }
       return sections.join("\n");
