@@ -10,8 +10,7 @@ import { WorkspacePickSchema } from "./schemas.js";
 export function registerListPresetsTool(server: FastMCP): void {
   server.addTool({
     name: "list_presets",
-    description:
-      "List named entries from `.rethunk/git-mcp-presets.json` at the git toplevel for the resolved workspace root.",
+    description: "List presets from .rethunk/git-mcp-presets.json. See docs/mcp-tools.md.",
     parameters: WorkspacePickSchema.pick({
       workspaceRoot: true,
       rootIndex: true,

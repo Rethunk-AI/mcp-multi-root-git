@@ -19,15 +19,13 @@ import { WorkspacePickSchema } from "./schemas.js";
 export function registerGitStatusTool(server: FastMCP): void {
   server.addTool({
     name: "git_status",
-    description:
-      "Run `git status --short -b` in the workspace root and (optionally) each path from `.gitmodules`. " +
-      "Read-only. Supports multi-root MCP workspaces via `allWorkspaceRoots` or `rootIndex`.",
+    description: "Read-only `git status --short -b` per root + submodules. See docs/mcp-tools.md.",
     parameters: WorkspacePickSchema.extend({
       includeSubmodules: z
         .boolean()
         .optional()
         .default(true)
-        .describe("When true (default), include submodule paths listed in .gitmodules."),
+        .describe("Include .gitmodules paths (default true)."),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);

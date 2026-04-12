@@ -23,44 +23,24 @@ import { MAX_INVENTORY_ROOTS_DEFAULT, WorkspacePickSchema } from "./schemas.js";
 export function registerGitInventoryTool(server: FastMCP): void {
   server.addTool({
     name: "git_inventory",
-    description:
-      "Read-only push-prep inventory: status + ahead/behind per root. " +
-      "Uses each repo's configured upstream (`@{u}`) unless both `remote` and `branch` are set. " +
-      "Presets from `.rethunk/git-mcp-presets.json`; use `presetMerge` to combine with inline paths.",
+    description: "Read-only status + ahead/behind per root. See docs/mcp-tools.md.",
     parameters: WorkspacePickSchema.extend({
-      nestedRoots: z
-        .array(z.string())
-        .optional()
-        .describe(
-          "Paths relative to git toplevel. If empty/omitted, only the repo root is listed. With `presetMerge`, merged with preset paths.",
-        ),
-      preset: z
-        .string()
-        .optional()
-        .describe("Named preset from .rethunk/git-mcp-presets.json (at git toplevel)."),
+      nestedRoots: z.array(z.string()).optional().describe("Paths relative to git toplevel."),
+      preset: z.string().optional().describe("Named preset from .rethunk/git-mcp-presets.json."),
       presetMerge: z
         .boolean()
         .optional()
         .default(false)
-        .describe("When true, merge `nestedRoots` with preset nestedRoots instead of replacing."),
-      remote: z
-        .string()
-        .optional()
-        .describe(
-          "Fixed upstream remote; must be set together with `branch` to override auto upstream.",
-        ),
-      branch: z
-        .string()
-        .optional()
-        .describe("Fixed upstream branch name; must be set together with `remote`."),
+        .describe("Merge nestedRoots with preset instead of replacing."),
+      remote: z.string().optional().describe("Fixed upstream remote (pair with `branch`)."),
+      branch: z.string().optional().describe("Fixed upstream branch (pair with `remote`)."),
       maxRoots: z
         .number()
         .int()
         .min(1)
         .max(256)
         .optional()
-        .default(MAX_INVENTORY_ROOTS_DEFAULT)
-        .describe("Max nested roots to process (cap)."),
+        .default(MAX_INVENTORY_ROOTS_DEFAULT),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, args.preset);
