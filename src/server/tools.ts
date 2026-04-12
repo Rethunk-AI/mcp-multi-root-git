@@ -1,5 +1,6 @@
 import type { FastMCP } from "fastmcp";
 
+import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
@@ -11,5 +12,6 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitInventoryTool(server);
   registerGitParityTool(server);
   registerListPresetsTool(server);
+  registerBatchCommitTool(server);
   registerPresetsResource(server);
 }
