@@ -26,17 +26,13 @@ export function readMcpServerVersion(): `${number}.${number}.${number}` {
 }
 
 export function jsonRespond(body: Record<string, unknown>): string {
-  return JSON.stringify(
-    {
-      ...body,
-      rethunkGitMcp: {
-        jsonFormatVersion: MCP_JSON_FORMAT_VERSION,
-        packageVersion: readPackageVersion(),
-      },
+  return JSON.stringify({
+    ...body,
+    rethunkGitMcp: {
+      jsonFormatVersion: MCP_JSON_FORMAT_VERSION,
+      packageVersion: readPackageVersion(),
     },
-    null,
-    2,
-  );
+  });
 }
 
 /** Spread into an object literal only when `cond` is true; otherwise `{}`. */
