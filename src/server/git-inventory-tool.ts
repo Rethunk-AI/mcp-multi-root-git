@@ -94,7 +94,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
               entries: [makeSkipEntry(workspaceRoot, workspaceRoot, useFixed ? "fixed" : "auto", JSON.stringify(err))],
             });
           } else {
-            mdChunks.push(`# Git inventory`, "", jsonRespond(err), "");
+            mdChunks.push(`### ${workspaceRoot}\n${jsonRespond(err)}`);
           }
           continue;
         }
@@ -196,17 +196,10 @@ export function registerGitInventoryTool(server: FastMCP): void {
             entries,
           });
         } else {
-          const sections: string[] = [
-            "# Git inventory",
-            "",
-            `workspace_root: ${top}`,
-            headerNote,
-            "",
-          ];
+          const sections: string[] = [`### ${top}`, headerNote];
           if (nestedRootsTruncated) {
             sections.push(
               `nested_roots_truncated: ${nestedRootsOmittedCount} path(s) not listed (maxRoots=${maxRoots})`,
-              "",
             );
           }
           for (const e of entries) {
@@ -219,7 +212,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       if (args.format === "json") {
         return jsonRespond({ inventories: allJson });
       }
-      return mdChunks.join("\n\n---\n\n");
+      return ["# Git inventory", ...mdChunks].join("\n\n");
     },
   });
 }
