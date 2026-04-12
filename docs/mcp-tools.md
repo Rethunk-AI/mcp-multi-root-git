@@ -20,11 +20,28 @@ Pass **`format: "json"`** on any tool for structured JSON instead of markdown (d
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"2"`** (envelope removed); server + format version are discoverable via MCP `initialize`. Payload keys (e.g. `groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"2"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
-For **`git_inventory`** with `format: "json"`, each object inside **`inventories`** may include **`nestedRootsTruncated`** (boolean) and **`nestedRootsOmittedCount`** (number) when **`nestedRoots`** was longer than **`maxRoots`**.
+### v2 field omission (consumer contract)
 
-**When to bump `jsonFormatVersion` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*.
+To keep responses compact, **optional fields are omitted when they would be empty, `null`, or `false`** — they are not emitted as `null`. Consumers must test for *presence*, not compare to `null`.
+
+**`git_inventory` → `inventories[*]`**
+
+- Always present: `workspace_root`, `entries`.
+- Omitted when not applicable: `presetSchemaVersion`, `nestedRootsTruncated`, `nestedRootsOmittedCount`, and the whole `upstream` object (emitted only when a fixed `remote`/`branch` pair was supplied; in `auto` mode it is absent).
+
+**`git_inventory` → `entries[*]` (`InventoryEntryJson`)**
+
+- Always present: `label`, `path`, `upstreamMode` (`"auto"` or `"fixed"`).
+- Optional (omitted when empty/absent): `branchStatus`, `headAbbrev`, `upstreamRef`, `ahead`, `behind`, `upstreamNote`, `detached` (only emitted as `true`), `skipReason` (only on skipped entries).
+- **Removed in v2:** `shortStatus`. The porcelain entries now live inside `branchStatus` (the full `git status --short -b` body — branch header line followed by porcelain lines).
+
+**Errors** (any tool)
+
+- Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). It is retained only where it carries parse output (the `invalid_json` preset branch).
+
+**When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*.
 
 ## Resource
 
@@ -38,7 +55,7 @@ Order applied when resolving which directory(ies) tools run against:
 
 1. Explicit **`workspaceRoot`** on the tool call (highest priority).
 2. **`rootIndex`** (0-based) — one `file://` MCP root when several exist.
-3. **`allWorkspaceRoots`: true** — every `file://` root; markdown sections separated by `---`, or combined JSON.
+3. **`allWorkspaceRoots`: true** — every `file://` root; markdown output emits one `# {tool}` header with per-root subsections (`git_inventory` uses `### {gitTop}`; `git_status` uses `### MCP root: ...`), or combined JSON.
 4. **`preset`** set and multiple roots — first root whose git toplevel defines that preset (respecting **`workspaceRootHint`** on the preset entry when present).
 5. Otherwise the first `file://` root from MCP **`initialize`** / **`roots/list_changed`**.
 6. **`process.cwd()`** if no file roots (e.g. CI with explicit `workspaceRoot`).
