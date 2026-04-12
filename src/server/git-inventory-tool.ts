@@ -73,7 +73,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       const allJson: {
         workspace_root: string;
         presetSchemaVersion?: string;
-        upstream: { mode: "auto" | "fixed"; remote?: string; branch?: string };
+        upstream?: { mode: "fixed"; remote: string; branch: string };
         entries: InventoryEntryJson[];
       }[] = [];
 
@@ -86,11 +86,9 @@ export function registerGitInventoryTool(server: FastMCP): void {
           if (args.format === "json") {
             allJson.push({
               workspace_root: workspaceRoot,
-              upstream: {
-                mode: useFixed ? "fixed" : "auto",
-                remote: fixedRemote,
-                branch: fixedBranch,
-              },
+              ...(useFixed
+                ? { upstream: { mode: "fixed" as const, remote: fixedRemote!, branch: fixedBranch! } }
+                : {}),
               entries: [makeSkipEntry(workspaceRoot, workspaceRoot, useFixed ? "fixed" : "auto", JSON.stringify(err))],
             });
           } else {
@@ -190,9 +188,15 @@ export function registerGitInventoryTool(server: FastMCP): void {
               nestedRootsTruncated: true,
               nestedRootsOmittedCount,
             }),
-            upstream: useFixed
-              ? { mode: "fixed", remote: fixedRemote, branch: fixedBranch }
-              : { mode: "auto" },
+            ...(useFixed
+              ? {
+                  upstream: {
+                    mode: "fixed" as const,
+                    remote: fixedRemote!,
+                    branch: fixedBranch!,
+                  },
+                }
+              : {}),
             entries,
           });
         } else {
