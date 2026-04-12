@@ -53,20 +53,12 @@ export function registerGitInventoryTool(server: FastMCP): void {
       const hasRemote = fixedRemote !== undefined && fixedRemote.trim() !== "";
       const hasBranch = fixedBranch !== undefined && fixedBranch.trim() !== "";
       if (hasRemote !== hasBranch) {
-        return jsonRespond({
-          error: "remote_branch_mismatch",
-          message:
-            "Set both `remote` and `branch` for fixed upstream, or omit both for auto `@{u}`.",
-        });
+        return jsonRespond({ error: "remote_branch_mismatch" });
       }
       const useFixed = hasRemote && hasBranch;
       if (useFixed) {
         if (!isSafeGitUpstreamToken(fixedRemote!.trim()) || !isSafeGitUpstreamToken(fixedBranch!.trim())) {
-          return jsonRespond({
-            error: "invalid_remote_or_branch",
-            message:
-              "remote and branch must be plain tokens: no whitespace, control characters, `@`, `..`, leading `-`, or git rev metacharacters like `^ : ? * [ ] { } ~ \\`.",
-          });
+          return jsonRespond({ error: "invalid_remote_or_branch" });
         }
       }
 

@@ -15,8 +15,6 @@ let gitPathState: GitPathState = "unknown";
 
 const GIT_NOT_FOUND_BODY: Record<string, unknown> = {
   error: "git_not_found",
-  message:
-    "The `git` binary was not found on PATH or failed `git --version`. Install Git and ensure it is available to the MCP server process.",
 };
 
 export function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } {

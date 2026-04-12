@@ -134,7 +134,6 @@ export function getPresetEntry(
           error: "preset_not_found",
           preset: presetName,
           presetFile: join(gitTop, PRESET_FILE_PATH),
-          message: "Preset file missing",
         },
       };
     }

@@ -78,10 +78,7 @@ export function registerGitParityTool(server: FastMCP): void {
         }
 
         if (!pairs?.length) {
-          return jsonRespond({
-            error: "no_pairs",
-            message: "Pass `pairs` directly or a `preset` with parityPairs (or presetMerge).",
-          });
+          return jsonRespond({ error: "no_pairs" });
         }
 
         let allOk = true;
