@@ -61,7 +61,14 @@ export function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveR
   if (args.rootIndex != null) {
     const r = fileRoots[args.rootIndex];
     if (!r) {
-      return { ok: false, error: { error: "root_index_out_of_range", rootIndex: args.rootIndex, rootCount: fileRoots.length } };
+      return {
+        ok: false,
+        error: {
+          error: "root_index_out_of_range",
+          rootIndex: args.rootIndex,
+          rootCount: fileRoots.length,
+        },
+      };
     }
     return { ok: true, roots: [r] };
   }

@@ -34,13 +34,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
         .describe("Merge with preset instead of replacing."),
       remote: z.string().optional().describe("Pair with `branch`."),
       branch: z.string().optional().describe("Pair with `remote`."),
-      maxRoots: z
-        .number()
-        .int()
-        .min(1)
-        .max(256)
-        .optional()
-        .default(MAX_INVENTORY_ROOTS_DEFAULT),
+      maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, args.preset);
@@ -57,7 +51,10 @@ export function registerGitInventoryTool(server: FastMCP): void {
       }
       const useFixed = hasRemote && hasBranch;
       if (useFixed) {
-        if (!isSafeGitUpstreamToken(fixedRemote!.trim()) || !isSafeGitUpstreamToken(fixedBranch!.trim())) {
+        if (
+          !isSafeGitUpstreamToken(fixedRemote!.trim()) ||
+          !isSafeGitUpstreamToken(fixedBranch!.trim())
+        ) {
           return jsonRespond({ error: "invalid_remote_or_branch" });
         }
       }
@@ -80,9 +77,17 @@ export function registerGitInventoryTool(server: FastMCP): void {
             allJson.push({
               workspace_root: workspaceRoot,
               ...(useFixed
-                ? { upstream: { mode: "fixed" as const, remote: fixedRemote!, branch: fixedBranch! } }
+                ? {
+                    upstream: {
+                      mode: "fixed" as const,
+                      remote: fixedRemote!,
+                      branch: fixedBranch!,
+                    },
+                  }
                 : {}),
-              entries: [makeSkipEntry(workspaceRoot, workspaceRoot, upstreamMode, JSON.stringify(err))],
+              entries: [
+                makeSkipEntry(workspaceRoot, workspaceRoot, upstreamMode, JSON.stringify(err)),
+              ],
             });
           } else {
             mdChunks.push(`### ${workspaceRoot}\n${jsonRespond(err)}`);
@@ -123,24 +128,12 @@ export function registerGitInventoryTool(server: FastMCP): void {
             const { abs, underTop } = validateRepoPath(rel, top);
             if (!underTop) {
               entries.push(
-                makeSkipEntry(
-                  rel,
-                  abs,
-                  upstreamMode,
-                  "(path escapes git toplevel — rejected)",
-                ),
+                makeSkipEntry(rel, abs, upstreamMode, "(path escapes git toplevel — rejected)"),
               );
               continue;
             }
             if (!gitRevParseGitDir(abs)) {
-              entries.push(
-                makeSkipEntry(
-                  rel,
-                  abs,
-                  upstreamMode,
-                  "(not a git work tree — skip)",
-                ),
-              );
+              entries.push(makeSkipEntry(rel, abs, upstreamMode, "(not a git work tree — skip)"));
               continue;
             }
             jobs.push({ label: rel, abs });
@@ -155,14 +148,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           );
           entries.push(...computed);
         } else if (!gitRevParseGitDir(top)) {
-          entries.push(
-            makeSkipEntry(
-              ".",
-              top,
-              upstreamMode,
-              "(not a git work tree — unexpected)",
-            ),
-          );
+          entries.push(makeSkipEntry(".", top, upstreamMode, "(not a git work tree — unexpected)"));
         } else {
           const one = await collectInventoryEntry(
             ".",

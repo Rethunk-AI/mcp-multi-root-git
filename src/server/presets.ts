@@ -124,7 +124,9 @@ export function presetLoadErrorPayload(
 export function getPresetEntry(
   gitTop: string,
   presetName: string,
-): { ok: true; entry: PresetEntry; presetSchemaVersion?: string } | { ok: false; error: Record<string, unknown> } {
+):
+  | { ok: true; entry: PresetEntry; presetSchemaVersion?: string }
+  | { ok: false; error: Record<string, unknown> } {
   const loaded = loadPresetsFromGitTop(gitTop);
   if (!loaded.ok) {
     if (loaded.reason === "missing") {
