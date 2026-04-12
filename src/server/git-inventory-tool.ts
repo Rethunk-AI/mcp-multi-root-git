@@ -61,6 +61,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           return jsonRespond({ error: "invalid_remote_or_branch" });
         }
       }
+      const upstreamMode: "auto" | "fixed" = useFixed ? "fixed" : "auto";
 
       const allJson: {
         workspace_root: string;
@@ -81,7 +82,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
               ...(useFixed
                 ? { upstream: { mode: "fixed" as const, remote: fixedRemote!, branch: fixedBranch! } }
                 : {}),
-              entries: [makeSkipEntry(workspaceRoot, workspaceRoot, useFixed ? "fixed" : "auto", JSON.stringify(err))],
+              entries: [makeSkipEntry(workspaceRoot, workspaceRoot, upstreamMode, JSON.stringify(err))],
             });
           } else {
             mdChunks.push(`### ${workspaceRoot}\n${jsonRespond(err)}`);
@@ -125,7 +126,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
                 makeSkipEntry(
                   rel,
                   abs,
-                  useFixed ? "fixed" : "auto",
+                  upstreamMode,
                   "(path escapes git toplevel — rejected)",
                 ),
               );
@@ -136,7 +137,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
                 makeSkipEntry(
                   rel,
                   abs,
-                  useFixed ? "fixed" : "auto",
+                  upstreamMode,
                   "(not a git work tree — skip)",
                 ),
               );
@@ -158,7 +159,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
             makeSkipEntry(
               ".",
               top,
-              useFixed ? "fixed" : "auto",
+              upstreamMode,
               "(not a git work tree — unexpected)",
             ),
           );
