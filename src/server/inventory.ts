@@ -7,7 +7,6 @@ export type InventoryEntryJson = {
   label: string;
   path: string;
   branchStatus: string;
-  shortStatus: string;
   detached: boolean;
   headAbbrev: string;
   upstreamMode: "auto" | "fixed";
@@ -33,7 +32,6 @@ export function makeSkipEntry(
     label,
     path: abs,
     branchStatus: "",
-    shortStatus: "",
     detached: false,
     headAbbrev: "",
     upstreamMode,
@@ -50,10 +48,7 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
     return [`## ${e.label}`, `path: ${e.path}`, "```text", e.skipReason, "```", ``];
   }
   const lines: string[] = [];
-  lines.push(e.branchStatus);
-  lines.push("");
-  lines.push("short:");
-  lines.push(e.shortStatus || "(clean)");
+  lines.push(e.branchStatus || "(clean)");
   lines.push("");
   if (e.detached) {
     lines.push("branch: (detached HEAD)");
@@ -76,7 +71,6 @@ function buildEntry(params: {
   label: string;
   absPath: string;
   branchStatus: string;
-  shortStatus: string;
   detached: boolean;
   headAbbrev: string;
   upstreamMode: "auto" | "fixed";
@@ -89,7 +83,6 @@ function buildEntry(params: {
     label: params.label,
     path: params.absPath,
     branchStatus: params.branchStatus,
-    shortStatus: params.shortStatus,
     detached: params.detached,
     headAbbrev: params.headAbbrev || "(unknown)",
     upstreamMode: params.upstreamMode,
@@ -112,10 +105,9 @@ export async function collectInventoryEntry(
   ]);
 
   const branchStatus = snap.branchLine;
-  const shortStatus = snap.shortLine;
   const headAbbrev = headR.ok ? headR.stdout.trim() : "";
   const detached = !headR.ok || headAbbrev === "HEAD" || headAbbrev.endsWith("/HEAD");
-  const base = { label, absPath, branchStatus, shortStatus, detached, headAbbrev };
+  const base = { label, absPath, branchStatus, detached, headAbbrev };
 
   if (fixedRemote !== undefined && fixedBranch !== undefined) {
     const ref = `${fixedRemote}/${fixedBranch}`;

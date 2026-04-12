@@ -147,20 +147,13 @@ function gitStatusFailText(r: { stderr: string; stdout: string }): string {
 
 export async function gitStatusSnapshotAsync(cwd: string): Promise<{
   branchLine: string;
-  shortLine: string;
   branchOk: boolean;
-  shortOk: boolean;
 }> {
   const r = await spawnGitAsync(cwd, ["status", "--short", "-b"]);
   if (!r.ok) {
-    const text = gitStatusFailText(r);
-    return { branchOk: false, shortOk: false, branchLine: text, shortLine: text };
+    return { branchOk: false, branchLine: gitStatusFailText(r) };
   }
-  const full = r.stdout.trimEnd();
-  const nl = full.indexOf("\n");
-  const branchLine = full;
-  const shortLine = nl >= 0 ? full.slice(nl + 1) : "";
-  return { branchOk: true, shortOk: true, branchLine, shortLine };
+  return { branchOk: true, branchLine: r.stdout.trimEnd() };
 }
 
 export async function gitStatusShortBranchAsync(
