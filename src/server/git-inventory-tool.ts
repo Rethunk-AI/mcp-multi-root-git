@@ -121,8 +121,8 @@ export function registerGitInventoryTool(server: FastMCP): void {
         }
 
         const headerNote = useFixed
-          ? `remote/branch (fixed): ${fixedRemote}/${fixedBranch}`
-          : "upstream: per-repo @{u} (configured upstream)";
+          ? `upstream (fixed): ${fixedRemote}/${fixedBranch}`
+          : "upstream: @{u}";
 
         const entries: InventoryEntryJson[] = [];
 
