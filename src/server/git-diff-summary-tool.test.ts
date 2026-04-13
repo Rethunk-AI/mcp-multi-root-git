@@ -158,8 +158,6 @@ function makeRepo(): string {
   return dir;
 }
 
-let _seq = 0;
-
 function addCommit(dir: string, file: string, content: string, message: string): void {
   writeFileSync(join(dir, file), content);
   gitCmd(dir, "add", file);
