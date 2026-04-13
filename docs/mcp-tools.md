@@ -15,6 +15,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args. |
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args. |
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only. |
+| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args + `format`. |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -42,6 +43,60 @@ To keep responses compact, **optional fields are omitted when they would be empt
 - Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). It is retained only where it carries parse output (the `invalid_json` preset branch).
 
 **When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*.
+
+### `git_log` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `since` | string | `"7.days"` | Passed to `git log --since=`. Accepts ISO timestamps (`2026-04-01T00:00:00Z`) or git relative forms (`48.hours`, `2.weeks.ago`). |
+| `paths` | string[] | (all) | Restrict to commits touching these paths (appended after `--`). |
+| `grep` | string | — | Filter by commit message regex (git `--grep`, always case-insensitive). |
+| `author` | string | — | Filter by author name or email (`--author=`). |
+| `maxCommits` | int | `50` | Max commits per root. Hard cap: `500`. |
+| `branch` | string | `HEAD` | Ref/branch to log from. |
+| `workspaceRoot` | string | — | Explicit root; highest priority. |
+| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
+| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+
+### `git_log` — JSON shape (`format: "json"`)
+
+```json
+{
+  "groups": [{
+    "workspace_root": "/abs/path",
+    "repo": "my-repo",
+    "branch": "main",
+    "commits": [{
+      "sha7": "a1bf184",
+      "shaFull": "a1bf184c3d...",
+      "subject": "feat(satcom): upgrade to PROTOCOL_VERSION 4",
+      "author": "Damon Blais",
+      "email": "damon@example.com",
+      "date": "2026-04-12T18:32:01-07:00",
+      "ageRelative": "42m ago",
+      "filesChanged": 4,
+      "insertions": 16,
+      "deletions": 5
+    }],
+    "truncated": true,
+    "omittedCount": 12
+  }]
+}
+```
+
+v2 field-omission rules: `filesChanged`, `insertions`, `deletions` are omitted when zero/absent (new file with no shortstat). `truncated` and `omittedCount` are omitted when `false`/`0`. A group emits `error` instead of `commits` when git fails for that root.
+
+### `git_log` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `not_a_git_repo` | The resolved workspace root is not inside a git repository. |
+| `invalid_since` | The `since` string contains shell metacharacters and was rejected. |
+| `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
+| `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
+| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
 
 ## Resource
 

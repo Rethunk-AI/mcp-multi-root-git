@@ -25,6 +25,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `git_inventory` |
 | [`src/server/git-parity-tool.ts`](src/server/git-parity-tool.ts) | `git_parity` |
 | [`src/server/list-presets-tool.ts`](src/server/list-presets-tool.ts) | `list_presets` |
+| [`src/server/git-log-tool.ts`](src/server/git-log-tool.ts) | `git_log` |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
 | [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
 
