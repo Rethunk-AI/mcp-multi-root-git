@@ -16,6 +16,8 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args. |
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only. |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args + `format`. |
+| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args + `format`. **Read-only.** |
+| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Args: `commits` (array of `{message, files}`), plus workspace pick args + `format`. **Mutating — not idempotent.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -97,6 +99,98 @@ v2 field-omission rules: `filesChanged`, `insertions`, `deletions` are omitted w
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
 | `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+
+### `git_diff_summary` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `range` | string | unstaged | Diff range. `"staged"` / `"cached"` for index; `"HEAD"` for last commit; `"A..B"` or `"A...B"` for revision ranges; single ref. Default: unstaged working-tree changes. |
+| `fileFilter` | string | — | Glob pattern to restrict output to matching files (e.g. `"*.ts"`, `"src/**"`). |
+| `maxLinesPerFile` | int | `50` | Max diff lines to include per file (1–2000). |
+| `maxFiles` | int | `30` | Max files to include in output (1–500). |
+| `excludePatterns` | string[] | lock files, dist, vendor | Glob patterns to exclude. Defaults to `*.lock`, `*.lockb`, `bun.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `*.min.js`, `*.min.css`, `vendor/**`, `node_modules/**`, `dist/**`. Pass an empty array to disable. |
+| `workspaceRoot` | string | — | Explicit root; highest priority. |
+| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+
+### `git_diff_summary` — JSON shape (`format: "json"`)
+
+```json
+{
+  "range": "unstaged changes",
+  "totalFiles": 2,
+  "totalAdditions": 10,
+  "totalDeletions": 5,
+  "files": [{
+    "path": "src/foo.ts",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 3,
+    "truncated": false,
+    "diff": "@@ -1,3 +1,8 @@\n-const x = 1;\n+const x = 2;"
+  }],
+  "truncatedFiles": 1,
+  "excludedFiles": ["yarn.lock"]
+}
+```
+
+`status` is one of `"modified"`, `"added"`, `"deleted"`, `"renamed"`. `oldPath` is present only for renamed files. `truncatedFiles` and `excludedFiles` are omitted when zero/empty (v2 field-omission contract).
+
+### `git_diff_summary` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+| `unsafe_range_token` | The `range` string contains characters outside the safe token set. |
+| `git_diff_failed` | `git diff` exited non-zero. |
+
+---
+
+### `batch_commit` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `commits` | `{message: string, files: string[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is a path relative to the git root; all must stay within the git toplevel. |
+| `workspaceRoot` | string | Explicit root; highest priority. |
+| `rootIndex` | int | Pick one of several MCP roots (0-based). |
+| `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
+
+### `batch_commit` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ok": true,
+  "committed": 2,
+  "total": 2,
+  "results": [{
+    "index": 0,
+    "ok": true,
+    "sha": "a1b2c3d",
+    "message": "feat: add foo",
+    "files": ["src/foo.ts"]
+  }, {
+    "index": 1,
+    "ok": true,
+    "sha": "b2c3d4e",
+    "message": "chore: update config",
+    "files": ["config.json"]
+  }]
+}
+```
+
+On first failure `ok` is `false`, `committed` reflects only the entries that succeeded before the error, and the failing entry includes `error` and `detail` fields. Remaining entries are skipped and not included in `results`.
+
+### `batch_commit` — error codes (per-result `error` field)
+
+| Code | Meaning |
+|------|---------|
+| `path_escapes_repository` | One of the listed file paths resolves outside the git toplevel. |
+| `stage_failed` | `git add` failed (e.g. untracked path or permission error). |
+| `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected). |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
 
 ## Resource
 

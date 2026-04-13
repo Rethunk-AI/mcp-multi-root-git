@@ -14,10 +14,10 @@ IDEs injecting this as context: do not re-link from rules.
 | File | Symbols |
 |------|---------|
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
-| [`src/server/json.ts`](src/server/json.ts) | `MCP_JSON_FORMAT_VERSION="2"`, `jsonRespond()` (minified, no envelope), `spreadWhen`, `spreadDefined` |
+| [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `spreadWhen`, `spreadDefined` |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
-| [`src/server/roots.ts`](src/server/roots.ts) | `uriToPath`, `listFileRoots`, `pathMatchesWorkspaceRootHint`, `resolveWorkspaceRoots`, `resolveRootsForPreset`, `requireGitAndRoots` — session roots only |
-| [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `splitPresetFileRaw`, `loadPresetsFromGitTop`, `getPresetEntry`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
+| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots` — sole public export; session root resolution |
+| [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
 | [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT` |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below |
@@ -26,14 +26,16 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/git-parity-tool.ts`](src/server/git-parity-tool.ts) | `git_parity` |
 | [`src/server/list-presets-tool.ts`](src/server/list-presets-tool.ts) | `list_presets` |
 | [`src/server/git-log-tool.ts`](src/server/git-log-tool.ts) | `git_log` |
+| [`src/server/git-diff-summary-tool.ts`](src/server/git-diff-summary-tool.ts) | `git_diff_summary` — structured token-efficient diff viewer; read-only |
+| [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
-| [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop`, `realPathOrSelf` |
+| [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop` |
 
 ## Changing contracts
 
 - **No banner paragraphs** in shipped docs. Use normal titles + cross-links.
-- **`MCP_JSON_FORMAT_VERSION`** (currently `"2"`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false.
-- **Preset file:** keep `splitPresetFileRaw` + Zod aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
+- **JSON format version** (currently `"2"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false.
+- **Preset file:** keep `presets.ts` Zod schemas aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
 - **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned). Install/client wiring → [docs/install.md](docs/install.md) only. `.cursor/rules/rethunk-git-mcp.mdc` → only when *MCP-vs-shell* guidance changes.
 
 ## Validate + CI
