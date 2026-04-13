@@ -1,6 +1,6 @@
 {
   "name": "@rethunk/mcp-multi-root-git",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "MCP stdio server: multi-root git status, inventory, and HEAD parity checks. Generic tools usable by any workspace.",
   "type": "module",
   "private": false,
