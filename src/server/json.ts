@@ -2,9 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const MCP_JSON_FORMAT_VERSION = "2" as const;
-
-export function readPackageVersion(): string {
+function readPackageVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const pkgPath = join(here, "..", "..", "package.json");
   try {

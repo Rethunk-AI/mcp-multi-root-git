@@ -24,26 +24,26 @@ const PresetEntrySchema = z.object({
 
 const PresetFileSchema = z.record(z.string(), PresetEntrySchema);
 
-export type PresetEntry = z.infer<typeof PresetEntrySchema>;
-export type PresetFile = z.infer<typeof PresetFileSchema>;
+type PresetEntry = z.infer<typeof PresetEntrySchema>;
+type PresetFile = z.infer<typeof PresetFileSchema>;
 
 export const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
 
-export type PresetLoadFail =
+type PresetLoadFail =
   | { ok: false; reason: "missing" }
   | { ok: false; reason: "invalid_json"; message: string }
   | { ok: false; reason: "schema"; issues: z.ZodIssue[] };
 
-export type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
+type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
 
-export type PresetLoadResult = PresetLoadOk | PresetLoadFail;
+type PresetLoadResult = PresetLoadOk | PresetLoadFail;
 
 /**
  * Supports:
  * - Wrapped: `{ "schemaVersion": "1", "presets": { "name": { ... } } }`
  * - Legacy: `{ "name": { ... }, ... }` with optional top-level `schemaVersion` / `$schema` (editor hints).
  */
-export function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: string } {
+function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: string } {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("invalid_root");
   }
@@ -121,7 +121,7 @@ export function presetLoadErrorPayload(
   return { error: "preset_file_invalid", presetFile };
 }
 
-export function getPresetEntry(
+function getPresetEntry(
   gitTop: string,
   presetName: string,
 ):
@@ -155,7 +155,7 @@ export function getPresetEntry(
   return { ok: true, entry, presetSchemaVersion: loaded.schemaVersion };
 }
 
-export function mergeNestedRoots(
+function mergeNestedRoots(
   preset: string[] | undefined,
   inline: string[] | undefined,
 ): string[] | undefined {
@@ -173,7 +173,7 @@ export function mergeNestedRoots(
   return out;
 }
 
-export function mergePairs<T extends { left: string; right: string; label?: string }>(
+function mergePairs<T extends { left: string; right: string; label?: string }>(
   preset: T[] | undefined,
   inline: T[] | undefined,
 ): T[] | undefined {

@@ -6,7 +6,7 @@ import type { FastMCP } from "fastmcp";
 import { gateGit, gitTopLevel } from "./git.js";
 import { loadPresetsFromGitTop, presetLoadErrorPayload } from "./presets.js";
 
-export function uriToPath(uri: string): string | null {
+function uriToPath(uri: string): string | null {
   if (!uri.startsWith("file://")) return null;
   try {
     return fileURLToPath(uri);
@@ -15,7 +15,7 @@ export function uriToPath(uri: string): string | null {
   }
 }
 
-export function listFileRoots(server: FastMCP): string[] {
+function listFileRoots(server: FastMCP): string[] {
   const sessions = server.sessions;
   const roots = sessions[0]?.roots ?? [];
   const paths: string[] = [];
@@ -27,7 +27,7 @@ export function listFileRoots(server: FastMCP): string[] {
 }
 
 /** Basename or trailing path segment; compares using normalized slashes so Windows backslashes match. */
-export function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
+function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
   const h = hint.trim();
   if (!h) return true;
   const absRoot = resolve(rootPath);
@@ -39,17 +39,17 @@ export function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): bo
   return basename(rootPath) === h;
 }
 
-export type RootPick = {
+type RootPick = {
   workspaceRoot?: string;
   rootIndex?: number;
   allWorkspaceRoots?: boolean;
 };
 
-export type ResolveRootsResult =
+type ResolveRootsResult =
   | { ok: true; roots: string[] }
   | { ok: false; error: Record<string, unknown> };
 
-export function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveRootsResult {
+function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveRootsResult {
   if (args.workspaceRoot?.trim()) {
     return { ok: true, roots: [resolve(args.workspaceRoot.trim())] };
   }
@@ -80,7 +80,7 @@ export function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveR
  * When a preset name is requested and multiple MCP roots exist, pick the first root
  * whose git toplevel loads a preset file containing that name.
  */
-export function resolveRootsForPreset(
+function resolveRootsForPreset(
   server: FastMCP,
   args: RootPick,
   presetName: string,
@@ -116,7 +116,7 @@ export function resolveRootsForPreset(
   return resolveWorkspaceRoots(server, args);
 }
 
-export type GitAndRootsResult =
+type GitAndRootsResult =
   | { ok: true; roots: string[] }
   | { ok: false; error: Record<string, unknown> };
 

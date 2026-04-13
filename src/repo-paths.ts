@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-export function realPathOrSelf(p: string): string {
+function realPathOrSelf(p: string): string {
   try {
     return realpathSync(p);
   } catch {
