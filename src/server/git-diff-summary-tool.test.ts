@@ -19,8 +19,9 @@ import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob } from "node:path";
-
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
+import { captureTool } from "./test-harness.js";
 
 // ---------------------------------------------------------------------------
 // Local copies of private helpers (mirrors git-diff-summary-tool.ts)
@@ -505,5 +506,112 @@ describe("git diff integration", () => {
     expect(matchesAnyPattern("yarn.lock", DEFAULT_EXCLUDE_PATTERNS)).toBe(true);
     expect(matchesAnyPattern("bun.lock", DEFAULT_EXCLUDE_PATTERNS)).toBe(true);
     expect(matchesAnyPattern("src/index.ts", DEFAULT_EXCLUDE_PATTERNS)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execute handler: end-to-end via fake server harness
+// ---------------------------------------------------------------------------
+
+describe("git_diff_summary execute handler", () => {
+  test("unstaged changes appear in markdown output", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "foo.ts", "const x = 1;\n", "chore: initial");
+    writeFileSync(join(dir, "foo.ts"), "const x = 2;\n");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir });
+    expect(text).toContain("foo.ts");
+  });
+
+  test("json format returns structured DiffSummary", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.ts", "const a = 1;\n", "chore: initial");
+    writeFileSync(join(dir, "a.ts"), "const a = 99;\n");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      range: string;
+      totalFiles: number;
+      files: Array<{ path: string; status: string }>;
+    };
+    expect(parsed.totalFiles).toBe(1);
+    expect(parsed.files[0]?.path).toBe("a.ts");
+    expect(parsed.files[0]?.status).toBe("modified");
+    expect(parsed.range).toBe("unstaged changes");
+  });
+
+  test("staged range shows only staged files", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "staged.ts", "const s = 1;\n", "chore: initial");
+    writeFileSync(join(dir, "staged.ts"), "const s = 2;\n");
+    gitCmd(dir, "add", "staged.ts");
+    writeFileSync(join(dir, "unstaged.ts"), "const u = 9;\n");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json", range: "staged" });
+    const parsed = JSON.parse(text) as {
+      range: string;
+      files: Array<{ path: string }>;
+    };
+    expect(parsed.range).toBe("staged changes");
+    const paths = parsed.files.map((f) => f.path);
+    expect(paths).toContain("staged.ts");
+    expect(paths).not.toContain("unstaged.ts");
+  });
+
+  test("fileFilter restricts output to matching files only", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "foo.ts", "const f = 1;\n", "chore: initial");
+    addCommit(dir, "bar.md", "# Doc\n", "docs: add readme");
+    writeFileSync(join(dir, "foo.ts"), "const f = 2;\n");
+    writeFileSync(join(dir, "bar.md"), "# Updated\n");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json", fileFilter: "*.ts" });
+    const parsed = JSON.parse(text) as { files: Array<{ path: string }> };
+    const paths = parsed.files.map((f) => f.path);
+    expect(paths).toContain("foo.ts");
+    expect(paths).not.toContain("bar.md");
+  });
+
+  test("clean working tree returns empty files array", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "clean.ts", "const c = 1;\n", "chore: initial");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as { totalFiles: number; files: unknown[] };
+    expect(parsed.totalFiles).toBe(0);
+    expect(parsed.files).toHaveLength(0);
+  });
+
+  test("non-git workspaceRoot → not_a_git_repository error", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-diff-"));
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: plain, format: "json" });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("not_a_git_repository");
+  });
+
+  test("maxLinesPerFile truncates long diffs", async () => {
+    const dir = makeRepo();
+    addCommit(
+      dir,
+      "big.ts",
+      `${Array.from({ length: 5 }, (_, i) => `const v${i} = ${i};`).join("\n")}\n`,
+      "chore: initial",
+    );
+    writeFileSync(
+      join(dir, "big.ts"),
+      `${Array.from({ length: 5 }, (_, i) => `const v${i} = ${i * 10};`).join("\n")}\n`,
+    );
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json", maxLinesPerFile: 2 });
+    const parsed = JSON.parse(text) as { files: Array<{ truncated: boolean }> };
+    expect(parsed.files[0]?.truncated).toBe(true);
   });
 });

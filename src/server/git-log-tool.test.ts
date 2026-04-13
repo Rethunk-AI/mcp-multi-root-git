@@ -24,6 +24,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { gitTopLevel, spawnGitAsync } from "./git.js";
+import { registerGitLogTool } from "./git-log-tool.js";
+import { captureTool } from "./test-harness.js";
 
 // ---------------------------------------------------------------------------
 // Separators — must match git-log-tool.ts constants
@@ -305,5 +307,93 @@ describe("git_log integration", () => {
     const records = parseRecords(r.stdout);
     expect(records.length).toBe(1);
     expect(records[0]?.[2]).toBe("fix: handle 100% edge case");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execute handler: end-to-end via fake server harness
+// ---------------------------------------------------------------------------
+
+// JSON output shape: { groups: [{ workspace_root, repo, commits, truncated? }] }
+// Commits use GIT_AUTHOR_DATE=2025-01-01 — must pass since beyond 7-day default.
+const SINCE_WIDE = "2.years";
+
+describe("git_log execute handler", () => {
+  test("returns commits in json format", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: commit A");
+    addCommit(dir, "b.txt", "feat: commit B");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const commits = parsed.groups[0]?.commits ?? [];
+    expect(commits.length).toBeGreaterThanOrEqual(2);
+    const subjects = commits.map((c) => c.subject);
+    expect(subjects).toContain("feat: commit B");
+    expect(subjects).toContain("feat: commit A");
+  });
+
+  test("markdown output contains commit subjects", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "x.txt", "chore: markdown test");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({ workspaceRoot: dir, since: SINCE_WIDE });
+    expect(text).toContain("chore: markdown test");
+  });
+
+  test("maxCommits caps number of commits returned", async () => {
+    const dir = makeRepo();
+    for (let i = 1; i <= 5; i++) {
+      addCommit(dir, `f${i}.txt`, `chore: commit ${i}`);
+    }
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      maxCommits: 3,
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }>; truncated?: boolean }>;
+    };
+    const group = parsed.groups[0];
+    expect(group?.commits.length).toBe(3);
+    expect(group?.truncated).toBe(true);
+  });
+
+  test("non-git workspaceRoot → not_a_git_repo error in group", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-log-"));
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({ workspaceRoot: plain, format: "json" });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ error?: string }>;
+    };
+    expect(parsed.groups[0]?.error).toBe("not_a_git_repo");
+  });
+
+  test("paths filter limits commits to those touching a specific file", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "important.ts", "feat: touch important");
+    addCommit(dir, "other.ts", "chore: unrelated");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      paths: ["important.ts"],
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const commits = parsed.groups[0]?.commits ?? [];
+    expect(commits.length).toBe(1);
+    expect(commits[0]?.subject).toContain("important");
   });
 });

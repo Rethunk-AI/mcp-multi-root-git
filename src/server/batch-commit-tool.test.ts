@@ -23,7 +23,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
+import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { spawnGitAsync } from "./git.js";
+import { captureTool } from "./test-harness.js";
 
 // ---------------------------------------------------------------------------
 // Mirrors the SHA extraction regex from batch-commit-tool.ts
@@ -212,6 +214,101 @@ describe("batch_commit integration", () => {
     expect(logResult.stdout.indexOf("feat: third")).toBeLessThan(
       logResult.stdout.indexOf("feat: second"),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execute handler: end-to-end via fake server harness
+// ---------------------------------------------------------------------------
+
+describe("batch_commit execute handler", () => {
+  test("happy path: single commit returns markdown with sha and success header", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+    expect(text).toContain("1/1 committed");
+    expect(text).toContain("feat: add new");
+  });
+
+  test("json format returns structured result with ok:true", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: json", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number; total: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+    expect(parsed.total).toBe(1);
+  });
+
+  test("path_escapes_repository: dotdot path → error in json response", async () => {
+    const dir = makeRepo();
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: ["../../etc/passwd"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("path_escapes_repository");
+  });
+
+  test("non-git workspaceRoot → not_a_git_repository error", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: plain,
+      format: "json",
+      commits: [{ message: "noop", files: ["x.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("not_a_git_repository");
+  });
+
+  test("multiple commits: stops on first failure, reports partial progress", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "ok.ts"), "const ok = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        { message: "feat: ok", files: ["ok.ts"] },
+        { message: "feat: bad", files: ["nonexistent.ts"] },
+      ],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      results: Array<{ ok: boolean; error?: string }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.committed).toBe(1);
+    expect(parsed.results[0]?.ok).toBe(true);
+    expect(parsed.results[1]?.ok).toBe(false);
   });
 });
 
