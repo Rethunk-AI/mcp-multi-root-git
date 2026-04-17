@@ -17,7 +17,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only. |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args + `format`. |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args + `format`. **Read-only.** |
-| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Args: `commits` (array of `{message, files}`), plus workspace pick args + `format`. **Mutating — not idempotent.** |
+| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Optional `push: "after"` pushes the current branch to its upstream once every commit lands. Args: `commits` (array of `{message, files}`), `push?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -152,6 +152,7 @@ v2 field-omission rules: `filesChanged`, `insertions`, `deletions` are omitted w
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `commits` | `{message: string, files: string[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is a path relative to the git root; all must stay within the git toplevel. |
+| `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. Enum reserved for future modes such as `"force-with-lease"`. |
 | `workspaceRoot` | string | Explicit root; highest priority. |
 | `rootIndex` | int | Pick one of several MCP roots (0-based). |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
@@ -175,11 +176,18 @@ v2 field-omission rules: `filesChanged`, `insertions`, `deletions` are omitted w
     "sha": "b2c3d4e",
     "message": "chore: update config",
     "files": ["config.json"]
-  }]
+  }],
+  "push": {
+    "ok": true,
+    "branch": "main",
+    "upstream": "origin/main"
+  }
 }
 ```
 
 On first failure `ok` is `false`, `committed` reflects only the entries that succeeded before the error, and the failing entry includes `error` and `detail` fields. Remaining entries are skipped and not included in `results`.
+
+The `push` object is present only when `push: "after"` was requested **and** every commit landed. On push failure the top-level `ok` stays `true` (the commits themselves succeeded) while `push.ok` is `false` and `push.error` carries the code.
 
 ### `batch_commit` — error codes (per-result `error` field)
 
@@ -189,6 +197,14 @@ On first failure `ok` is `false`, `committed` reflects only the entries that suc
 | `stage_failed` | `git add` failed (e.g. untracked path or permission error). |
 | `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+### `batch_commit` — push error codes (`push.error` field)
+
+| Code | Meaning |
+|------|---------|
+| `push_detached_head` | HEAD is detached; no branch to push. |
+| `push_no_upstream` | Current branch has no configured upstream. `batch_commit` will not auto-set one — do `git push -u origin <branch>` yourself (or re-run without `push`). |
+| `push_failed` | `git push` exited non-zero (network error, non-fast-forward, hook rejection). `detail` carries the stderr/stdout from git. |
 
 ---
 
