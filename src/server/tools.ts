@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
+import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitLogTool } from "./git-log-tool.js";
@@ -19,5 +20,6 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitDiffSummaryTool(server);
   registerGitLogTool(server);
   registerGitMergeTool(server);
+  registerGitCherryPickTool(server);
   registerPresetsResource(server);
 }
