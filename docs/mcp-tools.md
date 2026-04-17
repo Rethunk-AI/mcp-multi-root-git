@@ -19,6 +19,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args + `format`. **Read-only.** |
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Optional `push: "after"` pushes the current branch to its upstream once every commit lands. Args: `commits` (array of `{message, files}`), `push?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + workspace pick + `format`. **Mutating.** |
+| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped). Args: `sources`, `onto?`, cleanup flags + workspace pick + `format`. **Mutating.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -270,6 +271,71 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 | `merge_conflicts` (per source) | Merge commit encountered conflicts. Repo state is cleaned before returning. |
 | `merge_failed` (per source) | `git merge --ff-only` failed unexpectedly. `detail` carries stderr. |
 | `merge_base_failed` (per source) | `git merge-base` failed (usually unrelated histories). |
+
+---
+
+### `git_cherry_pick` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `sources` | `string[]` | Source specs. 1–50 entries. Each entry is one of: a full/short SHA, an `A..B` / `A...B` range, or a branch name. Branch names expand to `onto..<branch>` (oldest-first). |
+| `onto` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
+| `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally (`git branch -d`) when it is fully merged into the destination by SHA-reachability (not patch-equivalence). Protected names always skipped; never touches remote refs. |
+| `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_cherry_pick` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ok": true,
+  "onto": "main",
+  "headSha": "a1b2c3d…",
+  "picked": 3,
+  "applied": 2,
+  "results": [
+    { "source": "feature/a", "kind": "branch", "resolvedCommits": 2, "keptCommits": 2 },
+    { "source": "abcdef1",    "kind": "sha",    "resolvedCommits": 1, "keptCommits": 1 }
+  ]
+}
+```
+
+**`picked`** is the number of unique SHAs fed to `git cherry-pick` after SHA-reachability filtering. **`applied`** is the number of new commits actually added to HEAD — may be less than `picked` because the tool passes `--empty=drop` to git, so patch-equivalent commits are skipped at apply time without error.
+
+**`kind`** is `"sha"`, `"range"`, or `"branch"`. **`resolvedCommits`** is how many commits the source expanded to; **`keptCommits`** is how many survived SHA-reachability dedupe. Cleanup fields (`branchDeleted`, `worktreeRemoved`) are only emitted for branch-kind sources when the corresponding flag was set and the operation succeeded.
+
+On conflict, the response has `ok: false` and a top-level `conflict` object:
+
+```json
+{
+  "ok": false,
+  "onto": "main",
+  "picked": 2,
+  "applied": 0,
+  "results": [ ... ],
+  "conflict": {
+    "stage": "cherry-pick",
+    "commit": "abcdef1",
+    "paths": ["src/foo.ts"],
+    "detail": "…git stderr…"
+  }
+}
+```
+
+Repo state is cleaned (`git cherry-pick --abort`) before returning — no partially-applied index.
+
+### `git_cherry_pick` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_ref_token` | A source or `onto` contains characters outside the argv-safe subset. |
+| `onto_detached_head` | HEAD is detached and no `onto` was given. |
+| `working_tree_dirty` | Uncommitted changes present. Commit, stash, or discard before cherry-picking. |
+| `checkout_failed` | Could not switch to `onto`. |
+| `destination_not_found` | `onto` does not resolve to a commit. |
+| `source_not_found` | A source spec resolves to neither a branch, a range, nor a commit. |
+| `range_resolution_failed` | `git rev-list` failed to expand a range spec. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
 
