@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
 import { gitTopLevel, spawnGitAsync } from "./git.js";
-import { jsonRespond, spreadDefined } from "./json.js";
+import { getCurrentBranch } from "./git-refs.js";
+import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -11,6 +12,16 @@ const CommitEntrySchema = z.object({
   message: z.string().min(1).describe("Commit message."),
   files: z.array(z.string().min(1)).min(1).describe("Paths to stage, relative to the git root."),
 });
+
+const PushModeSchema = z
+  .enum(["never", "after"])
+  .optional()
+  .default("never")
+  .describe(
+    "`never` (default): no push. `after`: push the current branch to its upstream once all commits succeed; " +
+      "fails with `push_no_upstream` if the branch has no upstream (commits are NOT rolled back). " +
+      "Enum reserved for future modes such as `force-with-lease`.",
+  );
 
 interface CommitResult {
   index: number;
@@ -22,13 +33,66 @@ interface CommitResult {
   detail?: string;
 }
 
+interface PushReport {
+  ok: boolean;
+  branch?: string;
+  upstream?: string;
+  error?: string;
+  detail?: string;
+}
+
+/**
+ * After all commits succeed, push the current branch to its upstream.
+ * Commits are already applied at this point — do NOT attempt rollback on push failure.
+ */
+async function runPushAfter(gitTop: string): Promise<PushReport> {
+  const branch = await getCurrentBranch(gitTop);
+  if (!branch) {
+    return { ok: false, error: "push_detached_head" };
+  }
+
+  // Verify upstream exists before attempting push (avoids side effects of auto-set-upstream).
+  const upstreamProbe = await spawnGitAsync(gitTop, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{u}",
+  ]);
+  if (!upstreamProbe.ok) {
+    return {
+      ok: false,
+      branch,
+      error: "push_no_upstream",
+      detail: (upstreamProbe.stderr || upstreamProbe.stdout).trim(),
+    };
+  }
+  const upstream = upstreamProbe.stdout.trim();
+
+  // Explicit remote + branch so a future push refspec change to the upstream does not surprise us.
+  const slash = upstream.indexOf("/");
+  const remote = slash > 0 ? upstream.slice(0, slash) : "origin";
+
+  const pushResult = await spawnGitAsync(gitTop, ["push", remote, branch]);
+  if (!pushResult.ok) {
+    return {
+      ok: false,
+      branch,
+      upstream,
+      error: "push_failed",
+      detail: (pushResult.stderr || pushResult.stdout).trim(),
+    };
+  }
+  return { ok: true, branch, upstream };
+}
+
 export function registerBatchCommitTool(server: FastMCP): void {
   server.addTool({
     name: "batch_commit",
     description:
       "Create multiple sequential git commits in a single call. " +
       "Each entry stages the listed files then commits with the given message. " +
-      "Stops on first failure. See docs/mcp-tools.md.",
+      'Stops on first failure. Optional `push: "after"` pushes the current branch ' +
+      "to its upstream once all commits succeed. See docs/mcp-tools.md.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -40,6 +104,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
         .min(1)
         .max(50)
         .describe("Commits to create, applied in order."),
+      push: PushModeSchema,
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);
@@ -122,6 +187,10 @@ export function registerBatchCommitTool(server: FastMCP): void {
 
       const allOk = results.length === args.commits.length && results.every((r) => r.ok);
 
+      // --- Optional push after all commits succeed ---
+      const push: PushReport | undefined =
+        allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
+
       if (args.format === "json") {
         return jsonRespond({
           ok: allOk,
@@ -136,6 +205,15 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ...spreadDefined("error", r.error),
             ...spreadDefined("detail", r.detail),
           })),
+          ...spreadWhen(push !== undefined, {
+            push: {
+              ok: push?.ok ?? false,
+              ...spreadDefined("branch", push?.branch),
+              ...spreadDefined("upstream", push?.upstream),
+              ...spreadDefined("error", push?.error),
+              ...spreadDefined("detail", push?.detail),
+            },
+          }),
         });
       }
 
@@ -158,6 +236,15 @@ export function registerBatchCommitTool(server: FastMCP): void {
       if (!allOk && results.length < args.commits.length) {
         const skipped = args.commits.length - results.length;
         lines.push("", `${skipped} remaining commit(s) skipped.`);
+      }
+
+      if (push) {
+        lines.push("");
+        if (push.ok) {
+          lines.push(`Push: ✓ ${push.branch} → ${push.upstream}`);
+        } else {
+          lines.push(`Push: ✗ ${push.error}${push.detail ? ` — ${push.detail}` : ""}`);
+        }
       }
 
       return lines.join("\n");

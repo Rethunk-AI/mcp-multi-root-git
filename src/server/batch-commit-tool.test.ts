@@ -64,6 +64,31 @@ function makeRepo(): string {
   return dir;
 }
 
+/**
+ * Create a clone + upstream pair so push tests can target a real remote
+ * without hitting the network. Returns `{ work, remote }` where `work` is
+ * the working clone (current branch `main` tracks `origin/main`) and
+ * `remote` is a bare repo used as `origin`.
+ */
+function makeRepoWithUpstream(): { work: string; remote: string } {
+  const remote = mkdtempSync(join(tmpdir(), "mcp-batch-commit-remote-"));
+  gitCmd(remote, "init", "--bare", "-b", "main");
+
+  const work = mkdtempSync(join(tmpdir(), "mcp-batch-commit-work-"));
+  gitCmd(work, "init", "-b", "main");
+  gitCmd(work, "config", "user.email", "test@example.com");
+  gitCmd(work, "config", "user.name", "Test User");
+  gitCmd(work, "remote", "add", "origin", remote);
+
+  // Seed a commit and set upstream so `@{u}` resolves.
+  writeFileSync(join(work, "seed.txt"), "seed\n");
+  gitCmd(work, "add", "seed.txt");
+  gitCmd(work, "commit", "-m", "chore: seed");
+  gitCmd(work, "push", "-u", "origin", "main");
+
+  return { work, remote };
+}
+
 // ---------------------------------------------------------------------------
 // Unit: SHA extraction regex
 // ---------------------------------------------------------------------------
@@ -309,6 +334,97 @@ describe("batch_commit execute handler", () => {
     expect(parsed.committed).toBe(1);
     expect(parsed.results[0]?.ok).toBe(true);
     expect(parsed.results[1]?.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// push: "after" behaviour
+// ---------------------------------------------------------------------------
+
+describe("batch_commit push: after", () => {
+  test("default (push omitted) does not touch the remote", async () => {
+    const { work, remote } = makeRepoWithUpstream();
+    writeFileSync(join(work, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; push?: unknown };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.push).toBeUndefined();
+
+    // Remote is still at the seed commit only.
+    const remoteLog = execFileSync("git", ["-C", remote, "log", "--oneline"], { encoding: "utf8" });
+    expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(1);
+  });
+
+  test('push: "after" with a tracking branch pushes successfully', async () => {
+    const { work, remote } = makeRepoWithUpstream();
+    writeFileSync(join(work, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      push: "after",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      push?: { ok: boolean; branch?: string; upstream?: string; error?: string };
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.push?.ok).toBe(true);
+    expect(parsed.push?.branch).toBe("main");
+    expect(parsed.push?.upstream).toBe("origin/main");
+
+    // Remote now has two commits (seed + new).
+    const remoteLog = execFileSync("git", ["-C", remote, "log", "--oneline"], { encoding: "utf8" });
+    expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(2);
+  });
+
+  test('push: "after" on a branch with no upstream returns push_no_upstream', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      push: "after",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      push?: { ok: boolean; error?: string };
+    };
+    // Commits succeed; only push fails — do NOT roll back.
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+    expect(parsed.push?.ok).toBe(false);
+    expect(parsed.push?.error).toBe("push_no_upstream");
+  });
+
+  test('push: "after" is skipped when a commit fails', async () => {
+    const { work } = makeRepoWithUpstream();
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      push: "after",
+      commits: [{ message: "feat: bad", files: ["nonexistent.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; push?: unknown };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.push).toBeUndefined();
   });
 });
 
