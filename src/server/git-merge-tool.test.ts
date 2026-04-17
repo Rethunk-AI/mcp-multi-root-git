@@ -5,14 +5,16 @@
  * No network, no real upstream — every branch lives locally.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { registerGitMergeTool } from "./git-merge-tool.js";
-import { captureTool } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, trackTmpPath } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
 // Repo helpers
@@ -36,7 +38,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mcp-git-merge-test-"));
+  const dir = mkTmpDir("mcp-git-merge-test-");
   gitCmd(dir, "init", "-b", "main");
   gitCmd(dir, "config", "user.email", "test@example.com");
   gitCmd(dir, "config", "user.name", "Test User");
@@ -318,7 +320,7 @@ describe("git_merge cleanup", () => {
     const dir = makeRepo();
     // Create branch + worktree for it.
     gitCmd(dir, "branch", "feature/w", "HEAD");
-    const wtPath = join(tmpdir(), `mcp-wt-${Date.now()}`);
+    const wtPath = trackTmpPath(join(tmpdir(), `mcp-wt-${Date.now()}`));
     gitCmd(dir, "worktree", "add", wtPath, "feature/w");
     // Add a commit in the worktree so it's ahead.
     writeFileSync(join(wtPath, "w.txt"), "W\n");
@@ -395,7 +397,7 @@ describe("git_merge guardrails", () => {
   });
 
   test("non-git workspaceRoot returns not_a_git_repository", async () => {
-    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-"));
+    const plain = mkTmpDir("mcp-plain-");
     const run = captureTool(registerGitMergeTool);
     const text = await run({
       workspaceRoot: plain,

@@ -2,14 +2,15 @@
  * Integration tests for git_cherry_pick.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
-import { captureTool } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 function gitCmd(cwd: string, ...args: string[]): string {
   const opts: ExecSyncOptionsWithStringEncoding = {
@@ -29,7 +30,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mcp-cherry-pick-test-"));
+  const dir = mkTmpDir("mcp-cherry-pick-test-");
   gitCmd(dir, "init", "-b", "main");
   gitCmd(dir, "config", "user.email", "test@example.com");
   gitCmd(dir, "config", "user.name", "Test User");

@@ -17,6 +17,9 @@
  *   // result is string (markdown) or JSON-parseable string
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { FastMCP } from "fastmcp";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +46,34 @@ const STUB_CONTEXT: AnyRecord = {
   reportProgress: async () => undefined,
   session: undefined,
 };
+
+// ---------------------------------------------------------------------------
+// Tmp-dir lifecycle — prevents accumulating thousands of leaked test dirs.
+// Each test file must register the hook itself:
+//   afterEach(cleanupTmpPaths);
+// Module-scope afterEach(...) would only register once (first-importer wins)
+// because the module is cached across test files in the same bun test run.
+// ---------------------------------------------------------------------------
+
+const tmpPaths: string[] = [];
+
+export function mkTmpDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tmpPaths.push(dir);
+  return dir;
+}
+
+export function trackTmpPath(path: string): string {
+  tmpPaths.push(path);
+  return path;
+}
+
+export function cleanupTmpPaths(): void {
+  while (tmpPaths.length > 0) {
+    const p = tmpPaths.pop();
+    if (p) rmSync(p, { recursive: true, force: true });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fake server

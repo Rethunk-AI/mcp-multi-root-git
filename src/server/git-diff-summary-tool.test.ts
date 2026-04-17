@@ -14,14 +14,15 @@
  *  7. Integration: real diff against a throwaway repo
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
-import { captureTool } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
 // Local copies of private helpers (mirrors git-diff-summary-tool.ts)
@@ -152,7 +153,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mcp-git-diff-test-"));
+  const dir = mkTmpDir("mcp-git-diff-test-");
   gitCmd(dir, "init", "-b", "main");
   gitCmd(dir, "config", "user.email", "test@example.com");
   gitCmd(dir, "config", "user.name", "Test User");
@@ -588,7 +589,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("non-git workspaceRoot → not_a_git_repository error", async () => {
-    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-diff-"));
+    const plain = mkTmpDir("mcp-plain-diff-");
 
     const run = captureTool(registerGitDiffSummaryTool);
     const text = await run({ workspaceRoot: plain, format: "json" });

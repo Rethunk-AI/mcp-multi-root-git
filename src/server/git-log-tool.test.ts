@@ -17,15 +17,16 @@
  *  9. commit subject containing % is preserved intact
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitTopLevel, spawnGitAsync } from "./git.js";
 import { registerGitLogTool } from "./git-log-tool.js";
-import { captureTool } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
 // Separators — must match git-log-tool.ts constants
@@ -62,7 +63,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mcp-git-log-test-"));
+  const dir = mkTmpDir("mcp-git-log-test-");
   gitCmd(dir, "init", "-b", "main");
   gitCmd(dir, "config", "user.email", "test@example.com");
   gitCmd(dir, "config", "user.name", "Test User");
@@ -266,7 +267,7 @@ describe("git_log integration", () => {
   });
 
   test("not_a_git_repo: gitTopLevel returns null for a plain directory", () => {
-    const dir = mkdtempSync(join(tmpdir(), "mcp-not-git-"));
+    const dir = mkTmpDir("mcp-not-git-");
     const top = gitTopLevel(dir);
     expect(top).toBeNull();
   });
@@ -367,7 +368,7 @@ describe("git_log execute handler", () => {
   });
 
   test("non-git workspaceRoot → not_a_git_repo error in group", async () => {
-    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-log-"));
+    const plain = mkTmpDir("mcp-plain-log-");
 
     const run = captureTool(registerGitLogTool);
     const text = await run({ workspaceRoot: plain, format: "json" });

@@ -16,16 +16,17 @@
  *  7. Valid path that is exactly the git root is accepted
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { spawnGitAsync } from "./git.js";
-import { captureTool } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
 // Mirrors the SHA extraction regex from batch-commit-tool.ts
@@ -57,7 +58,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mcp-batch-commit-test-"));
+  const dir = mkTmpDir("mcp-batch-commit-test-");
   gitCmd(dir, "init", "-b", "main");
   gitCmd(dir, "config", "user.email", "test@example.com");
   gitCmd(dir, "config", "user.name", "Test User");
@@ -71,10 +72,10 @@ function makeRepo(): string {
  * `remote` is a bare repo used as `origin`.
  */
 function makeRepoWithUpstream(): { work: string; remote: string } {
-  const remote = mkdtempSync(join(tmpdir(), "mcp-batch-commit-remote-"));
+  const remote = mkTmpDir("mcp-batch-commit-remote-");
   gitCmd(remote, "init", "--bare", "-b", "main");
 
-  const work = mkdtempSync(join(tmpdir(), "mcp-batch-commit-work-"));
+  const work = mkTmpDir("mcp-batch-commit-work-");
   gitCmd(work, "init", "-b", "main");
   gitCmd(work, "config", "user.email", "test@example.com");
   gitCmd(work, "config", "user.name", "Test User");
@@ -124,27 +125,27 @@ describe("extractSha", () => {
 
 describe("path escape detection", () => {
   test("dotdot path that escapes root is rejected", () => {
-    const gitTop = mkdtempSync(join(tmpdir(), "mcp-top-"));
+    const gitTop = mkTmpDir("mcp-top-");
     const rel = "../../etc/passwd";
     const abs = resolvePathForRepo(rel, gitTop);
     expect(isStrictlyUnderGitTop(abs, gitTop)).toBe(false);
   });
 
   test("normal nested path is accepted", () => {
-    const gitTop = mkdtempSync(join(tmpdir(), "mcp-top-"));
+    const gitTop = mkTmpDir("mcp-top-");
     const rel = "src/foo.ts";
     const abs = resolvePathForRepo(rel, gitTop);
     expect(isStrictlyUnderGitTop(abs, gitTop)).toBe(true);
   });
 
   test("absolute path outside root is rejected", () => {
-    const gitTop = mkdtempSync(join(tmpdir(), "mcp-top-"));
-    const outside = mkdtempSync(join(tmpdir(), "mcp-other-"));
+    const gitTop = mkTmpDir("mcp-top-");
+    const outside = mkTmpDir("mcp-other-");
     expect(isStrictlyUnderGitTop(outside, gitTop)).toBe(false);
   });
 
   test("path equal to git root is accepted", () => {
-    const gitTop = mkdtempSync(join(tmpdir(), "mcp-top-"));
+    const gitTop = mkTmpDir("mcp-top-");
     expect(isStrictlyUnderGitTop(gitTop, gitTop)).toBe(true);
   });
 });
@@ -297,7 +298,7 @@ describe("batch_commit execute handler", () => {
   });
 
   test("non-git workspaceRoot → not_a_git_repository error", async () => {
-    const plain = mkdtempSync(join(tmpdir(), "mcp-plain-"));
+    const plain = mkTmpDir("mcp-plain-");
 
     const run = captureTool(registerBatchCommitTool);
     const text = await run({
