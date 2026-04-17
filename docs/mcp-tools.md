@@ -18,6 +18,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args + `format`. |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args + `format`. **Read-only.** |
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Optional `push: "after"` pushes the current branch to its upstream once every commit lands. Args: `commits` (array of `{message, files}`), `push?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
+| `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + workspace pick + `format`. **Mutating.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -205,6 +206,70 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 | `push_detached_head` | HEAD is detached; no branch to push. |
 | `push_no_upstream` | Current branch has no configured upstream. `batch_commit` will not auto-set one — do `git push -u origin <branch>` yourself (or re-run without `push`). |
 | `push_failed` | `git push` exited non-zero (network error, non-fast-forward, hook rejection). `detail` carries the stderr/stdout from git. |
+
+---
+
+### `git_merge` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `sources` | `string[]` | Source branches to merge, in order. 1–20 entries. Each must be a valid git ref token. |
+| `into` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
+| `strategy` | `"auto"` \| `"ff-only"` \| `"rebase"` \| `"merge"` | Default `"auto"`: cascade **fast-forward → rebase → merge-commit** per source. `"ff-only"` fails on divergence. `"rebase"` rebases source onto destination and fast-forwards; no merge-commit fallback. `"merge"` always creates a merge commit (`--no-ff`). |
+| `message` | string | Merge commit message, used only when a merge commit is created. Defaults to `Merge branch '<source>' into <into>`. |
+| `deleteMergedBranches` | boolean | Default `false`. After **all** sources land cleanly, delete each source branch locally (`git branch -d`). **Protected names always skipped** (main, master, dev, develop, stable, trunk, prod, production, `release/*`, `release-*`, `hotfix/*`, `hotfix-*`). Never touches remote refs. |
+| `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree currently checked out on a source branch (`git worktree remove`). Protected tails always skipped. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_merge` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ok": true,
+  "into": "main",
+  "strategy": "auto",
+  "headSha": "a1b2c3d4e5f6…",
+  "applied": 2,
+  "total": 2,
+  "results": [
+    {
+      "source": "feature/a",
+      "ok": true,
+      "outcome": "fast_forward",
+      "mergedSha": "a1b2c3d4e5f6…",
+      "branchDeleted": true,
+      "worktreeRemoved": "/tmp/agent-a"
+    },
+    {
+      "source": "feature/b",
+      "ok": true,
+      "outcome": "rebase_then_ff",
+      "mergedSha": "b2c3d4e5f6a1…"
+    }
+  ]
+}
+```
+
+**`outcome`** (per source): `fast_forward`, `rebase_then_ff`, `merge_commit`, `up_to_date`, or `conflicts`. Cleanup fields (`branchDeleted`, `worktreeRemoved`) are only emitted when the corresponding flag was set and the operation actually ran — both are omitted for up-to-date sources and are never populated on partial-failure runs.
+
+On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` with `conflictStage` (`"rebase"` or `"merge"`), `conflictPaths` (array of paths with unresolved markers), and an `error` code. Remaining sources are not attempted.
+
+### `git_merge` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_ref_token` | A source or `into` contains characters outside the argv-safe subset (spaces, shell meta, `..`, `@{`, leading `-`, trailing `.lock`). |
+| `into_detached_head` | HEAD is detached and no `into` was given — the tool needs a concrete destination branch. |
+| `working_tree_dirty` | Uncommitted changes present. Commit, stash, or discard before merging. |
+| `checkout_failed` | Could not switch to `into`. `detail` carries git's stderr. |
+| `destination_not_found` | `into` does not resolve to a commit. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+| `source_not_found` (per source) | A source branch name does not resolve. |
+| `cannot_fast_forward` (per source) | `strategy: "ff-only"` refused because branches have diverged. |
+| `rebase_conflicts` (per source) | Rebase encountered conflicts. Repo state is cleaned before returning. |
+| `merge_conflicts` (per source) | Merge commit encountered conflicts. Repo state is cleaned before returning. |
+| `merge_failed` (per source) | `git merge --ff-only` failed unexpectedly. `detail` carries stderr. |
+| `merge_base_failed` (per source) | `git merge-base` failed (usually unrelated histories). |
 
 ---
 
