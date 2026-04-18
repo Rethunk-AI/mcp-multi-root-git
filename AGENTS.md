@@ -53,7 +53,3 @@ Dogfood from clone: [docs/install.md](docs/install.md) — *From source*.
 Repo ships `.cursor/` with alwaysApply rule [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) covering MCP-vs-shell usage. Rule does not re-link this file (already injected).
 
 User-level skills may mention README for discovery. Canonical refs: tools/JSON → [docs/mcp-tools.md](docs/mcp-tools.md); install → [docs/install.md](docs/install.md); presets → [HUMANS.md](HUMANS.md).
-
-## Commits
-
-Conventional Commits. Small themed commits. Why-focused messages. Stage + commit in one invocation per batch.
