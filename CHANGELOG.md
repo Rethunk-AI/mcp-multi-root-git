@@ -2,6 +2,16 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.3.1] — 2026-04-21
+
+Documentation-only patch following the 2.3.0 release.
+
+### Documentation
+
+- **`README.md`** — one-liner description updated to include `git_log`, `git_push`, `git_worktree_*`, and `git_reset_soft`.
+- **`HUMANS.md`** — opening line corrected from "Read-only MCP git tools" to "MCP git tools" (mutating operations have been present since v2.2.0).
+- **`docs/mcp-tools.md`** — overview table expanded from 9 to 14 rows, adding all tools introduced in v2.3.0; **Read-only** / **Mutating** annotations added to every row consistently.
+
 ## [2.3.0] — 2026-04-21
 
 Five new tools, a token-efficiency sweep, a targeted breaking change to the `git_log` JSON contract, and test coverage raised from 70% to 89%.
@@ -87,6 +97,7 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[2.3.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.1
 [2.3.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.0
 [2.2.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.2.0
 [2.1.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.1.0
