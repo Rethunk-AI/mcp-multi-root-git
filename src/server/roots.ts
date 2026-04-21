@@ -138,3 +138,26 @@ export function requireGitAndRoots(
   }
   return { ok: true, roots: rootsRes.roots };
 }
+
+type SingleRepoResult =
+  | { ok: true; gitTop: string }
+  | { ok: false; error: Record<string, unknown> };
+
+/**
+ * Convenience wrapper for single-repo tools: gate git, resolve roots, pick the first
+ * root, and resolve its git toplevel. Returns `{ ok: true, gitTop }` or a structured
+ * error payload ready for `jsonRespond`.
+ */
+export function requireSingleRepo(
+  server: FastMCP,
+  args: RootPick,
+  presetName: string | undefined = undefined,
+): SingleRepoResult {
+  const pre = requireGitAndRoots(server, args, presetName);
+  if (!pre.ok) return pre;
+  const rootInput = pre.roots[0];
+  if (!rootInput) return { ok: false, error: { error: "no_workspace_root" } };
+  const top = gitTopLevel(rootInput);
+  if (!top) return { ok: false, error: { error: "not_a_git_repository", path: rootInput } };
+  return { ok: true, gitTop: top };
+}

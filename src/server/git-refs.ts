@@ -1,6 +1,20 @@
 import { spawnGitAsync } from "./git.js";
 
 // ---------------------------------------------------------------------------
+// Merge conflict helpers (shared between git_merge and git_cherry_pick)
+// ---------------------------------------------------------------------------
+
+/** Paths with unresolved merge conflicts (`--diff-filter=U`). */
+export async function conflictPaths(gitTop: string): Promise<string[]> {
+  const r = await spawnGitAsync(gitTop, ["diff", "--name-only", "--diff-filter=U"]);
+  if (!r.ok) return [];
+  return r.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+}
+
+// ---------------------------------------------------------------------------
 // Protected branch names — never auto-delete, never cascade destructive ops onto
 // ---------------------------------------------------------------------------
 
@@ -45,6 +59,17 @@ export function isSafeGitRefToken(s: string): boolean {
   if (t.includes("@{")) return false;
   if (t.includes("//")) return false;
   return /^[A-Za-z0-9_./+-]+$/.test(t);
+}
+
+/**
+ * Same as `isSafeGitRefToken` but also allows `~N` / `^N` ancestor notation used
+ * by `git reset --soft HEAD~3`. Permits `~` and `^` suffix characters.
+ */
+export function isSafeGitAncestorRef(s: string): boolean {
+  const t = s.trim();
+  if (t.length === 0 || t.length > 256) return false;
+  if (t.startsWith("-")) return false;
+  return /^[A-Za-z0-9_./+~^-]+$/.test(t);
 }
 
 /**
