@@ -19,29 +19,9 @@ batch_commit({
 
 Path-level `files: string[]` already exists per-entry on `batch_commit`. Remaining gap is hunk-level staging via `git add -p` patch interface.
 
-### `git_worktree_add` / `git_worktree_remove` / `git_worktree_list`
+### `git_worktree_add` / `git_worktree_remove` / `git_worktree_list` ✓ implemented
 
-**Pain:** Parallel subagent batches use worktrees heavily. Today: Bash `git worktree add/remove/list`. Should be MCP-native.
-
-**Ask:**
-
-```ts
-git_worktree_add({ path: ".claude/worktrees/agent-abc", branch: "worktree-agent-abc", baseRef: "main" })
-git_worktree_remove({ path: "...", force?: false })
-git_worktree_list() // → [{ path, branch, commit, locked }]
-```
-
-### `git_reset_soft` MCP tool
-
-**Pain:** Sandbox blocks Bash `git reset --soft HEAD~N`, but this is the only way to split atomic commits. Subagents hit this repeatedly.
-
-**Ask:** Narrow, safe MCP tool:
-
-```ts
-git_reset_soft({ ref: "HEAD~3" })
-// Reset branch pointer by N commits while keeping staged index.
-// Refuses if working tree is dirty (reserve for workflows where all changes are already committed).
-```
+### `git_reset_soft` MCP tool ✓ implemented
 
 ## Medium value — ergonomics
 

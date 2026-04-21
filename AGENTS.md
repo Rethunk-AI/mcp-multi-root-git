@@ -16,25 +16,31 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
 | [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `spreadWhen`, `spreadDefined` |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
-| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots` — sole public export; session root resolution |
+| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots`, `requireSingleRepo` — shared tool preludes; session root resolution |
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
 | [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT` |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
+| [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `conflictPaths` |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below |
 | [`src/server/git-status-tool.ts`](src/server/git-status-tool.ts) | `git_status` |
 | [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `git_inventory` |
 | [`src/server/git-parity-tool.ts`](src/server/git-parity-tool.ts) | `git_parity` |
 | [`src/server/list-presets-tool.ts`](src/server/list-presets-tool.ts) | `list_presets` |
-| [`src/server/git-log-tool.ts`](src/server/git-log-tool.ts) | `git_log` |
+| [`src/server/git-log-tool.ts`](src/server/git-log-tool.ts) | `git_log` — v3 JSON shape: `sha` (full), `workspaceRoot`, no `sha7`/`ageRelative`, optional `email` |
 | [`src/server/git-diff-summary-tool.ts`](src/server/git-diff-summary-tool.ts) | `git_diff_summary` — structured token-efficient diff viewer; read-only |
-| [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating |
+| [`src/server/git-worktree-tool.ts`](src/server/git-worktree-tool.ts) | `git_worktree_list`, `git_worktree_add`, `git_worktree_remove` |
+| [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating; exports `PushReport`, `runPushAfter` |
+| [`src/server/git-push-tool.ts`](src/server/git-push-tool.ts) | `git_push` — standalone push with optional upstream tracking |
+| [`src/server/git-merge-tool.ts`](src/server/git-merge-tool.ts) | `git_merge` — mutating |
+| [`src/server/git-cherry-pick-tool.ts`](src/server/git-cherry-pick-tool.ts) | `git_cherry_pick` — mutating |
+| [`src/server/git-reset-soft-tool.ts`](src/server/git-reset-soft-tool.ts) | `git_reset_soft` — soft-reset; mutating |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
 | [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop` |
 
 ## Changing contracts
 
 - **No banner paragraphs** in shipped docs. Use normal titles + cross-links.
-- **JSON format version** (currently `"2"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false.
+- **JSON format version** (currently `"3"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false. v3 changes in `git_log`: `sha7` → `sha` (full SHA), `workspace_root` → `workspaceRoot`, `ageRelative` removed, `email` omitted when empty.
 - **Preset file:** keep `presets.ts` Zod schemas aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
 - **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned). Install/client wiring → [docs/install.md](docs/install.md) only. `.cursor/rules/rethunk-git-mcp.mdc` → only when *MCP-vs-shell* guidance changes.
 

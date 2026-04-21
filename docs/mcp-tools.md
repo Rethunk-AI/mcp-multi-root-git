@@ -25,9 +25,9 @@ Pass **`format: "json"`** on any tool for structured JSON instead of markdown (d
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"2"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
-### v2 field omission (consumer contract)
+### v2/v3 field omission (consumer contract)
 
 To keep responses compact, **optional fields are omitted when they would be empty, `null`, or `false`** — they are not emitted as `null`. Consumers must test for *presence*, not compare to `null`.
 
@@ -68,17 +68,15 @@ To keep responses compact, **optional fields are omitted when they would be empt
 ```json
 {
   "groups": [{
-    "workspace_root": "/abs/path",
+    "workspaceRoot": "/abs/path",
     "repo": "my-repo",
     "branch": "main",
     "commits": [{
-      "sha7": "a1bf184",
-      "shaFull": "a1bf184c3d...",
+      "sha": "a1bf184c3d…",
       "subject": "feat(satcom): upgrade to PROTOCOL_VERSION 4",
       "author": "Damon Blais",
       "email": "damon@example.com",
       "date": "2026-04-12T18:32:01-07:00",
-      "ageRelative": "42m ago",
       "filesChanged": 4,
       "insertions": 16,
       "deletions": 5
@@ -89,14 +87,16 @@ To keep responses compact, **optional fields are omitted when they would be empt
 }
 ```
 
-v2 field-omission rules: `filesChanged`, `insertions`, `deletions` are omitted when zero/absent (new file with no shortstat). `truncated` and `omittedCount` are omitted when `false`/`0`. A group emits `error` instead of `commits` when git fails for that root.
+v3 changes from v2: `sha7` removed (use `sha.slice(0,7)` for display); `ageRelative` removed (use `date` — ISO 8601); `email` omitted when empty; `workspace_root` renamed to `workspaceRoot` (camelCase consistency).
+
+v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` omitted when zero/absent. `truncated` and `omittedCount` omitted when `false`/`0`. A group emits `error` instead of `commits` when git fails for that root.
 
 ### `git_log` — error codes
 
 | Code | Meaning |
 |------|---------|
 | `git_not_found` | `git` binary not on `PATH`. |
-| `not_a_git_repo` | The resolved workspace root is not inside a git repository. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 | `invalid_since` | The `since` string contains shell metacharacters and was rejected. |
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
@@ -335,6 +335,110 @@ Repo state is cleaned (`git cherry-pick --abort`) before returning — no partia
 | `destination_not_found` | `onto` does not resolve to a commit. |
 | `source_not_found` | A source spec resolves to neither a branch, a range, nor a commit. |
 | `range_resolution_failed` | `git rev-list` failed to expand a range spec. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_push` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `remote` | string | Remote to push to. Defaults to the remote inferred from the upstream tracking ref, or `origin` when `setUpstream` is true. |
+| `branch` | string | Branch to push. Defaults to the currently checked-out branch. Rejected on detached HEAD. |
+| `setUpstream` | boolean | Default `false`. Pass `-u` to set the upstream tracking ref; remote defaults to `origin`. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_push` — JSON shape (`format: "json"`)
+
+```json
+{ "ok": true, "branch": "feature/x", "remote": "origin", "upstream": "origin/feature/x" }
+```
+
+### `git_push` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `push_detached_head` | HEAD is detached; no branch name to push. |
+| `push_no_upstream` | Branch has no configured upstream and `setUpstream` was not requested. |
+| `push_failed` | `git push` exited non-zero. `detail` carries stderr. |
+| `unsafe_ref_token` | `branch` value contains characters outside the safe token set. |
+| `unsafe_remote_token` | `remote` value contains disallowed characters. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_reset_soft` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `ref` | string | Target commit: `HEAD~N`, branch name, or full/short SHA. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_reset_soft` — JSON shape (`format: "json"`)
+
+```json
+{ "ok": true, "ref": "HEAD~2", "beforeSha": "a1b2c3d…", "afterSha": "f9e8d7c…", "stagedCount": 5 }
+```
+
+### `git_reset_soft` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_ref_token` | `ref` contains characters outside the ancestor-safe token set. |
+| `working_tree_dirty` | Working tree has uncommitted/unstaged changes; clean up before resetting. |
+| `status_failed` | `git status` failed unexpectedly. |
+| `reset_failed` | `git reset --soft` failed (e.g. ref does not exist). |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_worktree_list` — JSON shape (`format: "json"`)
+
+```json
+{ "worktrees": [{ "path": "/abs/path", "branch": "feature/x", "head": "a1b2c3d…" }] }
+```
+
+`branch` is `null` for detached-HEAD worktrees.
+
+### `git_worktree_add` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `path` | string | Filesystem path for the new worktree. Relative paths are resolved from the git toplevel. |
+| `branch` | string | Branch to check out. Created from `baseRef` if it does not already exist. |
+| `baseRef` | string | Commit-ish for branch creation. Default: `HEAD`. Ignored when `branch` already exists. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_worktree_add` — JSON shape (`format: "json"`)
+
+```json
+{ "ok": true, "path": "/abs/worktree", "branch": "feature/x", "created": true, "baseRef": "main" }
+```
+
+### `git_worktree_add` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_ref_token` | `branch` or `baseRef` contains disallowed characters. |
+| `protected_branch` | `branch` is on the protected names list. |
+| `worktree_add_failed` | `git worktree add` exited non-zero. `detail` carries stderr. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+### `git_worktree_remove` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `path` | string | Path of the worktree to remove. |
+| `force` | boolean | Default `false`. Pass `--force` to allow removal with uncommitted changes. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+
+### `git_worktree_remove` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `cannot_remove_main_worktree` | `path` resolves to the main (non-linked) worktree. |
+| `worktree_not_found` | `path` is not registered as a worktree in this repo. |
+| `worktree_remove_failed` | `git worktree remove` failed. Pass `force: true` if there are uncommitted changes. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
