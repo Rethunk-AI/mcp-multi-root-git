@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
-import { getCurrentBranch, isSafeGitRefToken } from "./git-refs.js";
+import { getCurrentBranch, inferRemoteFromUpstream, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -70,22 +70,15 @@ export function registerGitPushTool(server: FastMCP): void {
         remote = "origin";
       } else {
         // Infer remote from existing upstream tracking ref.
-        const upstreamProbe = await spawnGitAsync(gitTop, [
-          "rev-parse",
-          "--abbrev-ref",
-          "--symbolic-full-name",
-          "@{u}",
-        ]);
-        if (!upstreamProbe.ok) {
+        const t = await inferRemoteFromUpstream(gitTop);
+        if (!t.ok) {
           return jsonRespond({
             error: "push_no_upstream",
             branch,
-            detail: (upstreamProbe.stderr || upstreamProbe.stdout).trim(),
+            detail: t.detail,
           });
         }
-        const upstream = upstreamProbe.stdout.trim();
-        const slash = upstream.indexOf("/");
-        remote = slash > 0 ? upstream.slice(0, slash) : "origin";
+        remote = t.remote;
       }
 
       // --- Push ---

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
 import { spawnGitAsync } from "./git.js";
-import { getCurrentBranch } from "./git-refs.js";
+import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -51,38 +51,22 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
     return { ok: false, error: "push_detached_head" };
   }
 
-  // Verify upstream exists before attempting push (avoids side effects of auto-set-upstream).
-  const upstreamProbe = await spawnGitAsync(gitTop, [
-    "rev-parse",
-    "--abbrev-ref",
-    "--symbolic-full-name",
-    "@{u}",
-  ]);
-  if (!upstreamProbe.ok) {
-    return {
-      ok: false,
-      branch,
-      error: "push_no_upstream",
-      detail: (upstreamProbe.stderr || upstreamProbe.stdout).trim(),
-    };
+  const t = await inferRemoteFromUpstream(gitTop);
+  if (!t.ok) {
+    return { ok: false, branch, error: "push_no_upstream", detail: t.detail };
   }
-  const upstream = upstreamProbe.stdout.trim();
 
-  // Explicit remote + branch so a future push refspec change to the upstream does not surprise us.
-  const slash = upstream.indexOf("/");
-  const remote = slash > 0 ? upstream.slice(0, slash) : "origin";
-
-  const pushResult = await spawnGitAsync(gitTop, ["push", remote, branch]);
+  const pushResult = await spawnGitAsync(gitTop, ["push", t.remote, branch]);
   if (!pushResult.ok) {
     return {
       ok: false,
       branch,
-      upstream,
+      upstream: t.upstream,
       error: "push_failed",
       detail: (pushResult.stderr || pushResult.stdout).trim(),
     };
   }
-  return { ok: true, branch, upstream };
+  return { ok: true, branch, upstream: t.upstream };
 }
 
 export function registerBatchCommitTool(server: FastMCP): void {

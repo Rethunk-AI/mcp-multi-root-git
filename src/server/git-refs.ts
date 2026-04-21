@@ -187,3 +187,22 @@ export async function worktreeForBranch(cwd: string, branch: string): Promise<st
   const hit = trees.find((t) => t.branch === branch);
   return hit?.path ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Push helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Probe `@{u}` and extract the remote name from the tracking ref.
+ * Returns an error payload when no upstream is configured.
+ */
+export async function inferRemoteFromUpstream(
+  cwd: string,
+): Promise<{ ok: true; remote: string; upstream: string } | { ok: false; detail: string }> {
+  const r = await spawnGitAsync(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  if (!r.ok) return { ok: false, detail: (r.stderr || r.stdout).trim() };
+  const upstream = r.stdout.trim();
+  const slash = upstream.indexOf("/");
+  const remote = slash > 0 ? upstream.slice(0, slash) : "origin";
+  return { ok: true, remote, upstream };
+}
