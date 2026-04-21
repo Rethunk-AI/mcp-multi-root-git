@@ -2,6 +2,19 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.3.2] — 2026-04-21
+
+### CI
+
+- Coverage gate added: `bun run test:coverage` enforces an 80% line-coverage minimum in CI (`check` job).
+
+### Documentation
+
+- **`CONTRIBUTING.md`** — new file; consolidates dev setup, hook table, commit conventions, CI description, PR checklist, path-confinement guidance, and how-to-add-a-tool guidance for mutating tools.
+- **`HUMANS.md`** — Development section replaced with a pointer to `CONTRIBUTING.md`; preset file, `git_not_found`, install reference, and publishing steps remain.
+- **`AGENTS.md`** — corrected pre-push hook description (missing `test` step) and updated canonical-docs link for dev/CI content.
+- **`.cursor/rules/rethunk-git-mcp.mdc`** — removed stale "shell is fine for `git diff` / `git cherry-pick`" examples; both now have MCP tool equivalents (`git_diff_summary`, `git_cherry_pick`).
+
 ## [2.3.1] — 2026-04-21
 
 Documentation-only patch following the 2.3.0 release.
