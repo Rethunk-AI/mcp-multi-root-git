@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { spawnGitAsync } from "./git.js";
-import { isSafeGitAncestorRef } from "./git-refs.js";
+import { isSafeGitAncestorRef, isWorkingTreeClean } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -40,14 +40,7 @@ export function registerGitResetSoftTool(server: FastMCP): void {
       }
 
       // Refuse when the working tree is dirty (unstaged or untracked changes).
-      const statusResult = await spawnGitAsync(gitTop, ["status", "--porcelain"]);
-      if (!statusResult.ok) {
-        return jsonRespond({
-          error: "status_failed",
-          detail: (statusResult.stderr || statusResult.stdout).trim(),
-        });
-      }
-      if (statusResult.stdout.trim() !== "") {
+      if (!(await isWorkingTreeClean(gitTop))) {
         return jsonRespond({
           error: "working_tree_dirty",
           detail:
