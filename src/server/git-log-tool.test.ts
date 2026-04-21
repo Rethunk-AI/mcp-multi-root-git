@@ -12,7 +12,7 @@
  *  4. `since` filter excludes older commits
  *  5. `paths` filter limits to relevant commits
  *  6. `grep` filter matches subject
- *  7. not_a_git_repo error code for a non-git path
+ *  7. not_a_git_repository error code for a non-git path
  *  8. author filter restricts results
  *  9. commit subject containing % is preserved intact
  */
@@ -266,7 +266,7 @@ describe("git_log integration", () => {
     expect(records.length).toBe(0);
   });
 
-  test("not_a_git_repo: gitTopLevel returns null for a plain directory", () => {
+  test("not_a_git_repository: gitTopLevel returns null for a plain directory", () => {
     const dir = mkTmpDir("mcp-not-git-");
     const top = gitTopLevel(dir);
     expect(top).toBeNull();
@@ -315,7 +315,7 @@ describe("git_log integration", () => {
 // Execute handler: end-to-end via fake server harness
 // ---------------------------------------------------------------------------
 
-// JSON output shape: { groups: [{ workspace_root, repo, commits, truncated? }] }
+// JSON output shape: { groups: [{ workspaceRoot, repo, commits, truncated? }] }
 // Commits use GIT_AUTHOR_DATE=2025-01-01 — must pass since beyond 7-day default.
 const SINCE_WIDE = "2.years";
 
@@ -367,7 +367,7 @@ describe("git_log execute handler", () => {
     expect(group?.truncated).toBe(true);
   });
 
-  test("non-git workspaceRoot → not_a_git_repo error in group", async () => {
+  test("non-git workspaceRoot → not_a_git_repository error in group", async () => {
     const plain = mkTmpDir("mcp-plain-log-");
 
     const run = captureTool(registerGitLogTool);
@@ -375,7 +375,7 @@ describe("git_log execute handler", () => {
     const parsed = JSON.parse(text) as {
       groups: Array<{ error?: string }>;
     };
-    expect(parsed.groups[0]?.error).toBe("not_a_git_repo");
+    expect(parsed.groups[0]?.error).toBe("not_a_git_repository");
   });
 
   test("paths filter limits commits to those touching a specific file", async () => {

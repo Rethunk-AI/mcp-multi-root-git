@@ -21,32 +21,31 @@ const DEFAULT_SINCE = "7.days";
 const FIELD_SEP_OUT = "\x01"; // what git outputs (SOH)
 const RECORD_SEP_OUT = "\x02"; // what git outputs (STX) — used as record-START marker
 
-// git log --pretty tformat: sha7, shaFull, subject, author, email, ISO date, relative date.
+// git log --pretty tformat: shaFull, subject, author, email, ISO date.
+// sha7 and ageRelative dropped in v3 (shaFull.slice(0,7) used for display; date is ISO).
 // %x02 is placed at the START of each record (tformat adds \n as terminator after each).
 // Splitting stdout on \x02 then gives empty-first-chunk + one chunk per commit,
 // each structured as:  <fields>\x01\n\n <shortstat text>\n
 // Fields are separated by %x01; the trailing \x01 before \n leaves one empty last field (ignored).
-const PRETTY_FORMAT = "%x02%h%x01%H%x01%s%x01%aN%x01%aE%x01%aI%x01%ar%x01";
+const PRETTY_FORMAT = "%x02%H%x01%s%x01%aN%x01%aE%x01%aI%x01";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface CommitJson {
-  sha7: string;
-  shaFull: string;
+  sha: string;
   subject: string;
   author: string;
-  email: string;
+  email?: string;
   date: string;
-  ageRelative: string;
   filesChanged?: number;
   insertions?: number;
   deletions?: number;
 }
 
 interface LogGroupJson {
-  workspace_root: string;
+  workspaceRoot: string;
   repo: string;
   branch: string;
   commits: CommitJson[];
@@ -87,7 +86,7 @@ async function gitCurrentBranch(cwd: string, branchArg: string | undefined): Pro
 }
 
 interface LogResult {
-  workspace_root: string;
+  workspaceRoot: string;
   repo: string;
   branch: string;
   commits: CommitJson[];
@@ -167,20 +166,18 @@ async function runGitLog(opts: {
     const statPart = newlineIdx >= 0 ? chunk.slice(newlineIdx + 1) : "";
 
     const fields = fieldsPart.split(FIELD_SEP_OUT);
-    const [sha7, shaFull, subject, authorName, email, date, ageRelative] = fields;
+    const [shaFull, subject, authorName, email, date] = fields;
 
-    if (!sha7 || !shaFull) continue;
+    if (!shaFull) continue;
 
     const stat = parseShortstat(statPart);
 
     const commit: CommitJson = {
-      sha7: sha7.trim(),
-      shaFull: shaFull.trim(),
+      sha: shaFull.trim(),
       subject: subject?.trim() ?? "",
       author: authorName?.trim() ?? "",
-      email: email?.trim() ?? "",
+      ...spreadDefined("email", email?.trim() || undefined),
       date: date?.trim() ?? "",
-      ageRelative: ageRelative?.trim() ?? "",
       ...spreadDefined("filesChanged", stat?.filesChanged),
       ...spreadDefined("insertions", stat?.insertions),
       ...spreadDefined("deletions", stat?.deletions),
@@ -193,7 +190,7 @@ async function runGitLog(opts: {
   const omittedCount = truncated ? allCommits.length - maxCommits : 0;
 
   return {
-    workspace_root: top,
+    workspaceRoot: top,
     repo: basename(top),
     branch: resolvedBranch,
     commits,
@@ -209,14 +206,16 @@ async function runGitLog(opts: {
 function renderLogMarkdown(group: LogResult, filterSummary: string): string {
   const lines: string[] = [];
   lines.push(`### ${group.repo} (${group.branch})${filterSummary ? `  —  ${filterSummary}` : ""}`);
-  lines.push(`_root: ${group.workspace_root}_`);
+  lines.push(`_root: ${group.workspaceRoot}_`);
   lines.push("");
 
   if (group.commits.length === 0) {
     lines.push("_(no commits match)_");
   } else {
     for (const c of group.commits) {
-      lines.push(`- \`${c.sha7}\`  ${c.ageRelative}  ${c.subject}  —  ${c.author}`);
+      lines.push(
+        `- \`${c.sha.slice(0, 7)}\`  ${c.date.slice(0, 10)}  ${c.subject}  —  ${c.author}`,
+      );
     }
   }
 
@@ -239,8 +238,7 @@ export function registerGitLogTool(server: FastMCP): void {
     name: "git_log",
     description:
       "Path-filtered, time-windowed read-only `git log` across one or more workspace roots. " +
-      "Returns structured commit history with author, date, subject, and optional diff stats. " +
-      "See docs/mcp-tools.md.",
+      "Returns structured commit history with author, date, subject, and optional diff stats.",
     annotations: {
       readOnlyHint: true,
     },
@@ -304,7 +302,7 @@ export function registerGitLogTool(server: FastMCP): void {
       const results = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async ({ rootInput }) => {
         const top = gitTopLevel(rootInput);
         if (!top) {
-          return { _error: true as const, workspace_root: rootInput, error: "not_a_git_repo" };
+          return { _error: true as const, workspaceRoot: rootInput, error: "not_a_git_repository" };
         }
         const r = await runGitLog({
           top,
@@ -316,7 +314,7 @@ export function registerGitLogTool(server: FastMCP): void {
           branch: args.branch,
         });
         if ("error" in r) {
-          return { _error: true as const, workspace_root: rootInput, error: r.error };
+          return { _error: true as const, workspaceRoot: rootInput, error: r.error };
         }
         return { _error: false as const, ...r };
       });
@@ -332,8 +330,8 @@ export function registerGitLogTool(server: FastMCP): void {
         const groups: LogGroupJson[] = results.map((r) => {
           if (r._error) {
             return {
-              workspace_root: r.workspace_root,
-              repo: basename(r.workspace_root),
+              workspaceRoot: r.workspaceRoot,
+              repo: basename(r.workspaceRoot ?? ""),
               branch: "",
               commits: [],
               ...spreadWhen(true, { error: r.error }),
@@ -352,7 +350,7 @@ export function registerGitLogTool(server: FastMCP): void {
       const mdChunks: string[] = ["# Git log"];
       for (const r of results) {
         if (r._error) {
-          mdChunks.push(`### ${r.workspace_root}\n_error: ${r.error}_`);
+          mdChunks.push(`### ${r.workspaceRoot}\n_error: ${r.error}_`);
           continue;
         }
         const { _error: _e, ...group } = r;
