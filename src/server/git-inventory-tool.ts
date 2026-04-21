@@ -23,7 +23,10 @@ import { MAX_INVENTORY_ROOTS_DEFAULT, WorkspacePickSchema } from "./schemas.js";
 export function registerGitInventoryTool(server: FastMCP): void {
   server.addTool({
     name: "git_inventory",
-    description: "Read-only status + ahead/behind per root. See docs/mcp-tools.md.",
+    description: "Read-only status + ahead/behind per root.",
+    annotations: {
+      readOnlyHint: true,
+    },
     parameters: WorkspacePickSchema.extend({
       nestedRoots: z.array(z.string()).optional(),
       preset: z.string().optional(),

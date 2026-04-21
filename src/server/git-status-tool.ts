@@ -19,7 +19,10 @@ import { WorkspacePickSchema } from "./schemas.js";
 export function registerGitStatusTool(server: FastMCP): void {
   server.addTool({
     name: "git_status",
-    description: "Read-only `git status --short -b` per root + submodules. See docs/mcp-tools.md.",
+    description: "Read-only `git status --short -b` per root + submodules.",
+    annotations: {
+      readOnlyHint: true,
+    },
     parameters: WorkspacePickSchema.extend({
       includeSubmodules: z.boolean().optional().default(true),
     }),

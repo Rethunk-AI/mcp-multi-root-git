@@ -11,7 +11,10 @@ import { WorkspacePickSchema } from "./schemas.js";
 export function registerGitParityTool(server: FastMCP): void {
   server.addTool({
     name: "git_parity",
-    description: "Read-only HEAD parity for path pairs. See docs/mcp-tools.md.",
+    description: "Read-only HEAD parity for path pairs.",
+    annotations: {
+      readOnlyHint: true,
+    },
     parameters: WorkspacePickSchema.extend({
       pairs: z
         .array(
