@@ -15,6 +15,8 @@ Prefer **`rethunk-git_git_*`** and **`rethunk-git_list_presets`** over shell **`
 
 ## When shell git is still fine
 
-Commands the tools do not cover (e.g. `git diff`, `git cherry-pick`), or when MCP is unavailable after a failed reload.
+Commands the MCP tools do not cover (e.g. `git fetch`, `git stash`, `git rebase`), or when MCP is unavailable after a failed reload.
+
+Note: `git_diff_summary` covers diff views; `git_cherry_pick`, `git_merge`, `git_reset_soft` cover those mutating ops — prefer the MCP tools so operations are scoped to workspace roots.
 
 If tools are missing: reload the MCP connection and follow **[docs/install.md](../../docs/install.md)** — *Troubleshooting* and *From source* (this clone).
