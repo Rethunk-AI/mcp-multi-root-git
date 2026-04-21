@@ -1,8 +1,9 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { gitTopLevel, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
 import {
+  conflictPaths,
   getCurrentBranch,
   isFullyMergedInto,
   isProtectedBranch,
@@ -12,7 +13,7 @@ import {
   worktreeForBranch,
 } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -56,17 +57,8 @@ interface SourceResult {
 }
 
 // ---------------------------------------------------------------------------
-// Conflict helpers
+// Abort helpers
 // ---------------------------------------------------------------------------
-
-async function conflictPaths(gitTop: string): Promise<string[]> {
-  const r = await spawnGitAsync(gitTop, ["diff", "--name-only", "--diff-filter=U"]);
-  if (!r.ok) return [];
-  return r.stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-}
 
 async function abortMerge(gitTop: string): Promise<void> {
   await spawnGitAsync(gitTop, ["merge", "--abort"]);
@@ -299,7 +291,7 @@ export function registerGitMergeTool(server: FastMCP): void {
       "Refuses if the working tree is dirty. Stops on the first conflict and reports " +
       "the affected paths. Optional flags auto-delete merged branches and worktrees, " +
       "skipping protected names (main, master, dev, develop, stable, trunk, prod, " +
-      "production, release/*, hotfix/*). See docs/mcp-tools.md.",
+      "production, release/*, hotfix/*).",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -326,8 +318,7 @@ export function registerGitMergeTool(server: FastMCP): void {
         .default(false)
         .describe(
           "After all sources merge cleanly, delete each source branch locally (`git branch -d`). " +
-            "Protected names (main, master, dev, develop, stable, trunk, prod, production, " +
-            "release/*, hotfix/*) are always skipped. Never affects remote branches.",
+            "Protected names always skipped. Never affects remote branches.",
         ),
       deleteMergedWorktrees: z
         .boolean()
@@ -339,14 +330,9 @@ export function registerGitMergeTool(server: FastMCP): void {
         ),
     }),
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
-
-      const rootInput = pre.roots[0];
-      if (!rootInput) return jsonRespond({ error: "no_workspace_root" });
-
-      const gitTop = gitTopLevel(rootInput);
-      if (!gitTop) return jsonRespond({ error: "not_a_git_repository", path: rootInput });
+      const gitTop = pre.gitTop;
 
       // --- Validate ref tokens early ---
       for (const s of args.sources) {

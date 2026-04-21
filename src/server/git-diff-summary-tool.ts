@@ -3,9 +3,9 @@ import { matchesGlob } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { gitTopLevel, isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
     description:
       "Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions, " +
       "truncated to configurable line limits, with noise files (lock files, dist, etc.) excluded by default. " +
-      "Use `range` to target staged, HEAD, or any revision range. See docs/mcp-tools.md.",
+      "Use `range` to target staged, HEAD, or any revision range.",
     annotations: {
       readOnlyHint: true,
     },
@@ -242,17 +242,9 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         ),
     }),
     execute: async (args) => {
-      // --- Standard prelude ---
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
-
-      const rootInput = pre.roots[0];
-      if (!rootInput) return jsonRespond({ error: "no_workspace_root" });
-
-      const gitTop = gitTopLevel(rootInput);
-      if (!gitTop) {
-        return jsonRespond({ error: "not_a_git_repository", path: rootInput });
-      }
+      const gitTop = pre.gitTop;
 
       // --- Build git diff args ---
       const diffArgsResult = buildDiffArgs(args.range);

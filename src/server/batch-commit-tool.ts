@@ -2,10 +2,10 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
-import { gitTopLevel, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
 import { getCurrentBranch } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
 const CommitEntrySchema = z.object({
@@ -33,7 +33,7 @@ interface CommitResult {
   detail?: string;
 }
 
-interface PushReport {
+export interface PushReport {
   ok: boolean;
   branch?: string;
   upstream?: string;
@@ -45,7 +45,7 @@ interface PushReport {
  * After all commits succeed, push the current branch to its upstream.
  * Commits are already applied at this point — do NOT attempt rollback on push failure.
  */
-async function runPushAfter(gitTop: string): Promise<PushReport> {
+export async function runPushAfter(gitTop: string): Promise<PushReport> {
   const branch = await getCurrentBranch(gitTop);
   if (!branch) {
     return { ok: false, error: "push_detached_head" };
@@ -92,7 +92,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "Create multiple sequential git commits in a single call. " +
       "Each entry stages the listed files then commits with the given message. " +
       'Stops on first failure. Optional `push: "after"` pushes the current branch ' +
-      "to its upstream once all commits succeed. See docs/mcp-tools.md.",
+      "to its upstream once all commits succeed.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -107,18 +107,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
       push: PushModeSchema,
     }),
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
-
-      const rootInput = pre.roots[0];
-      if (!rootInput) {
-        return jsonRespond({ error: "no_workspace_root" });
-      }
-
-      const gitTop = gitTopLevel(rootInput);
-      if (!gitTop) {
-        return jsonRespond({ error: "not_a_git_repository", path: rootInput });
-      }
+      const gitTop = pre.gitTop;
 
       const results: CommitResult[] = [];
 

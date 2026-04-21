@@ -1,9 +1,10 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { gitTopLevel, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
 import {
   commitListBetween,
+  conflictPaths,
   getCurrentBranch,
   isFullyMergedInto,
   isProtectedBranch,
@@ -14,7 +15,7 @@ import {
   worktreeForBranch,
 } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -44,15 +45,6 @@ interface ConflictReport {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function conflictPaths(gitTop: string): Promise<string[]> {
-  const r = await spawnGitAsync(gitTop, ["diff", "--name-only", "--diff-filter=U"]);
-  if (!r.ok) return [];
-  return r.stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-}
 
 async function cherryPickHead(gitTop: string): Promise<string | undefined> {
   const r = await spawnGitAsync(gitTop, ["rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"]);
@@ -159,7 +151,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       "`A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). " +
       "Commits already reachable from the destination are skipped. Refuses on dirty tree; " +
       "stops on the first conflict and reports paths. Optional flags auto-delete fully " +
-      "merged source branches and their worktrees, skipping protected names. See docs/mcp-tools.md.",
+      "merged source branches and their worktrees, skipping protected names.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -197,14 +189,9 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         ),
     }),
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
-
-      const rootInput = pre.roots[0];
-      if (!rootInput) return jsonRespond({ error: "no_workspace_root" });
-
-      const gitTop = gitTopLevel(rootInput);
-      if (!gitTop) return jsonRespond({ error: "not_a_git_repository", path: rootInput });
+      const gitTop = pre.gitTop;
 
       // --- Resolve destination ---
       const startBranch = await getCurrentBranch(gitTop);
