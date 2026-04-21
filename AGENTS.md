@@ -7,7 +7,8 @@ IDEs injecting this as context: do not re-link from rules.
 **Canonical docs — do not duplicate:**
 - Install + per-client wiring → [docs/install.md](docs/install.md)
 - Tools, JSON shape, resources, root resolution → [docs/mcp-tools.md](docs/mcp-tools.md)
-- Presets, dev, CI, publish → [HUMANS.md](HUMANS.md)
+- Dev setup, CI, commit conventions → [CONTRIBUTING.md](CONTRIBUTING.md)
+- Presets, auth, publish → [HUMANS.md](HUMANS.md)
 
 ## Implementation map
 
@@ -48,7 +49,7 @@ IDEs injecting this as context: do not re-link from rules.
 
 Local: `bun run build` | `bun run check` | `bun run test`. CI ([`ci.yml`](.github/workflows/ci.yml)) runs same on PRs + `main` after `bun install --frozen-lockfile`, uploads prerelease `npm pack` artifact. Tag `v*.*.*` matching `package.json` version → [`release.yml`](.github/workflows/release.yml) publishes to GitHub Packages as `@rethunk-ai/mcp-multi-root-git` + cuts GitHub Release. npmjs publish is manual (see [HUMANS.md](HUMANS.md)).
 
-Optional [`.githooks/`](.githooks): `bun run setup-hooks` once per clone. pre-commit=`check`; pre-push=frozen install + build + check.
+Optional [`.githooks/`](.githooks): `bun run setup-hooks` once per clone. pre-commit=`check`; pre-push=frozen install + build + check + test.
 
 Path confinement: [`src/repo-paths.ts`](src/repo-paths.ts) — extend tests when changing.
 
