@@ -7,7 +7,12 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { isProtectedBranch, isSafeGitRangeToken, isSafeGitRefToken } from "./git-refs.js";
+import {
+  isProtectedBranch,
+  isSafeGitAncestorRef,
+  isSafeGitRangeToken,
+  isSafeGitRefToken,
+} from "./git-refs.js";
 
 describe("isProtectedBranch", () => {
   test("exact protected names are protected", () => {
@@ -104,5 +109,41 @@ describe("isSafeGitRangeToken", () => {
   test("rejects empty endpoints", () => {
     expect(isSafeGitRangeToken("..b")).toBe(false);
     expect(isSafeGitRangeToken("a..")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSafeGitAncestorRef
+// ---------------------------------------------------------------------------
+
+describe("isSafeGitAncestorRef", () => {
+  test("accepts HEAD~N ancestor notation", () => {
+    expect(isSafeGitAncestorRef("HEAD~1")).toBe(true);
+    expect(isSafeGitAncestorRef("HEAD~10")).toBe(true);
+    expect(isSafeGitAncestorRef("HEAD^1")).toBe(true);
+  });
+
+  test("accepts plain branch names and full SHAs", () => {
+    expect(isSafeGitAncestorRef("main")).toBe(true);
+    expect(isSafeGitAncestorRef("feature/auth")).toBe(true);
+    expect(isSafeGitAncestorRef("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")).toBe(true);
+  });
+
+  test("rejects leading dash", () => {
+    expect(isSafeGitAncestorRef("-ref")).toBe(false);
+  });
+
+  test("rejects shell metacharacters", () => {
+    expect(isSafeGitAncestorRef("HEAD;evil")).toBe(false);
+    expect(isSafeGitAncestorRef("HEAD$(cmd)")).toBe(false);
+    expect(isSafeGitAncestorRef("HEAD ref")).toBe(false);
+  });
+
+  test("rejects empty string", () => {
+    expect(isSafeGitAncestorRef("")).toBe(false);
+  });
+
+  test("rejects string longer than 256 chars", () => {
+    expect(isSafeGitAncestorRef("a".repeat(257))).toBe(false);
   });
 });
