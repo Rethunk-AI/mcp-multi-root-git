@@ -2,6 +2,52 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.3.0] — 2026-04-21
+
+Five new tools, a token-efficiency sweep, a targeted breaking change to the `git_log` JSON contract, and test coverage raised from 70% to 89%.
+
+### Added
+
+- **`git_push`** — push the current branch to its configured upstream. Accepts explicit `remote` / `branch` overrides and a `setUpstream: true` flag for first-push (`git push -u`). Refuses on detached HEAD; does not force-push.
+- **`git_worktree_list`** — list all git worktrees (`git worktree list --porcelain`); annotated `readOnlyHint: true`.
+- **`git_worktree_add`** — create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names (`main`, `master`, `dev`, `release*`, `hotfix*`, …).
+- **`git_worktree_remove`** — remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees.
+- **`git_reset_soft`** — soft-reset the current branch to a ref (`HEAD~1`, `HEAD~N`, SHA, branch name). Preserves rewound changes in the staging index — the canonical way to re-split an already-committed chunk. Requires a clean working tree.
+
+### Changed — breaking (`git_log` JSON, `MCP_JSON_FORMAT_VERSION` → `"3"`)
+
+Consumers using `format: "json"` with `git_log` must update field names. All other tools are unaffected.
+
+- `sha7` removed — was always derivable as `sha.slice(0, 7)`.
+- `ageRelative` removed — was human-readable noise in machine output.
+- `workspace_root` renamed to `workspaceRoot` — consistent camelCase with all other fields.
+- `email` is now omitted when empty rather than always present.
+- Error code `not_a_git_repo` corrected to `not_a_git_repository` — consistent with all other tools.
+
+### Changed — non-breaking
+
+- **Token efficiency:** `readOnlyHint: true` added to `git_status`, `git_inventory`, `git_parity`, and `list_presets`. "See docs/mcp-tools.md" suffix dropped from all 9 tool descriptions; descriptions are now self-contained.
+- **`WorkspacePickSchema`** — `rootIndex` and `allWorkspaceRoots` parameters carry inline descriptions so LLMs can pick them without consulting external docs.
+- **`git_merge`** — protected-branch list in the description collapsed to a single canonical reference (was duplicated inline).
+
+### Internal
+
+- `requireSingleRepo` helper extracted to `roots.ts`; replaces copy-paste preludes across `batch_commit`, `git_diff_summary`, `git_merge`, `git_cherry_pick`, `git_push`, `git_reset_soft`, and all `git_worktree_*`.
+- `conflictPaths` extracted from `git-merge-tool.ts` to `git-refs.ts`; shared by `git_merge` and `git_cherry_pick`.
+- `inferRemoteFromUpstream` extracted to `git-refs.ts`; shared by `runPushAfter` (`batch_commit`) and `git_push`.
+- `isWorkingTreeClean` used consistently everywhere (was inlined in `git_reset_soft`).
+
+### Tests
+
+- Coverage: **88.6% lines / 92.8% functions** (up from 69.9% / 71.4%).
+- 262 tests across 15 files (up from 134 across 7 files).
+- New test files: `presets.test.ts`, `inventory.test.ts`, `git-utils.test.ts`, `json.test.ts`, `git-reset-soft-tool.test.ts`, `git-push-tool.test.ts`, `git-worktree-tool.test.ts`, `roots.test.ts`. `git-refs.test.ts` extended with `isSafeGitAncestorRef` cases.
+
+### Documentation
+
+- `docs/mcp-tools.md` — all new tools documented with parameter tables, JSON shapes, and error-code tables.
+- `AGENTS.md` — implementation map updated with all new and refactored modules.
+
 ## [2.2.0] — 2026-04-17
 
 Mutating git operations: merge, cherry-pick, and optional push-after for `batch_commit`.
@@ -41,6 +87,7 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[2.3.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.0
 [2.2.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.2.0
 [2.1.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.1.0
 [2.0.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.0.1
