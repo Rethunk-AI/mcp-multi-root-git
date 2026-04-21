@@ -4,7 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/%40rethunk%2Fmcp-multi-root-git.svg)](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**git** tools over MCP: read-only status, multi-root inventory, `HEAD` parity, presets, structured diff viewer, batch commit, merge, and cherry-pick. **Install and MCP client wiring:** **[docs/install.md](docs/install.md)** only — do not duplicate those steps elsewhere.
+**git** tools over MCP: read-only status, multi-root inventory, `HEAD` parity, presets, structured diff viewer, log, push, worktrees, soft-reset, batch commit, merge, and cherry-pick. **Install and MCP client wiring:** **[docs/install.md](docs/install.md)** only — do not duplicate those steps elsewhere.
 
 **Repository:** [github.com/Rethunk-AI/mcp-multi-root-git](https://github.com/Rethunk-AI/mcp-multi-root-git) · **npmjs (manual releases):** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) · **GitHub Packages (CI on each tag):** [`@rethunk-ai/mcp-multi-root-git`](https://github.com/Rethunk-AI/mcp-multi-root-git/packages) — see [docs/install.md](docs/install.md) and [HUMANS.md](HUMANS.md) Publishing.
 

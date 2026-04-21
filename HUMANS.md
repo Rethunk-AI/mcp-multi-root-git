@@ -1,6 +1,6 @@
 # @rethunk/mcp-multi-root-git — User guide
 
-Read-only MCP git tools for any workspace. **How the server is installed and wired to clients:** **[docs/install.md](docs/install.md)** only (do not restate that material here).
+MCP git tools for any workspace. **How the server is installed and wired to clients:** **[docs/install.md](docs/install.md)** only (do not restate that material here).
 
 ## Badges
 
