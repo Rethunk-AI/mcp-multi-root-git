@@ -32,6 +32,8 @@ Pass **`format: "json"`** on any tool for structured JSON instead of markdown (d
 
 Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
+The package also ships **`tool-parameters.schema.json`**, generated from the registered Zod parameter schemas via `bun run schema:tools`. Connected MCP clients should still prefer live schema discovery from `initialize` / tool listing; the artifact is for offline inspection and drift checks.
+
 ### v2/v3 field omission (consumer contract)
 
 To keep responses compact, **optional fields are omitted when they would be empty, `null`, or `false`** — they are not emitted as `null`. Consumers must test for *presence*, not compare to `null`.

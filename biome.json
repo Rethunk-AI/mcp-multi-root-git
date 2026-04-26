@@ -23,6 +23,6 @@
     }
   },
   "files": {
-    "includes": ["src/**/*", "*.json", "*.md"]
+    "includes": ["src/**/*", "scripts/**/*", "*.json", "*.md", "!tool-parameters.schema.json"]
   }
 }

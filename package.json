@@ -1,6 +1,6 @@
 {
   "name": "@rethunk/mcp-multi-root-git",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "MCP stdio server: multi-root git status, inventory, and HEAD parity checks. Generic tools usable by any workspace.",
   "type": "module",
   "private": false,
@@ -11,6 +11,7 @@
   "files": [
     "dist",
     "git-mcp-presets.schema.json",
+    "tool-parameters.schema.json",
     "docs/install.md",
     "docs/mcp-tools.md",
     "AGENTS.md",
@@ -31,9 +32,13 @@
     "build": "rimraf dist && tsc",
     "check": "biome check .",
     "check:fix": "biome check --write .",
+    "coverage:check": "bun scripts/check-coverage.ts",
+    "schema:tools": "bun scripts/generate-tool-parameters-schema.ts",
+    "schema:tools:check": "bun scripts/generate-tool-parameters-schema.ts --check",
+    "publish:preflight": "bun scripts/publish-preflight.ts",
     "test": "bun test src/",
     "test:coverage": "bun test src/ --coverage",
-    "prepublishOnly": "bun run build && bun run check && bun run test",
+    "prepublishOnly": "bun run schema:tools:check && bun run build && bun run check && bun run test",
     "setup-hooks": "git config core.hooksPath .githooks"
   },
   "keywords": [

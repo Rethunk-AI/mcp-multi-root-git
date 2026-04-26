@@ -53,6 +53,22 @@ With **multiple MCP file roots**, the server picks a root whose git toplevel def
 
 If you installed from **GitHub Packages**, use **`./node_modules/@rethunk-ai/mcp-multi-root-git/git-mcp-presets.schema.json`** in **`$schema`** instead (see [docs/install.md](docs/install.md#github-packages)).
 
+## Tool parameter schema artifact
+
+The package ships **`tool-parameters.schema.json`**, a generated JSON Schema snapshot of every registered tool's parameter schema. Maintainers regenerate it with:
+
+```bash
+bun run schema:tools
+```
+
+CI and `prepublishOnly` use:
+
+```bash
+bun run schema:tools:check
+```
+
+This artifact is for inspection, drift checks, and clients that want an offline schema snapshot. Runtime MCP schema discovery remains the source of truth for connected clients.
+
 **Layouts:**
 
 1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }`.
@@ -127,6 +143,14 @@ Tag pushes run [`.github/workflows/release.yml`](.github/workflows/release.yml):
 2. **GitHub Packages** (npm registry): the workflow temporarily rewrites the package **name** to **`@rethunk-ai/mcp-multi-root-git`** (required scope for org `Rethunk-AI` on GitHub) and runs **`npm publish`** to **`https://npm.pkg.github.com`** with **`GITHUB_TOKEN`** (`packages: write`). No npmjs token is used in CI.
 
 Prerequisite: push a **semver git tag** `vX.Y.Z` that **exactly matches** `version` in `package.json` (e.g. `v1.2.3` and `"version": "1.2.3"`).
+
+Before tagging, run the clean-tree preflight from the release commit:
+
+```bash
+bun run publish:preflight
+```
+
+It verifies the `package.json` version has a matching `CHANGELOG.md` section, generated tool schemas are current, build/check/coverage pass, and `npm pack --dry-run` includes the expected package files.
 
 ### npmjs (manual) — maintainers only
 

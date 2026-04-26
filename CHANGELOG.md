@@ -2,6 +2,24 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.3.4] — 2026-04-26
+
+Publication-prep patch for the `absoluteGitRoots` line.
+
+### Added
+
+- **`tool-parameters.schema.json`** — generated JSON Schema snapshot for every registered tool parameter surface, plus `bun run schema:tools` / `bun run schema:tools:check`.
+- **`git_parity` absolute-root regression coverage** — sibling clone batches are now covered directly.
+
+### Fixed
+
+- **CI coverage gate** now checks `% Lines` from Bun's coverage table instead of accidentally reading `% Funcs`.
+
+### Documentation
+
+- **`HUMANS.md`** — added sibling-clone `absoluteGitRoots` examples for `git_status` and `git_parity`.
+- **`docs/mcp-tools.md`** — clarified direct `git_push` use for already-committed work and `git_parity` sibling-clone batches.
+
 ## [2.3.3] — 2026-04-21
 
 ### Added

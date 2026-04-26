@@ -17,8 +17,12 @@ bun install
 bun run build       # rimraf dist && tsc → dist/server.js, dist/server/*.js, dist/repo-paths.js
 bun run check       # Biome lint + format check
 bun run check:fix   # auto-fix with Biome
+bun run schema:tools       # regenerate tool-parameters.schema.json
+bun run schema:tools:check # verify the generated tool schema is current
+bun run publish:preflight  # clean-tree release gate before tagging
 bun run test        # bun test src/
 bun run test:coverage  # bun test src/ --coverage
+bun run coverage:check /tmp/coverage.txt 80  # validate Bun coverage output captured with tee
 bun run setup-hooks    # one-time per clone: wire .githooks/
 ```
 
@@ -62,8 +66,9 @@ One logical unit per commit. Max ~7 files. Split by theme, not by file count.
 1. `bun install --frozen-lockfile`
 2. `bun run build`
 3. `bun run check` (Biome)
-4. `bun run test:coverage` + 80% line coverage threshold assertion
-5. Prerelease `npm pack` artifact uploaded (90-day retention)
+4. `bun run schema:tools:check`
+5. `bun run test:coverage` + `bun run coverage:check /tmp/coverage.txt 80`
+6. Prerelease `npm pack` artifact uploaded (90-day retention)
 
 Match the CI steps locally before opening a PR.
 
@@ -71,6 +76,7 @@ Match the CI steps locally before opening a PR.
 
 - [ ] `bun run build` passes.
 - [ ] `bun run check` passes (no Biome errors).
+- [ ] `bun run schema:tools:check` passes.
 - [ ] `bun run test` passes.
 - [ ] Any new tool has a corresponding `*.test.ts` file.
 - [ ] `docs/mcp-tools.md` updated if the public tool surface changed.

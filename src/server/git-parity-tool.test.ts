@@ -20,8 +20,13 @@ function gitInitMain(dir: string): void {
 
 function commitFile(dir: string, filename: string, content: string): string {
   writeFileSync(join(dir, filename), content);
-  execFileSync("git", ["add", filename], { cwd: dir, stdio: "ignore" });
-  execFileSync("git", ["commit", "-m", `add ${filename}`], { cwd: dir, stdio: "ignore" });
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+    GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+  };
+  execFileSync("git", ["add", filename], { cwd: dir, env, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", `add ${filename}`], { cwd: dir, env, stdio: "ignore" });
   return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
 }
 

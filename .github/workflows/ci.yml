@@ -28,18 +28,13 @@ jobs:
       - name: Lint and format check
         run: bun run check
 
+      - name: Tool schema snapshot check
+        run: bun run schema:tools:check
+
       - name: Unit tests with coverage
         run: |
           bun run test:coverage 2>&1 | tee /tmp/coverage.txt
-          node -e "
-            const out = require('fs').readFileSync('/tmp/coverage.txt', 'utf8');
-            const m = out.match(/all files[^\|]*\|\s*([\d.]+)/i);
-            if (!m) { console.log('No coverage summary found — skipping threshold check.'); process.exit(0); }
-            const pct = parseFloat(m[1]);
-            const min = 80;
-            if (pct < min) { process.stderr.write('Coverage ' + pct.toFixed(1) + '% is below minimum ' + min + '%\n'); process.exit(1); }
-            console.log('Coverage OK: ' + pct.toFixed(1) + '%');
-          "
+          bun run coverage:check /tmp/coverage.txt 80
 
       - name: Assert Node.js version
         run: node -e "const v=+process.version.slice(1).split('.')[0]; if(v<22)process.exit(1)"
