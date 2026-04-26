@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { spawnGitAsync } from "./git.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -60,8 +60,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-batch-commit-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
+  writeTestGitConfig(dir);
   return dir;
 }
 
@@ -77,8 +76,7 @@ function makeRepoWithUpstream(): { work: string; remote: string } {
 
   const work = mkTmpDir("mcp-batch-commit-work-");
   gitCmd(work, "init", "-b", "main");
-  gitCmd(work, "config", "user.email", "test@example.com");
-  gitCmd(work, "config", "user.name", "Test User");
+  writeTestGitConfig(work);
   gitCmd(work, "remote", "add", "origin", remote);
 
   // Seed a commit and set upstream so `@{u}` resolves.

@@ -17,7 +17,7 @@
  *   // result is string (markdown) or JSON-parseable string
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastMCP } from "fastmcp";
@@ -74,6 +74,13 @@ export function cleanupTmpPaths(): void {
     const p = tmpPaths.pop();
     if (p) rmSync(p, { recursive: true, force: true });
   }
+}
+
+export function writeTestGitConfig(repo: string): void {
+  appendFileSync(
+    join(repo, ".git", "config"),
+    "\n[user]\n\temail = test@example.com\n\tname = Test User\n[commit]\n\tgpgsign = false\n",
+  );
 }
 
 // ---------------------------------------------------------------------------

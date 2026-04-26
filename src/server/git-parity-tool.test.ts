@@ -8,14 +8,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitParityTool } from "./git-parity-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
 function gitInitMain(dir: string): void {
   execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.name", "t"], { cwd: dir, stdio: "ignore" });
+  writeTestGitConfig(dir);
 }
 
 function commitFile(dir: string, filename: string, content: string): string {

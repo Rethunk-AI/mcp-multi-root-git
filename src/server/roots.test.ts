@@ -13,14 +13,13 @@ import { join } from "node:path";
 
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
 function gitInitMain(dir: string): void {
   execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.name", "t"], { cwd: dir, stdio: "ignore" });
+  writeTestGitConfig(dir);
 }
 
 describe("workspace root resolution", () => {

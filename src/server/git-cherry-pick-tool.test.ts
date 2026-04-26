@@ -8,7 +8,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -32,9 +32,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-cherry-pick-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
-  gitCmd(dir, "config", "commit.gpgsign", "false");
+  writeTestGitConfig(dir);
   writeFileSync(join(dir, "seed.txt"), "seed\n");
   gitCmd(dir, "add", "seed.txt");
   gitCmd(dir, "commit", "-m", "chore: seed");

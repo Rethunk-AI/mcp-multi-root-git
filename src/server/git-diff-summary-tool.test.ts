@@ -20,7 +20,7 @@ import { writeFileSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -155,8 +155,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-git-diff-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
+  writeTestGitConfig(dir);
   return dir;
 }
 

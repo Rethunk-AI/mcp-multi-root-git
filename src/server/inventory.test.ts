@@ -16,7 +16,7 @@ import {
   makeSkipEntry,
   validateRepoPath,
 } from "./inventory.js";
-import { cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -40,9 +40,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-inventory-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
-  gitCmd(dir, "config", "commit.gpgsign", "false");
+  writeTestGitConfig(dir);
   writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
   gitCmd(dir, "add", "base.ts");
   gitCmd(dir, "commit", "-m", "chore: base");

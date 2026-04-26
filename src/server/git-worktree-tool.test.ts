@@ -12,7 +12,13 @@ import {
   registerGitWorktreeListTool,
   registerGitWorktreeRemoveTool,
 } from "./git-worktree-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, trackTmpPath } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  mkTmpDir,
+  trackTmpPath,
+  writeTestGitConfig,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -36,9 +42,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-git-worktree-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
-  gitCmd(dir, "config", "commit.gpgsign", "false");
+  writeTestGitConfig(dir);
   writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
   gitCmd(dir, "add", "base.ts");
   gitCmd(dir, "commit", "-m", "chore: base");

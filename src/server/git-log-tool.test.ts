@@ -24,7 +24,7 @@ import { join } from "node:path";
 
 import { gitTopLevel, spawnGitAsync } from "./git.js";
 import { registerGitLogTool } from "./git-log-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -65,8 +65,7 @@ function gitCmd(cwd: string, ...args: string[]): string {
 function makeRepo(): string {
   const dir = mkTmpDir("mcp-git-log-test-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
+  writeTestGitConfig(dir);
   return dir;
 }
 

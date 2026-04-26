@@ -8,7 +8,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitPushTool } from "./git-push-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -33,9 +33,7 @@ function makeRepoWithRemote(): { dir: string; remote: string } {
   const dir = mkTmpDir("mcp-git-push-test-");
   const remote = mkTmpDir("mcp-git-push-remote-");
   gitCmd(dir, "init", "-b", "main");
-  gitCmd(dir, "config", "user.email", "test@example.com");
-  gitCmd(dir, "config", "user.name", "Test User");
-  gitCmd(dir, "config", "commit.gpgsign", "false");
+  writeTestGitConfig(dir);
   writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
   gitCmd(dir, "add", "base.ts");
   gitCmd(dir, "commit", "-m", "chore: base");
@@ -79,9 +77,7 @@ describe("git_push", () => {
     const dir = mkTmpDir("mcp-git-push-set-upstream-");
     const remote = mkTmpDir("mcp-git-push-set-upstream-remote-");
     gitCmd(dir, "init", "-b", "feature/new");
-    gitCmd(dir, "config", "user.email", "test@example.com");
-    gitCmd(dir, "config", "user.name", "Test User");
-    gitCmd(dir, "config", "commit.gpgsign", "false");
+    writeTestGitConfig(dir);
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
     gitCmd(dir, "add", "base.ts");
     gitCmd(dir, "commit", "-m", "chore: base");
@@ -115,9 +111,7 @@ describe("git_push", () => {
   test("push_no_upstream when no tracking configured", async () => {
     const dir = mkTmpDir("mcp-git-push-no-upstream-");
     gitCmd(dir, "init", "-b", "main");
-    gitCmd(dir, "config", "user.email", "test@example.com");
-    gitCmd(dir, "config", "user.name", "Test User");
-    gitCmd(dir, "config", "commit.gpgsign", "false");
+    writeTestGitConfig(dir);
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
     gitCmd(dir, "add", "base.ts");
     gitCmd(dir, "commit", "-m", "chore: base");
@@ -132,9 +126,7 @@ describe("git_push", () => {
   test("push_detached_head when HEAD is detached", async () => {
     const dir = mkTmpDir("mcp-git-push-detached-");
     gitCmd(dir, "init", "-b", "main");
-    gitCmd(dir, "config", "user.email", "test@example.com");
-    gitCmd(dir, "config", "user.name", "Test User");
-    gitCmd(dir, "config", "commit.gpgsign", "false");
+    writeTestGitConfig(dir);
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
     gitCmd(dir, "add", "base.ts");
     gitCmd(dir, "commit", "-m", "chore: base");
