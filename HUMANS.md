@@ -74,6 +74,37 @@ Invalid JSON or schema errors return **`preset_file_invalid`** (not a silent emp
 
 Relative preset paths must stay inside the git toplevel; escapes are rejected.
 
+## Sibling clone batches
+
+Use **`absoluteGitRoots`** when you want one read-only call to inspect independent sibling clones that are not all exposed as MCP workspace roots. This is most useful from agent workflows rooted at a parent directory or when an MCP client exposes only one repo root.
+
+Example `git_status` batch:
+
+```json
+{
+  "format": "json",
+  "absoluteGitRoots": [
+    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
+    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
+  ]
+}
+```
+
+Example `git_parity` batch using the same pair in each sibling clone:
+
+```json
+{
+  "format": "json",
+  "absoluteGitRoots": [
+    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
+    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
+  ],
+  "pairs": [{ "left": "packages/shared", "right": "apps/web/shared", "label": "shared" }]
+}
+```
+
+`absoluteGitRoots` is read-only by design. Mutating tools such as **`batch_commit`**, **`git_push`**, **`git_merge`**, and **`git_cherry_pick`** omit it from their schema; use `workspaceRoot` or MCP roots for writes. Full parameter rules and error codes live in **[docs/mcp-tools.md](docs/mcp-tools.md#absoluteGitRoots-sibling-clones)**.
+
 ## `git_not_found`
 
 If **`git`** is missing or not runnable, tools and the presets resource respond with **`git_not_found`**. Prerequisites and `PATH`: **[docs/install.md](docs/install.md)**.

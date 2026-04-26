@@ -13,7 +13,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 |----------|-----------------------------------|---------|
 | `git_status` | `rethunk-git_git_status` | `git status --short -b` per MCP root and optional submodules (`includeSubmodules`); parallel submodule status. Args include `absoluteGitRoots`, `allWorkspaceRoots`, `rootIndex`, `workspaceRoot`, `format`. **Read-only.** |
 | `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args (`absoluteGitRoots` cannot combine with `preset`/`nestedRoots`). **Read-only.** |
-| `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args. **Read-only.** |
+| `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args (`absoluteGitRoots` for sibling clone batches). **Read-only.** |
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format`. **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
@@ -112,6 +112,23 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
 | `absolute_git_roots_empty` | `absoluteGitRoots` produced zero git toplevels after resolution. |
 | `absolute_git_roots_single_repo_only` | A single-repo tool received `absoluteGitRoots` resolving to more than one distinct git toplevel. |
+
+### `git_parity` — `absoluteGitRoots` example
+
+Use **`absoluteGitRoots`** when the same parity pair should be checked across sibling clones that are not all MCP workspace roots:
+
+```json
+{
+  "format": "json",
+  "absoluteGitRoots": [
+    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
+    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
+  ],
+  "pairs": [{ "left": "packages/shared", "right": "apps/web/shared", "label": "shared" }]
+}
+```
+
+The response contains one **`parity[]`** entry per resolved git toplevel. `absoluteGitRoots` cannot be combined with `preset`; pass inline `pairs` for sibling-clone batches.
 
 ### `git_diff_summary` — parameters
 
@@ -351,6 +368,8 @@ Repo state is cleaned (`git cherry-pick --abort`) before returning — no partia
 ---
 
 ### `git_push` — parameters
+
+For already-committed work, call **`git_push`** directly instead of creating an empty commit or falling back to shell. Continue to prefer **`batch_commit`** with **`push: "after"`** when commits and push happen in the same MCP call.
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
