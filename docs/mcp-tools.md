@@ -11,12 +11,12 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 
 | Short id | Client id (server `rethunk-git`) | Purpose |
 |----------|-----------------------------------|---------|
-| `git_status` | `rethunk-git_git_status` | `git status --short -b` per MCP root and optional submodules (`includeSubmodules`); parallel submodule status. Args include `allWorkspaceRoots`, `rootIndex`, `workspaceRoot`, `format`. **Read-only.** |
-| `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args. **Read-only.** |
+| `git_status` | `rethunk-git_git_status` | `git status --short -b` per MCP root and optional submodules (`includeSubmodules`); parallel submodule status. Args include `absoluteGitRoots`, `allWorkspaceRoots`, `rootIndex`, `workspaceRoot`, `format`. **Read-only.** |
+| `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args (`absoluteGitRoots` cannot combine with `preset`/`nestedRoots`). **Read-only.** |
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args. **Read-only.** |
-| `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only. **Read-only.** |
-| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args + `format`. **Read-only.** |
-| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args + `format`. **Read-only.** |
+| `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
+| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format`. **Read-only.** |
+| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. Workspace pick + `format`. **Mutating.** |
 | `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus workspace pick + `format`. **Mutating.** |
@@ -106,6 +106,12 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
 | `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `absolute_git_roots_exclusive` | `absoluteGitRoots` was combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
+| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` was combined with a `preset` argument (root resolution). |
+| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is empty, not inside a git worktree, or not a directory git recognizes. |
+| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
+| `absolute_git_roots_empty` | `absoluteGitRoots` produced zero git toplevels after resolution. |
+| `absolute_git_roots_single_repo_only` | A single-repo tool received `absoluteGitRoots` resolving to more than one distinct git toplevel. |
 
 ### `git_diff_summary` — parameters
 
@@ -455,6 +461,32 @@ Repo state is cleaned (`git cherry-pick --abort`) before returning — no partia
 | `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors). |
 
 ## Workspace root resolution
+
+### `absoluteGitRoots` (sibling clones)
+
+When **`absoluteGitRoots`** is a **non-empty** string array, it **replaces** the normal workspace pick for that tool call:
+
+- Each entry is passed through `path.resolve`, then resolved to a **git toplevel** via the same logic as `workspaceRoot`. Duplicate toplevels are dropped (stable order, first wins).
+- **Maximum** **256** paths (same cap as `git_inventory` `maxRoots` upper bound).
+- **Mutually exclusive** with **`workspaceRoot`**, **`rootIndex`**, and **`allWorkspaceRoots: true`**. Combining them returns `{ "error": "absolute_git_roots_exclusive" }`.
+- **Mutually exclusive** with a **`preset`** argument on root resolution (`absolute_git_roots_preset_conflict`).
+- **`git_inventory` only:** also mutually exclusive with **`nestedRoots`** or **`preset`** on the same call (`absolute_git_roots_nested_or_preset_conflict`).
+- **Mutating** tools (`batch_commit`, `git_push`, `git_merge`, …) **omit** this parameter from their schema; callers must use `workspaceRoot` / MCP roots for writes.
+- **Read tools** that use **`requireSingleRepo`** (`git_diff_summary`, …) accept at most **one** distinct toplevel from `absoluteGitRoots`; more than one returns `absolute_git_roots_single_repo_only`.
+
+Example — two sibling repos in one `git_status` call:
+
+```json
+{
+  "format": "json",
+  "absoluteGitRoots": [
+    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
+    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
+  ]
+}
+```
+
+### Default order (when `absoluteGitRoots` is absent or empty)
 
 Order applied when resolving which directory(ies) tools run against:
 

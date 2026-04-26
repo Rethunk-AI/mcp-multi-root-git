@@ -157,7 +157,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
       sources: z
         .array(z.string().min(1))
         .min(1)

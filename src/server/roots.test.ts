@@ -7,11 +7,21 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 
+import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
-import { captureTool, cleanupTmpPaths } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
+
+function gitInitMain(dir: string): void {
+  execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.name", "t"], { cwd: dir, stdio: "ignore" });
+}
 
 describe("workspace root resolution", () => {
   test("omitting workspaceRoot falls back to process.cwd() (which is a git repo in CI)", async () => {
@@ -36,5 +46,53 @@ describe("workspace root resolution", () => {
     const text = await run({ rootIndex: 99, format: "json" });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("root_index_out_of_range");
+  });
+
+  test("absoluteGitRoots: two sibling repos → two status groups", async () => {
+    const a = mkTmpDir("abs-root-a-");
+    const b = mkTmpDir("abs-root-b-");
+    gitInitMain(a);
+    gitInitMain(b);
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ format: "json", absoluteGitRoots: [a, b] });
+    const parsed = JSON.parse(text) as { groups?: { mcpRoot: string; repos: unknown[] }[] };
+    expect(parsed.groups?.length).toBe(2);
+    expect(parsed.groups?.[0]?.mcpRoot).toBe(a);
+    expect(parsed.groups?.[1]?.mcpRoot).toBe(b);
+  });
+
+  test("absoluteGitRoots dedupes same repo (nested path + root)", async () => {
+    const a = mkTmpDir("abs-root-dedupe-");
+    gitInitMain(a);
+    const nested = join(a, "subdir");
+    mkdirSync(nested, { recursive: true });
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ format: "json", absoluteGitRoots: [nested, a] });
+    const parsed = JSON.parse(text) as { groups?: unknown[] };
+    expect(parsed.groups?.length).toBe(1);
+  });
+
+  test("absoluteGitRoots + workspaceRoot → absolute_git_roots_exclusive", async () => {
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({
+      format: "json",
+      absoluteGitRoots: [process.cwd()],
+      workspaceRoot: process.cwd(),
+    });
+    const parsed = JSON.parse(text) as { error?: string };
+    expect(parsed.error).toBe("absolute_git_roots_exclusive");
+  });
+
+  test("git_inventory absoluteGitRoots + nestedRoots → conflict", async () => {
+    const a = mkTmpDir("abs-inv-");
+    gitInitMain(a);
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      format: "json",
+      absoluteGitRoots: [a],
+      nestedRoots: ["."],
+    });
+    const parsed = JSON.parse(text) as { error?: string };
+    expect(parsed.error).toBe("absolute_git_roots_nested_or_preset_conflict");
   });
 });

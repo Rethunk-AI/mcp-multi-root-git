@@ -70,7 +70,7 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
       path: z
         .string()
         .min(1)
@@ -165,7 +165,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
       destructiveHint: true,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
       path: z
         .string()
         .min(1)

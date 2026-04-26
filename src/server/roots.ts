@@ -5,6 +5,7 @@ import type { FastMCP } from "fastmcp";
 
 import { gateGit, gitTopLevel } from "./git.js";
 import { loadPresetsFromGitTop, presetLoadErrorPayload } from "./presets.js";
+import { MAX_ABSOLUTE_GIT_ROOTS } from "./schemas.js";
 
 function uriToPath(uri: string): string | null {
   if (!uri.startsWith("file://")) return null;
@@ -43,11 +44,58 @@ type RootPick = {
   workspaceRoot?: string;
   rootIndex?: number;
   allWorkspaceRoots?: boolean;
+  absoluteGitRoots?: string[];
 };
+
+/** Workspace pick args including optional `absoluteGitRoots` (same shape as tool args). */
+export type GitRootPickArgs = RootPick;
 
 type ResolveRootsResult =
   | { ok: true; roots: string[] }
   | { ok: false; error: Record<string, unknown> };
+
+function hasExclusiveWorkspacePick(args: RootPick): boolean {
+  if (args.workspaceRoot?.trim()) return true;
+  if (args.rootIndex != null) return true;
+  if (args.allWorkspaceRoots === true) return true;
+  return false;
+}
+
+/**
+ * Resolve `absoluteGitRoots` to unique git toplevels (stable order, first occurrence wins).
+ */
+export function resolveAbsoluteGitRootsList(raw: string[]): ResolveRootsResult {
+  if (raw.length > MAX_ABSOLUTE_GIT_ROOTS) {
+    return {
+      ok: false,
+      error: {
+        error: "absolute_git_roots_too_many",
+        max: MAX_ABSOLUTE_GIT_ROOTS,
+        count: raw.length,
+      },
+    };
+  }
+  const seen = new Set<string>();
+  const tops: string[] = [];
+  for (const item of raw) {
+    const trimmed = item.trim();
+    if (trimmed.length === 0) {
+      return { ok: false, error: { error: "invalid_absolute_git_root", path: item } };
+    }
+    const abs = resolve(trimmed);
+    const top = gitTopLevel(abs);
+    if (!top) {
+      return { ok: false, error: { error: "invalid_absolute_git_root", path: abs } };
+    }
+    if (seen.has(top)) continue;
+    seen.add(top);
+    tops.push(top);
+  }
+  if (tops.length === 0) {
+    return { ok: false, error: { error: "absolute_git_roots_empty" } };
+  }
+  return { ok: true, roots: tops };
+}
 
 function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveRootsResult {
   if (args.workspaceRoot?.trim()) {
@@ -130,6 +178,18 @@ export function requireGitAndRoots(
   if (!gg.ok) {
     return { ok: false, error: gg.body };
   }
+
+  const abs = args.absoluteGitRoots;
+  if (abs != null && abs.length > 0) {
+    if (presetName) {
+      return { ok: false, error: { error: "absolute_git_roots_preset_conflict" } };
+    }
+    if (hasExclusiveWorkspacePick(args)) {
+      return { ok: false, error: { error: "absolute_git_roots_exclusive" } };
+    }
+    return resolveAbsoluteGitRootsList(abs);
+  }
+
   const rootsRes = presetName
     ? resolveRootsForPreset(server, args, presetName)
     : resolveWorkspaceRoots(server, args);
@@ -155,6 +215,15 @@ export function requireSingleRepo(
 ): SingleRepoResult {
   const pre = requireGitAndRoots(server, args, presetName);
   if (!pre.ok) return pre;
+  if (args.absoluteGitRoots != null && args.absoluteGitRoots.length > 0 && pre.roots.length !== 1) {
+    return {
+      ok: false,
+      error: {
+        error: "absolute_git_roots_single_repo_only",
+        rootCount: pre.roots.length,
+      },
+    };
+  }
   const rootInput = pre.roots[0];
   if (!rootInput) return { ok: false, error: { error: "no_workspace_root" } };
   const top = gitTopLevel(rootInput);

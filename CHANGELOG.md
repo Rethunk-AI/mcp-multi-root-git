@@ -2,6 +2,16 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.3.3] — 2026-04-21
+
+### Added
+
+- **`absoluteGitRoots`** on the workspace pick schema: pass absolute paths to many independent git clones in one MCP call for **`git_status`**, **`git_inventory`**, **`git_log`**, **`git_parity`**, **`git_diff_summary`** (single distinct toplevel only), and **`list_presets`**. Mutating tools omit this parameter from their Zod surface. See **`docs/mcp-tools.md`** (*Workspace root resolution*).
+
+### Changed
+
+- **`requireGitAndRoots`** / **`requireSingleRepo`**: new prelude **`resolveAbsoluteGitRootsList`** with dedupe, fail-fast on invalid paths, and mutual exclusion with `workspaceRoot` / `rootIndex` / `allWorkspaceRoots` / `preset` (and `nestedRoots`+`preset` guarded in **`git_inventory`**).
+
 ## [2.3.2] — 2026-04-21
 
 ### CI

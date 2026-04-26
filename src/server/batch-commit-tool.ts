@@ -82,7 +82,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
       commits: z
         .array(CommitEntrySchema)
         .min(1)

@@ -17,9 +17,9 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
 | [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `spreadWhen`, `spreadDefined` |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync`, `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
-| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots`, `requireSingleRepo` — shared tool preludes; session root resolution |
+| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots`, `requireSingleRepo`, `resolveAbsoluteGitRootsList`, `GitRootPickArgs` — shared tool preludes; session root resolution; optional `absoluteGitRoots` bulk pick |
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
-| [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT` |
+| [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT`, **`MAX_ABSOLUTE_GIT_ROOTS`** (256), optional **`absoluteGitRoots`** on workspace pick |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
 | [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `conflictPaths` |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below |

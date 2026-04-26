@@ -11,7 +11,7 @@ Dogfood and all client wiring: **[docs/install.md](../../docs/install.md)** (*Fr
 
 ## When to use it
 
-Prefer **`rethunk-git_git_*`** and **`rethunk-git_list_presets`** over shell **`git status`** / ad-hoc loops for multi-root or preset-driven git state. Use resource **`rethunk-git://presets`** when the client supports MCP resources.
+Prefer **`rethunk-git_git_*`** and **`rethunk-git_list_presets`** over shell **`git status`** / ad-hoc loops for multi-root or preset-driven git state. For sibling clones under a non-git directory, use **`absoluteGitRoots`** (see **[docs/mcp-tools.md](../../docs/mcp-tools.md)** — *Workspace root resolution*). Use resource **`rethunk-git://presets`** when the client supports MCP resources.
 
 ## When shell git is still fine
 

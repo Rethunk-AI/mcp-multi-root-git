@@ -18,6 +18,7 @@ export function registerListPresetsTool(server: FastMCP): void {
       workspaceRoot: true,
       rootIndex: true,
       allWorkspaceRoots: true,
+      absoluteGitRoots: true,
       format: true,
     }),
     execute: async (args) => {

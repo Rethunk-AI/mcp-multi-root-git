@@ -40,6 +40,11 @@ export function registerGitInventoryTool(server: FastMCP): void {
       maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
     }),
     execute: async (args) => {
+      if (args.absoluteGitRoots != null && args.absoluteGitRoots.length > 0) {
+        if (args.preset || (args.nestedRoots?.length ?? 0) > 0) {
+          return jsonRespond({ error: "absolute_git_roots_nested_or_preset_conflict" });
+        }
+      }
       const pre = requireGitAndRoots(server, args, args.preset);
       if (!pre.ok) {
         return jsonRespond(pre.error);
