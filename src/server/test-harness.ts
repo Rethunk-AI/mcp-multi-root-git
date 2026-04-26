@@ -32,6 +32,7 @@ type ExecuteFn = (args: AnyRecord, context: AnyRecord) => Promise<string | AnyRe
 
 interface CapturedTool {
   name: string;
+  parameters?: unknown;
   execute: ExecuteFn;
 }
 
@@ -83,8 +84,11 @@ function makeFakeServer(): { server: FastMCP; tools: CapturedTool[] } {
   const tools: CapturedTool[] = [];
   const server = {
     sessions: [],
-    addTool(tool: { name: string; execute: ExecuteFn }) {
-      tools.push({ name: tool.name, execute: tool.execute });
+    addTool(tool: { name: string; parameters?: unknown; execute: ExecuteFn }) {
+      tools.push({ name: tool.name, parameters: tool.parameters, execute: tool.execute });
+    },
+    addResource() {
+      // Resource tests do not need transport behavior; tool-surface tests only need registration to complete.
     },
   } as unknown as FastMCP;
   return { server, tools };
@@ -119,4 +123,10 @@ export function captureTool(
     if (typeof result === "string") return result;
     return JSON.stringify(result);
   };
+}
+
+export function captureToolDefinitions(register: (server: FastMCP) => void): CapturedTool[] {
+  const { server, tools } = makeFakeServer();
+  register(server);
+  return tools;
 }
