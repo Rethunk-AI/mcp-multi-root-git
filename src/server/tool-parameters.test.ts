@@ -3,9 +3,25 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import type { FastMCP } from "fastmcp";
 import { z } from "zod";
+import { registerBatchCommitTool } from "./batch-commit-tool.js";
+import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
+import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
+import { registerGitInventoryTool } from "./git-inventory-tool.js";
+import { registerGitLogTool } from "./git-log-tool.js";
+import { registerGitMergeTool } from "./git-merge-tool.js";
+import { registerGitParityTool } from "./git-parity-tool.js";
+import { registerGitPushTool } from "./git-push-tool.js";
+import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
+import { registerGitStatusTool } from "./git-status-tool.js";
+import {
+  registerGitWorktreeAddTool,
+  registerGitWorktreeListTool,
+  registerGitWorktreeRemoveTool,
+} from "./git-worktree-tool.js";
+import { registerListPresetsTool } from "./list-presets-tool.js";
 import { captureToolDefinitions } from "./test-harness.js";
-import { registerRethunkGitTools } from "./tools.js";
 
 const READ_ONLY_ABSOLUTE_ROOT_TOOLS = [
   "git_status",
@@ -32,10 +48,22 @@ type JsonObjectSchema = { properties?: Record<string, unknown>; required?: strin
 
 function toolSchemas(): Map<string, JsonObjectSchema> {
   return new Map(
-    captureToolDefinitions(registerRethunkGitTools).map((tool) => [
-      tool.name,
-      z.toJSONSchema(tool.parameters as z.ZodType) as JsonObjectSchema,
-    ]),
+    captureToolDefinitions((server: FastMCP) => {
+      registerGitStatusTool(server);
+      registerGitInventoryTool(server);
+      registerGitParityTool(server);
+      registerListPresetsTool(server);
+      registerGitLogTool(server);
+      registerGitDiffSummaryTool(server);
+      registerGitWorktreeListTool(server);
+      registerBatchCommitTool(server);
+      registerGitPushTool(server);
+      registerGitMergeTool(server);
+      registerGitCherryPickTool(server);
+      registerGitResetSoftTool(server);
+      registerGitWorktreeAddTool(server);
+      registerGitWorktreeRemoveTool(server);
+    }).map((tool) => [tool.name, z.toJSONSchema(tool.parameters as z.ZodType) as JsonObjectSchema]),
   );
 }
 
