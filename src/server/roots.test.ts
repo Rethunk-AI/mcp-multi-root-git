@@ -7,18 +7,23 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  mkTmpDir,
+  writeTestGitConfig,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
 function gitInitMain(dir: string): void {
-  execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
+  gitCmd(dir, "init", "-b", "main");
   writeTestGitConfig(dir);
 }
 
