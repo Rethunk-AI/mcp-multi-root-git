@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import {
+  addCommit,
   captureTool,
   cleanupTmpPaths,
   gitCmd,
@@ -38,12 +39,6 @@ function createBranchAhead(dir: string, branch: string, files: Record<string, st
   }
   gitCmd(dir, "commit", "-m", `feat: ${branch}`);
   gitCmd(dir, "checkout", "main");
-}
-
-function commitOnMain(dir: string, path: string, body: string, message: string): void {
-  writeFileSync(join(dir, path), body);
-  gitCmd(dir, "add", path);
-  gitCmd(dir, "commit", "-m", message);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +98,7 @@ describe("git_merge fast-forward", () => {
     const dir = makeRepo();
     // feature/a points at main, then main advances past it.
     gitCmd(dir, "branch", "feature/a", "HEAD");
-    commitOnMain(dir, "extra.txt", "extra\n", "chore: advance main");
+    addCommit(dir, "extra.txt", "extra\n", "chore: advance main");
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -129,7 +124,7 @@ describe("git_merge strategy", () => {
     const dir = makeRepo();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     // advance main so feature/a is behind
-    commitOnMain(dir, "m.txt", "M\n", "chore: main advance");
+    addCommit(dir, "m.txt", "M\n", "chore: main advance");
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -149,7 +144,7 @@ describe("git_merge strategy", () => {
   test("auto on diverged branches rebases then fast-forwards when clean", async () => {
     const dir = makeRepo();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
-    commitOnMain(dir, "m.txt", "M\n", "chore: main advance");
+    addCommit(dir, "m.txt", "M\n", "chore: main advance");
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -195,7 +190,7 @@ describe("git_merge strategy", () => {
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "feat: alpha");
     gitCmd(dir, "checkout", "main");
-    commitOnMain(dir, "shared.txt", "beta\n", "chore: beta on main");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta on main");
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -220,7 +215,7 @@ describe("git_merge strategy", () => {
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "feat: alpha");
     gitCmd(dir, "checkout", "main");
-    commitOnMain(dir, "shared.txt", "beta\n", "chore: beta");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
