@@ -192,3 +192,10 @@ export function makeRepoWithUpstream(
 
   return { work, remote };
 }
+
+/** Add a commit to a repo with specified file content. */
+export function addCommit(dir: string, file: string, content: string, message: string): void {
+  writeFileSync(join(dir, file), content);
+  gitCmd(dir, "add", file);
+  gitCmd(dir, "commit", "-m", message);
+}

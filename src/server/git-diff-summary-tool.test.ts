@@ -20,6 +20,7 @@ import { join, matchesGlob } from "node:path";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import {
+  addCommit,
   captureTool,
   cleanupTmpPaths,
   gitCmd,
@@ -144,12 +145,6 @@ function buildDiffArgs(
 
 function makeRepo(): string {
   return makeRepoWithSeed("mcp-git-diff-test-");
-}
-
-function addCommit(dir: string, file: string, content: string, message: string): void {
-  writeFileSync(join(dir, file), content);
-  gitCmd(dir, "add", file);
-  gitCmd(dir, "commit", "-m", message);
 }
 
 // ---------------------------------------------------------------------------

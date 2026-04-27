@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import {
+  addCommit,
   captureTool,
   cleanupTmpPaths,
   gitCmd,
@@ -19,12 +20,6 @@ afterEach(cleanupTmpPaths);
 
 function makeRepo(): string {
   return makeRepoWithSeed("mcp-git-reset-soft-test-");
-}
-
-function addCommit(dir: string, filename: string, content: string, message: string): void {
-  writeFileSync(join(dir, filename), content);
-  gitCmd(dir, "add", filename);
-  gitCmd(dir, "commit", "-m", message);
 }
 
 describe("git_reset_soft", () => {
