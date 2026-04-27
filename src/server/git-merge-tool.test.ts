@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { registerGitMergeTool } from "./git-merge-tool.js";
@@ -293,6 +294,19 @@ describe("git_merge cleanup", () => {
     // dev still exists.
     const branches = gitCmd(dir, "branch").trim();
     expect(branches).toContain("dev");
+  });
+
+  test("simple ff-merge (markdown)", async () => {
+    const dir = makeRepo();
+    createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
+    gitCmd(dir, "checkout", "main");
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({ workspaceRoot: dir, sources: ["feature/a"] });
+
+    expect(text).toContain("# Merge into `main`");
+    expect(text).toContain("feature/a");
+    expect(text).toMatch(/✓|✔/);
   });
 
   test("deleteMergedWorktrees removes a worktree attached to merged source", async () => {

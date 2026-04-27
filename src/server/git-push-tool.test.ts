@@ -13,6 +13,7 @@ import {
   gitCmd,
   makeRepoWithUpstream,
   mkTmpDir,
+  writeTestGitConfig,
 } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
