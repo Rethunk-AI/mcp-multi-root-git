@@ -316,7 +316,7 @@ describe("batch_commit push: after", () => {
     expect(parsed.push).toBeUndefined();
 
     // Remote is still at the seed commit only.
-    const remoteLog = execFileSync("git", ["-C", remote, "log", "--oneline"], { encoding: "utf8" });
+    const remoteLog = gitCmd(remote, "log", "--oneline");
     expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(1);
   });
 
@@ -341,7 +341,7 @@ describe("batch_commit push: after", () => {
     expect(parsed.push?.upstream).toBe("origin/main");
 
     // Remote now has two commits (seed + new).
-    const remoteLog = execFileSync("git", ["-C", remote, "log", "--oneline"], { encoding: "utf8" });
+    const remoteLog = gitCmd(remote, "log", "--oneline");
     expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(2);
   });
 
