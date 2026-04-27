@@ -3,30 +3,30 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitParityTool } from "./git-parity-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  mkTmpDir,
+  writeTestGitConfig,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
 function gitInitMain(dir: string): void {
-  execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
+  gitCmd(dir, "init", "-b", "main");
   writeTestGitConfig(dir);
 }
 
 function commitFile(dir: string, filename: string, content: string): string {
   writeFileSync(join(dir, filename), content);
-  const env = {
-    ...process.env,
-    GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
-    GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
-  };
-  execFileSync("git", ["add", filename], { cwd: dir, env, stdio: "ignore" });
-  execFileSync("git", ["commit", "-m", `add ${filename}`], { cwd: dir, env, stdio: "ignore" });
-  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  gitCmd(dir, "add", filename);
+  gitCmd(dir, "commit", "-m", `add ${filename}`);
+  return gitCmd(dir, "rev-parse", "HEAD").trim();
 }
 
 function makeParityWorkspace(prefix: string): { root: string; sha: string } {
