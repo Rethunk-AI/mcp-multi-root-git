@@ -17,7 +17,8 @@
  *   // result is string (markdown) or JSON-parseable string
  */
 
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastMCP } from "fastmcp";
@@ -136,4 +137,58 @@ export function captureToolDefinitions(register: (server: FastMCP) => void): Cap
   const { server, tools } = makeFakeServer();
   register(server);
   return tools;
+}
+
+// ---------------------------------------------------------------------------
+// Shared git test helpers (extracted from per-file duplication)
+// ---------------------------------------------------------------------------
+
+/** Execute git command with standard test environment and encoding. */
+export function gitCmd(cwd: string, ...args: string[]): string {
+  const opts: ExecSyncOptionsWithStringEncoding = {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Test User",
+      GIT_AUTHOR_EMAIL: "test@example.com",
+      GIT_COMMITTER_NAME: "Test User",
+      GIT_COMMITTER_EMAIL: "test@example.com",
+      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
+      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
+    },
+  };
+  return execFileSync("git", args, opts);
+}
+
+/** Initialize a basic git repo with test config. */
+export function makeRepo(prefix: string = "mcp-test-repo-"): string {
+  const dir = mkTmpDir(prefix);
+  gitCmd(dir, "init", "-b", "main");
+  writeTestGitConfig(dir);
+  return dir;
+}
+
+/** Initialize a repo with a seed commit (useful for branch/cherry-pick tests). */
+export function makeRepoWithSeed(prefix: string = "mcp-test-repo-"): string {
+  const dir = makeRepo(prefix);
+  writeFileSync(join(dir, "seed.txt"), "seed\n");
+  gitCmd(dir, "add", "seed.txt");
+  gitCmd(dir, "commit", "-m", "chore: seed");
+  return dir;
+}
+
+/** Initialize work repo + bare remote with tracking set up. */
+export function makeRepoWithUpstream(
+  workPrefix: string = "mcp-work-",
+  remotePrefix: string = "mcp-remote-",
+): { work: string; remote: string } {
+  const remote = mkTmpDir(remotePrefix);
+  gitCmd(remote, "init", "--bare", "-b", "main");
+
+  const work = makeRepoWithSeed(workPrefix);
+  gitCmd(work, "remote", "add", "origin", remote);
+  gitCmd(work, "push", "-u", "origin", "main");
+
+  return { work, remote };
 }

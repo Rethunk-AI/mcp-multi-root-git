@@ -3,40 +3,22 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
-function gitCmd(cwd: string, ...args: string[]): string {
-  const opts: ExecSyncOptionsWithStringEncoding = {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "Test User",
-      GIT_AUTHOR_EMAIL: "test@example.com",
-      GIT_COMMITTER_NAME: "Test User",
-      GIT_COMMITTER_EMAIL: "test@example.com",
-      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
-    },
-  };
-  return execFileSync("git", args, opts);
-}
-
 function makeRepo(): string {
-  const dir = mkTmpDir("mcp-git-reset-soft-test-");
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-  writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
-  gitCmd(dir, "add", "base.ts");
-  gitCmd(dir, "commit", "-m", "chore: base");
-  return dir;
+  return makeRepoWithSeed("mcp-git-reset-soft-test-");
 }
 
 function addCommit(dir: string, filename: string, content: string, message: string): void {

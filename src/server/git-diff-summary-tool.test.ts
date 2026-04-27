@@ -15,12 +15,17 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -134,29 +139,11 @@ function buildDiffArgs(
 // ---------------------------------------------------------------------------
 // Throwaway repo helpers
 // ---------------------------------------------------------------------------
-
-function gitCmd(cwd: string, ...args: string[]): string {
-  const opts: ExecSyncOptionsWithStringEncoding = {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "Test User",
-      GIT_AUTHOR_EMAIL: "test@example.com",
-      GIT_COMMITTER_NAME: "Test User",
-      GIT_COMMITTER_EMAIL: "test@example.com",
-      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
-    },
-  };
-  return execFileSync("git", args, opts);
-}
+// Repo helpers (gitCmd, makeRepoWithSeed shared via test-harness.ts)
+// ---------------------------------------------------------------------------
 
 function makeRepo(): string {
-  const dir = mkTmpDir("mcp-git-diff-test-");
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-  return dir;
+  return makeRepoWithSeed("mcp-git-diff-test-");
 }
 
 function addCommit(dir: string, file: string, content: string, message: string): void {

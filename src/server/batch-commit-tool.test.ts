@@ -17,14 +17,20 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { spawnGitAsync } from "./git.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepo,
+  makeRepoWithUpstream,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -37,56 +43,10 @@ function extractSha(commitOutput: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Throwaway repo helpers
+// Repo helpers (shared via test-harness.ts)
 // ---------------------------------------------------------------------------
 
-function gitCmd(cwd: string, ...args: string[]): string {
-  const opts: ExecSyncOptionsWithStringEncoding = {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "Test User",
-      GIT_AUTHOR_EMAIL: "test@example.com",
-      GIT_COMMITTER_NAME: "Test User",
-      GIT_COMMITTER_EMAIL: "test@example.com",
-      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
-    },
-  };
-  return execFileSync("git", args, opts);
-}
-
-function makeRepo(): string {
-  const dir = mkTmpDir("mcp-batch-commit-test-");
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-  return dir;
-}
-
-/**
- * Create a clone + upstream pair so push tests can target a real remote
- * without hitting the network. Returns `{ work, remote }` where `work` is
- * the working clone (current branch `main` tracks `origin/main`) and
- * `remote` is a bare repo used as `origin`.
- */
-function makeRepoWithUpstream(): { work: string; remote: string } {
-  const remote = mkTmpDir("mcp-batch-commit-remote-");
-  gitCmd(remote, "init", "--bare", "-b", "main");
-
-  const work = mkTmpDir("mcp-batch-commit-work-");
-  gitCmd(work, "init", "-b", "main");
-  writeTestGitConfig(work);
-  gitCmd(work, "remote", "add", "origin", remote);
-
-  // Seed a commit and set upstream so `@{u}` resolves.
-  writeFileSync(join(work, "seed.txt"), "seed\n");
-  gitCmd(work, "add", "seed.txt");
-  gitCmd(work, "commit", "-m", "chore: seed");
-  gitCmd(work, "push", "-u", "origin", "main");
-
-  return { work, remote };
-}
+// gitCmd, makeRepo, makeRepoWithUpstream imported from test-harness
 
 // ---------------------------------------------------------------------------
 // Unit: SHA extraction regex

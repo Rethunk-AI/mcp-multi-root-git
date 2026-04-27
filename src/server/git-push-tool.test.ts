@@ -3,43 +3,27 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitPushTool } from "./git-push-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithUpstream,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
-function gitCmd(cwd: string, ...args: string[]): string {
-  const opts: ExecSyncOptionsWithStringEncoding = {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "Test User",
-      GIT_AUTHOR_EMAIL: "test@example.com",
-      GIT_COMMITTER_NAME: "Test User",
-      GIT_COMMITTER_EMAIL: "test@example.com",
-      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
-    },
-  };
-  return execFileSync("git", args, opts);
-}
-
 function makeRepoWithRemote(): { dir: string; remote: string } {
-  const dir = mkTmpDir("mcp-git-push-test-");
-  const remote = mkTmpDir("mcp-git-push-remote-");
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
+  // Use shared builder then add extra seed file (diverges from standard)
+  const { work: dir, remote } = makeRepoWithUpstream("mcp-git-push-test-", "mcp-git-push-remote-");
   writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
   gitCmd(dir, "add", "base.ts");
   gitCmd(dir, "commit", "-m", "chore: base");
-  gitCmd(remote, "init", "--bare", "-b", "main");
-  gitCmd(dir, "remote", "add", "origin", remote);
-  gitCmd(dir, "push", "-u", "origin", "main");
+  gitCmd(dir, "push", "origin", "main");
   return { dir, remote };
 }
 

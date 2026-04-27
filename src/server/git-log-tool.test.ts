@@ -18,13 +18,12 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitTopLevel, spawnGitAsync } from "./git.js";
 import { registerGitLogTool } from "./git-log-tool.js";
-import { captureTool, cleanupTmpPaths, mkTmpDir, writeTestGitConfig } from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, gitCmd, makeRepo, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -42,32 +41,8 @@ const RS = "\x02";
 const PRETTY_FORMAT = "%x02%h%x01%H%x01%s%x01%aN%x01%aE%x01%aI%x01%ar%x01";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers (gitCmd, makeRepo shared via test-harness.ts)
 // ---------------------------------------------------------------------------
-
-function gitCmd(cwd: string, ...args: string[]): string {
-  const opts: ExecSyncOptionsWithStringEncoding = {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "Test User",
-      GIT_AUTHOR_EMAIL: "test@example.com",
-      GIT_COMMITTER_NAME: "Test User",
-      GIT_COMMITTER_EMAIL: "test@example.com",
-      GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
-    },
-  };
-  return execFileSync("git", args, opts);
-}
-
-function makeRepo(): string {
-  const dir = mkTmpDir("mcp-git-log-test-");
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-  return dir;
-}
 
 let _seq = 0;
 function addCommit(dir: string, file: string, message: string): void {
