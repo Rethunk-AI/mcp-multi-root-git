@@ -316,6 +316,21 @@ describe("git_cherry_pick cleanup", () => {
     const branches = gitCmd(dir, "branch").trim();
     expect(branches).toContain("dev");
   });
+
+  test("single branch source cherry-pick (markdown)", async () => {
+    const dir = makeRepo();
+    createBranchWithCommits(dir, "feature/cp", [
+      { path: "cp.txt", body: "cp\n", message: "feat: cp" },
+    ]);
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({ workspaceRoot: dir, sources: ["feature/cp"] });
+
+    expect(text).toContain("# Cherry-pick onto `main`");
+    expect(text).toContain("feature/cp");
+    expect(text).toContain("branch");
+    expect(text).toContain("picked");
+  });
 });
 
 // ---------------------------------------------------------------------------
