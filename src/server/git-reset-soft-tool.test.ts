@@ -11,7 +11,6 @@ import {
   addCommit,
   captureTool,
   cleanupTmpPaths,
-  gitCmd,
   makeRepoWithSeed,
   mkTmpDir,
 } from "./test-harness.js";
