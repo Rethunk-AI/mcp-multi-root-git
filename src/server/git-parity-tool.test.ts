@@ -67,4 +67,18 @@ describe("git_parity", () => {
       true,
     ]);
   });
+
+  test("markdown format contains parity status and pair labels", async () => {
+    const w = makeParityWorkspace("parity-md-");
+    const run = captureTool(registerGitParityTool);
+
+    const text = await run({
+      absoluteGitRoots: [w.root],
+      pairs: [{ left: "left", right: "right", label: "test pair" }],
+    });
+
+    expect(text).toContain("# Git HEAD parity");
+    expect(text).toContain("test pair");
+    expect(text).toContain("OK");
+  });
 });
