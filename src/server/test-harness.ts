@@ -193,6 +193,12 @@ export function makeRepoWithUpstream(
   return { work, remote };
 }
 
+/** Initialize a git repo with main branch and test config. */
+export function gitInitMain(dir: string): void {
+  gitCmd(dir, "init", "-b", "main");
+  writeTestGitConfig(dir);
+}
+
 /** Add a commit to a repo with specified file content. */
 export function addCommit(dir: string, file: string, content: string, message: string): void {
   writeFileSync(join(dir, file), content);

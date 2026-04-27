@@ -12,20 +12,9 @@ import { join } from "node:path";
 
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
-import {
-  captureTool,
-  cleanupTmpPaths,
-  gitCmd,
-  mkTmpDir,
-  writeTestGitConfig,
-} from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, gitInitMain, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
-
-function gitInitMain(dir: string): void {
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-}
 
 describe("workspace root resolution", () => {
   test("omitting workspaceRoot falls back to process.cwd() (which is a git repo in CI)", async () => {

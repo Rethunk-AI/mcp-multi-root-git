@@ -7,20 +7,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitParityTool } from "./git-parity-tool.js";
-import {
-  captureTool,
-  cleanupTmpPaths,
-  gitCmd,
-  mkTmpDir,
-  writeTestGitConfig,
-} from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, gitCmd, gitInitMain, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
-
-function gitInitMain(dir: string): void {
-  gitCmd(dir, "init", "-b", "main");
-  writeTestGitConfig(dir);
-}
 
 function commitFile(dir: string, filename: string, content: string): string {
   writeFileSync(join(dir, filename), content);
