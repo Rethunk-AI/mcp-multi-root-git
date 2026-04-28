@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_push",
+  "description": "Parameter schema for the 'git_push' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Highest-priority override.",
+      "type": "string"
+    },
+    "rootIndex": {
+      "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "allWorkspaceRoots": {
+      "default": false,
+      "description": "Fan out across all MCP file roots.",
+      "type": "boolean"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "remote": {
+      "description": "Remote to push to. Defaults to the remote inferred from the current upstream tracking ref, or `origin` when `setUpstream` is true.",
+      "type": "string"
+    },
+    "branch": {
+      "description": "Branch to push. Defaults to the currently checked-out branch. Rejected when HEAD is detached.",
+      "type": "string"
+    },
+    "setUpstream": {
+      "default": false,
+      "description": "Set the upstream tracking reference (`git push -u`). Use when the branch has not been pushed yet. Remote defaults to `origin`.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "allWorkspaceRoots",
+    "format",
+    "setUpstream"
+  ],
+  "additionalProperties": false
+}

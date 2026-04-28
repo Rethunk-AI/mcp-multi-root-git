@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_inventory",
+  "description": "Parameter schema for the 'git_inventory' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Highest-priority override.",
+      "type": "string"
+    },
+    "rootIndex": {
+      "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "allWorkspaceRoots": {
+      "default": false,
+      "description": "Fan out across all MCP file roots.",
+      "type": "boolean"
+    },
+    "absoluteGitRoots": {
+      "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+      "maxItems": 256,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "nestedRoots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preset": {
+      "type": "string"
+    },
+    "presetMerge": {
+      "default": false,
+      "description": "Merge with preset instead of replacing.",
+      "type": "boolean"
+    },
+    "remote": {
+      "description": "Pair with `branch`.",
+      "type": "string"
+    },
+    "branch": {
+      "description": "Pair with `remote`.",
+      "type": "string"
+    },
+    "maxRoots": {
+      "default": 64,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    }
+  },
+  "required": [
+    "allWorkspaceRoots",
+    "format",
+    "presetMerge",
+    "maxRoots"
+  ],
+  "additionalProperties": false
+}

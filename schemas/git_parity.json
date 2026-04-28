@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_parity",
+  "description": "Parameter schema for the 'git_parity' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Highest-priority override.",
+      "type": "string"
+    },
+    "rootIndex": {
+      "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "allWorkspaceRoots": {
+      "default": false,
+      "description": "Fan out across all MCP file roots.",
+      "type": "boolean"
+    },
+    "absoluteGitRoots": {
+      "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+      "maxItems": 256,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "pairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "string"
+          },
+          "right": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "left",
+          "right"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "preset": {
+      "type": "string"
+    },
+    "presetMerge": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "allWorkspaceRoots",
+    "format",
+    "presetMerge"
+  ],
+  "additionalProperties": false
+}

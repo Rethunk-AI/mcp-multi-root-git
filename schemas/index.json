@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git tool schemas index",
+  "description": "Index of all available MCP tool parameter schemas.",
+  "generatedBy": "scripts/generate-individual-schemas.ts",
+  "tools": [
+    {
+      "name": "git_status",
+      "file": "git_status.json",
+      "description": "Parameter schema for the 'git_status' MCP tool."
+    },
+    {
+      "name": "git_inventory",
+      "file": "git_inventory.json",
+      "description": "Parameter schema for the 'git_inventory' MCP tool."
+    },
+    {
+      "name": "git_parity",
+      "file": "git_parity.json",
+      "description": "Parameter schema for the 'git_parity' MCP tool."
+    },
+    {
+      "name": "list_presets",
+      "file": "list_presets.json",
+      "description": "Parameter schema for the 'list_presets' MCP tool."
+    },
+    {
+      "name": "git_log",
+      "file": "git_log.json",
+      "description": "Parameter schema for the 'git_log' MCP tool."
+    },
+    {
+      "name": "git_diff_summary",
+      "file": "git_diff_summary.json",
+      "description": "Parameter schema for the 'git_diff_summary' MCP tool."
+    },
+    {
+      "name": "git_worktree_list",
+      "file": "git_worktree_list.json",
+      "description": "Parameter schema for the 'git_worktree_list' MCP tool."
+    },
+    {
+      "name": "batch_commit",
+      "file": "batch_commit.json",
+      "description": "Parameter schema for the 'batch_commit' MCP tool."
+    },
+    {
+      "name": "git_push",
+      "file": "git_push.json",
+      "description": "Parameter schema for the 'git_push' MCP tool."
+    },
+    {
+      "name": "git_merge",
+      "file": "git_merge.json",
+      "description": "Parameter schema for the 'git_merge' MCP tool."
+    },
+    {
+      "name": "git_cherry_pick",
+      "file": "git_cherry_pick.json",
+      "description": "Parameter schema for the 'git_cherry_pick' MCP tool."
+    },
+    {
+      "name": "git_reset_soft",
+      "file": "git_reset_soft.json",
+      "description": "Parameter schema for the 'git_reset_soft' MCP tool."
+    },
+    {
+      "name": "git_worktree_add",
+      "file": "git_worktree_add.json",
+      "description": "Parameter schema for the 'git_worktree_add' MCP tool."
+    },
+    {
+      "name": "git_worktree_remove",
+      "file": "git_worktree_remove.json",
+      "description": "Parameter schema for the 'git_worktree_remove' MCP tool."
+    }
+  ]
+}

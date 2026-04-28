@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_merge",
+  "description": "Parameter schema for the 'git_merge' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Highest-priority override.",
+      "type": "string"
+    },
+    "rootIndex": {
+      "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "allWorkspaceRoots": {
+      "default": false,
+      "description": "Fan out across all MCP file roots.",
+      "type": "boolean"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "sources": {
+      "minItems": 1,
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Branches to merge into the destination, in order."
+    },
+    "into": {
+      "description": "Destination branch. Defaults to the currently checked-out branch.",
+      "type": "string"
+    },
+    "strategy": {
+      "default": "auto",
+      "description": "`auto` (default): cascade fast-forward → rebase → merge-commit per source. `ff-only`: only fast-forward, fail if diverged. `rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). `merge`: always create a merge commit (no fast-forward).",
+      "type": "string",
+      "enum": [
+        "auto",
+        "ff-only",
+        "rebase",
+        "merge"
+      ]
+    },
+    "message": {
+      "description": "Merge commit message (used only when a merge commit is created).",
+      "type": "string"
+    },
+    "deleteMergedBranches": {
+      "default": false,
+      "description": "After all sources merge cleanly, delete each source branch locally (`git branch -d`). Protected names always skipped. Never affects remote branches.",
+      "type": "boolean"
+    },
+    "deleteMergedWorktrees": {
+      "default": false,
+      "description": "After all sources merge cleanly, remove any local worktree currently checked out on a source branch (`git worktree remove`). Protected tails always skipped.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "allWorkspaceRoots",
+    "format",
+    "sources",
+    "strategy",
+    "deleteMergedBranches",
+    "deleteMergedWorktrees"
+  ],
+  "additionalProperties": false
+}

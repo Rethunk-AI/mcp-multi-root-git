@@ -12,6 +12,7 @@
     "dist",
     "git-mcp-presets.schema.json",
     "tool-parameters.schema.json",
+    "schemas",
     "docs/install.md",
     "docs/mcp-tools.md",
     "AGENTS.md",
@@ -35,10 +36,11 @@
     "coverage:check": "bun scripts/check-coverage.ts",
     "schema:tools": "bun scripts/generate-tool-parameters-schema.ts",
     "schema:tools:check": "bun scripts/generate-tool-parameters-schema.ts --check",
+    "schema:individual": "bun scripts/generate-individual-schemas.ts",
     "publish:preflight": "bun scripts/publish-preflight.ts",
     "test": "bun test src/",
     "test:coverage": "bun test src/ --coverage",
-    "prepublishOnly": "bun run schema:tools:check && bun run build && bun run check && bun run test",
+    "prepublishOnly": "bun run schema:tools:check && bun run schema:individual && bun run build && bun run check && bun run test",
     "setup-hooks": "git config core.hooksPath .githooks"
   },
   "keywords": [
