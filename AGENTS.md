@@ -54,6 +54,26 @@ Optional [`.githooks/`](.githooks): `bun run setup-hooks` once per clone. pre-co
 
 Path confinement: [`src/repo-paths.ts`](src/repo-paths.ts) — extend tests when changing.
 
+## AI constraints
+
+Rules for LLMs operating in or against this repository.
+
+**Prefer MCP tools over shell git** — use `rethunk-git_git_status`, `rethunk-git_git_log`, `rethunk-git_git_diff_summary`, etc. instead of shelling out to `git status`, `git log`, `git diff`. Shell git is acceptable only for operations the MCP tools do not cover (`git fetch`, `git stash`, `git rebase`) or when the MCP connection is unavailable.
+
+**Mutating tools require workspace-root confirmation** — `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
+
+**`absoluteGitRoots` is read-only** — pass it only on read tools (`git_status`, `git_inventory`, `git_parity`, `git_log`, `git_diff_summary`, `list_presets`). Mutating tools reject this parameter.
+
+**Protected branches are enforced by the server** — do not attempt `git_worktree_add` with a branch name matching `main`, `master`, `dev`, `develop`, `stable`, `trunk`, `prod`, `production`, `release*`, or `hotfix*`. The server rejects such calls.
+
+**Never force-push** — `git_push` has no force-push mode by design. `git_merge` with `strategy: "ff-only"` will fail cleanly rather than force.
+
+**Contract bumps need documentation** — if a JSON output shape changes incompatibly, bump `MCP_JSON_FORMAT_VERSION` in `src/server.ts` and document the migration in both this file and [docs/mcp-tools.md](docs/mcp-tools.md).
+
+**Path confinement** — any tool accepting file paths must use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and include escaping-attempt tests.
+
+Cursor rule covering MCP-vs-shell selection: [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) (injected automatically via `alwaysApply: true`).
+
 ## Repo MCP entry (contributors)
 
 Dogfood from clone: [docs/install.md](docs/install.md) — *From source*.
