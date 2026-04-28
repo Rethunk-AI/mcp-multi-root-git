@@ -8,9 +8,27 @@ import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+const FileEntrySchema = z.union([
+  z.string().min(1),
+  z.object({
+    path: z.string().min(1).describe("File path relative to git root."),
+    lines: z
+      .object({
+        from: z.number().int().min(1).describe("Start line number (1-indexed)."),
+        to: z.number().int().min(1).describe("End line number (1-indexed, inclusive)."),
+      })
+      .describe("Line range to stage. Only hunks overlapping [from, to] are staged."),
+  }),
+]);
+
 const CommitEntrySchema = z.object({
   message: z.string().min(1).describe("Commit message."),
-  files: z.array(z.string().min(1)).min(1).describe("Paths to stage, relative to the git root."),
+  files: z
+    .array(FileEntrySchema)
+    .min(1)
+    .describe(
+      "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging.",
+    ),
 });
 
 const PushModeSchema = z
@@ -32,12 +50,154 @@ const DryRunSchema = z
       "Unstages any files that were staged for the preview. Response indicates DRY RUN mode.",
   );
 
+/**
+ * Parses a unified diff to extract hunks that overlap with a given line range.
+ * Returns a partial patch containing only the overlapping hunks, including header lines.
+ * Uses new file line numbers (after @@) to determine overlap.
+ */
+function extractOverlappingHunks(
+  diffContent: string,
+  fromLine: number,
+  toLine: number,
+): string | null {
+  const lines = diffContent.split("\n");
+
+  // Find file header lines (index, ---, +++)
+  const fileHeaderLines: string[] = [];
+  let firstHunkIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    if (line.startsWith("@@")) {
+      firstHunkIdx = i;
+      break;
+    }
+    fileHeaderLines.push(line);
+  }
+
+  if (firstHunkIdx === -1) {
+    // No hunks found
+    return null;
+  }
+
+  const result: string[] = [...fileHeaderLines];
+  let i = firstHunkIdx;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line === undefined) {
+      i++;
+      continue;
+    }
+
+    // Match hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+    const hunkMatch = /^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@/.exec(line);
+
+    if (hunkMatch) {
+      const newStart = Number.parseInt(hunkMatch[1] || "0", 10);
+      const newCount = Number.parseInt(hunkMatch[2] || "1", 10);
+      const hunkEnd = newStart + newCount - 1;
+
+      // Check if hunk overlaps with requested line range
+      const hasOverlap = !(hunkEnd < fromLine || newStart > toLine);
+
+      if (hasOverlap) {
+        // Add hunk header
+        result.push(line);
+        i++;
+
+        // Add hunk content until next hunk or EOF
+        while (i < lines.length) {
+          const contentLine = lines[i];
+          if (contentLine === undefined) {
+            i++;
+            continue;
+          }
+          // Stop at next hunk header
+          if (contentLine.startsWith("@@")) {
+            break;
+          }
+          result.push(contentLine);
+          i++;
+        }
+      } else {
+        // Skip hunk
+        i++;
+        while (i < lines.length) {
+          const contentLine = lines[i];
+          if (contentLine === undefined) {
+            i++;
+            continue;
+          }
+          if (contentLine.startsWith("@@")) {
+            break;
+          }
+          i++;
+        }
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return result.length > fileHeaderLines.length ? result.join("\n") : null;
+}
+
+/**
+ * Stages a file with optional line range. If lines are provided, only hunks
+ * overlapping the range are staged via a partial patch. Otherwise, stages the whole file.
+ */
+async function stageFile(
+  gitTop: string,
+  filePath: string,
+  lines?: { from: number; to: number },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!lines) {
+    // Simple case: stage the whole file
+    const addResult = await spawnGitAsync(gitTop, ["add", "--", filePath]);
+    return {
+      ok: addResult.ok,
+      error: addResult.ok ? undefined : (addResult.stderr || addResult.stdout).trim(),
+    };
+  }
+
+  // Line range case: extract overlapping hunks and apply patch
+  const diffResult = await spawnGitAsync(gitTop, ["diff", filePath]);
+  if (!diffResult.ok) {
+    return { ok: false, error: (diffResult.stderr || diffResult.stdout).trim() };
+  }
+
+  const partialPatch = extractOverlappingHunks(diffResult.stdout, lines.from, lines.to);
+  if (!partialPatch) {
+    return { ok: false, error: "No hunks found in line range" };
+  }
+
+  // Write partial patch to temp file in the git repo and apply it to the index
+  const tempPatchFile = `${gitTop}/.git/.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`;
+  const { writeFileSync, unlinkSync } = await import("node:fs");
+  writeFileSync(tempPatchFile, partialPatch, "utf8");
+
+  const applyResult = await spawnGitAsync(gitTop, ["apply", "--cached", tempPatchFile]);
+
+  // Clean up temp file
+  try {
+    unlinkSync(tempPatchFile);
+  } catch {
+    // Ignore cleanup errors
+  }
+
+  return {
+    ok: applyResult.ok,
+    error: applyResult.ok ? undefined : (applyResult.stderr || applyResult.stdout).trim(),
+  };
+}
+
 interface CommitResult {
   index: number;
   ok: boolean;
   sha?: string;
   message: string;
-  files: string[];
+  files: string[]; // File paths only (for display)
   error?: string;
   detail?: string;
   output?: string;
@@ -123,12 +283,25 @@ export function registerBatchCommitTool(server: FastMCP): void {
         const entry = args.commits[i];
         if (!entry) break;
 
+        // Normalize file entries to { path, lines? } format
+        const fileEntries: Array<{ path: string; lines?: { from: number; to: number } }> = [];
+        const filePaths: string[] = [];
+        for (const fileEntry of entry.files) {
+          if (typeof fileEntry === "string") {
+            fileEntries.push({ path: fileEntry });
+            filePaths.push(fileEntry);
+          } else {
+            fileEntries.push(fileEntry);
+            filePaths.push(fileEntry.path);
+          }
+        }
+
         // --- Validate all paths are under the git toplevel ---
         const escapedPaths: string[] = [];
-        for (const rel of entry.files) {
-          const abs = resolvePathForRepo(rel, gitTop);
+        for (const path of filePaths) {
+          const abs = resolvePathForRepo(path, gitTop);
           if (!isStrictlyUnderGitTop(abs, gitTop)) {
-            escapedPaths.push(rel);
+            escapedPaths.push(path);
           }
         }
         if (escapedPaths.length > 0) {
@@ -136,33 +309,42 @@ export function registerBatchCommitTool(server: FastMCP): void {
             index: i,
             ok: false,
             message: entry.message,
-            files: entry.files,
+            files: filePaths,
             error: "path_escapes_repository",
             detail: escapedPaths.join(", "),
           });
           break;
         }
 
-        // --- Stage files ---
-        const addResult = await spawnGitAsync(gitTop, ["add", "--", ...entry.files]);
-        if (!addResult.ok) {
-          const gitOutput = (addResult.stderr || addResult.stdout).trim();
+        // --- Stage files (with optional line ranges) ---
+        let stagingFailed = false;
+        let stagingError = "";
+        for (const fileEntry of fileEntries) {
+          const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
+          if (!stageResult.ok) {
+            stagingFailed = true;
+            stagingError = stageResult.error || "Unknown error";
+            break;
+          }
+        }
+
+        if (stagingFailed) {
           results.push({
             index: i,
             ok: false,
             message: entry.message,
-            files: entry.files,
+            files: filePaths,
             error: "stage_failed",
-            detail: gitOutput,
-            ...spreadDefined("output", gitOutput || undefined),
+            detail: stagingError,
+            ...spreadDefined("output", stagingError || undefined),
           });
           break;
         }
 
         // Track staged files for cleanup in dry-run
         if (args.dryRun) {
-          for (const file of entry.files) {
-            stagedFilesForCleanup.add(file);
+          for (const path of filePaths) {
+            stagedFilesForCleanup.add(path);
           }
         }
 
@@ -176,8 +358,8 @@ export function registerBatchCommitTool(server: FastMCP): void {
             index: i,
             ok: true,
             message: entry.message,
-            files: entry.files,
-            staged: entry.files,
+            files: filePaths,
+            staged: filePaths,
             ...spreadDefined("diffStat", diffStat || undefined),
           });
           continue; // Skip actual commit in dry-run mode
@@ -191,7 +373,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
             index: i,
             ok: false,
             message: entry.message,
-            files: entry.files,
+            files: filePaths,
             error: "commit_failed",
             detail: gitOutput,
             ...spreadDefined("output", gitOutput || undefined),
@@ -207,7 +389,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
           ok: true,
           sha: shaMatch?.[1],
           message: entry.message,
-          files: entry.files,
+          files: filePaths,
           ...spreadDefined("output", gitOutput || undefined),
         });
       }

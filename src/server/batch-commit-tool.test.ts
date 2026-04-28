@@ -566,4 +566,141 @@ describe("batch_commit dryRun mode", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Line-range staging (lines parameter)
+// ---------------------------------------------------------------------------
+
+describe("batch_commit line-range staging", () => {
+  test("stages only lines in range when lines parameter is provided", async () => {
+    const dir = makeRepo();
+
+    // Create base commit
+    writeFileSync(join(dir, "code.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "code.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify file with multiple sections
+    writeFileSync(
+      join(dir, "code.ts"),
+      "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconst e = 5;\n",
+    );
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: stage lines 2-3",
+          files: [{ path: "code.ts", lines: { from: 2, to: 3 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // Verify commit was created
+    const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
+    expect(logResult.ok).toBe(true);
+    expect(logResult.stdout).toContain("feat: stage lines 2-3");
+  });
+
+  test("stages whole file when lines parameter is absent", async () => {
+    const dir = makeRepo();
+
+    // Create base commit
+    writeFileSync(join(dir, "code.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "code.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify file with multiple lines
+    writeFileSync(join(dir, "code.ts"), "const a = 1;\nconst b = 2;\nconst c = 3;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: stage all",
+          files: ["code.ts"],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // Verify whole file was committed
+    const logResult = await spawnGitAsync(dir, ["log", "-1", "--name-status"]);
+    expect(logResult.ok).toBe(true);
+    expect(logResult.stdout).toContain("code.ts");
+  });
+
+  test("supports mixed file entries (with and without lines)", async () => {
+    const dir = makeRepo();
+
+    // Create base commit
+    writeFileSync(join(dir, "file1.ts"), "const b = 0;\n");
+    writeFileSync(join(dir, "file2.ts"), "const x = 0;\n");
+    gitCmd(dir, "add", "file1.ts", "file2.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify both files
+    writeFileSync(join(dir, "file1.ts"), "const a = 1;\nconst b = 2;\nconst c = 3;\n");
+    writeFileSync(join(dir, "file2.ts"), "const x = 1;\nconst y = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: mixed staging",
+          files: [
+            { path: "file1.ts", lines: { from: 2, to: 2 } }, // Only line 2
+            "file2.ts", // Whole file
+          ],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // Verify both files are in the commit
+    const logResult = await spawnGitAsync(dir, ["log", "-1", "--name-status"]);
+    expect(logResult.stdout).toContain("file1.ts");
+    expect(logResult.stdout).toContain("file2.ts");
+  });
+
+  test("returns error when line range has no matching hunks", async () => {
+    const dir = makeRepo();
+
+    // Create base commit
+    writeFileSync(join(dir, "code.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "code.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify only first line
+    writeFileSync(join(dir, "code.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: invalid range",
+          files: [{ path: "code.ts", lines: { from: 100, to: 200 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+  });
+});
+
 let _seq = 0;
