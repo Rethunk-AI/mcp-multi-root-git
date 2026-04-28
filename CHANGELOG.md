@@ -138,6 +138,9 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[2.3.4]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.4
+[2.3.3]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.3
+[2.3.2]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.2
 [2.3.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.1
 [2.3.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.0
 [2.2.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.2.0
