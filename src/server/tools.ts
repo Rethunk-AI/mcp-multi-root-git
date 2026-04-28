@@ -12,6 +12,7 @@ import { registerGitPushTool } from "./git-push-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
+import { registerGitTagTool } from "./git-tag-tool.js";
 import {
   registerGitWorktreeAddTool,
   registerGitWorktreeListTool,
@@ -37,6 +38,7 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitMergeTool(server);
   registerGitCherryPickTool(server);
   registerGitResetSoftTool(server);
+  registerGitTagTool(server);
   registerGitWorktreeAddTool(server);
   registerGitWorktreeRemoveTool(server);
   // Resources
