@@ -4,6 +4,7 @@ import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitDiffTool } from "./git-diff-tool.js";
+import { registerGitFetchTool } from "./git-fetch-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
@@ -34,6 +35,7 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitShowTool(server);
   registerGitWorktreeListTool(server);
   registerGitStashListTool(server);
+  registerGitFetchTool(server);
   // Mutating tools
   registerBatchCommitTool(server);
   registerGitPushTool(server);
