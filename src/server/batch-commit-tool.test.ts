@@ -387,4 +387,183 @@ describe("batch_commit push: after", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// dryRun mode tests
+// ---------------------------------------------------------------------------
+
+describe("batch_commit dryRun mode", () => {
+  test("dryRun: true stages files and returns preview without committing", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      dryRun: boolean;
+      ok: boolean;
+      results: Array<{ ok: boolean; staged?: string[] }>;
+    };
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.staged).toEqual(["new.ts"]);
+
+    // Verify no commit was written (log unchanged)
+    const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
+    expect(logResult.stdout).toContain("chore: base");
+    expect(logResult.stdout).not.toContain("feat: add new");
+  });
+
+  test("dryRun: true unstages files after preview", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    await run({
+      workspaceRoot: dir,
+      dryRun: true,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+
+    // Check that nothing is staged
+    const statusResult = await spawnGitAsync(dir, ["status", "--short"]);
+    expect(statusResult.stdout).toContain("?? new.ts"); // Untracked, not staged
+  });
+
+  test("dryRun: true includes diffStat in json response", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "file1.ts"), "export const a = 1;\n");
+    writeFileSync(join(dir, "file2.ts"), "export const b = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [{ message: "feat: multi", files: ["file1.ts", "file2.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      results: Array<{ diffStat?: string }>;
+    };
+    expect(parsed.results[0]?.diffStat).toBeDefined();
+    expect(parsed.results[0]?.diffStat).toContain("file1.ts");
+    expect(parsed.results[0]?.diffStat).toContain("file2.ts");
+  });
+
+  test("dryRun: true markdown header indicates DRY RUN mode", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      dryRun: true,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+    expect(text).toContain("DRY RUN");
+    expect(text).toContain("no commits written");
+  });
+
+  test("dryRun: true with multiple commits shows all previews", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "file1.ts"), "const a = 1;\n");
+    writeFileSync(join(dir, "file2.ts"), "const b = 2;\n");
+    writeFileSync(join(dir, "file3.ts"), "const c = 3;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [
+        { message: "feat: first", files: ["file1.ts"] },
+        { message: "feat: second", files: ["file2.ts"] },
+        { message: "feat: third", files: ["file3.ts"] },
+      ],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      total: number;
+      results: Array<{ ok: boolean; staged?: string[] }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(3);
+    expect(parsed.total).toBe(3);
+    expect(parsed.results[0]?.staged).toEqual(["file1.ts"]);
+    expect(parsed.results[1]?.staged).toEqual(["file2.ts"]);
+    expect(parsed.results[2]?.staged).toEqual(["file3.ts"]);
+
+    // Verify no commits were written
+    const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
+    expect(logResult.stdout).toContain("chore: base");
+    expect(logResult.stdout).not.toContain("feat: first");
+    expect(logResult.stdout).not.toContain("feat: second");
+    expect(logResult.stdout).not.toContain("feat: third");
+  });
+
+  test("dryRun: true does not perform push even with push: after", async () => {
+    const { work, remote } = makeRepoWithUpstream();
+    writeFileSync(join(work, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      dryRun: true,
+      push: "after",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { dryRun: boolean; push?: unknown };
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.push).toBeUndefined();
+
+    // Remote should still be at seed commit only
+    const remoteLog = gitCmd(remote, "log", "--oneline");
+    expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(1);
+  });
+
+  test("dryRun: false (default) commits as normal", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: false,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { dryRun?: boolean; ok: boolean };
+    expect(parsed.dryRun).toBeUndefined();
+    expect(parsed.ok).toBe(true);
+
+    // Verify commit was written
+    const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
+    expect(logResult.stdout).toContain("feat: add new");
+  });
+});
+
 let _seq = 0;

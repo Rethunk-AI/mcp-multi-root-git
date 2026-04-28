@@ -23,6 +23,15 @@ const PushModeSchema = z
       "Enum reserved for future modes such as `force-with-lease`.",
   );
 
+const DryRunSchema = z
+  .boolean()
+  .optional()
+  .default(false)
+  .describe(
+    "When true, stage files, collect preview (files staged, commit messages), return preview response without writing commits. " +
+      "Unstages any files that were staged for the preview. Response indicates DRY RUN mode.",
+  );
+
 interface CommitResult {
   index: number;
   ok: boolean;
@@ -32,6 +41,8 @@ interface CommitResult {
   error?: string;
   detail?: string;
   output?: string;
+  staged?: string[]; // For dry-run: files that were staged
+  diffStat?: string; // For dry-run: diff stat output
 }
 
 export interface PushReport {
@@ -84,7 +95,8 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "Create multiple sequential git commits in a single call. " +
       "Each entry stages the listed files then commits with the given message. " +
       'Stops on first failure. Optional `push: "after"` pushes the current branch ' +
-      "to its upstream once all commits succeed.",
+      "to its upstream once all commits succeed. " +
+      "Optional `dryRun: true` previews what would be staged/committed without writing commits.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -97,6 +109,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
         .max(50)
         .describe("Commits to create, applied in order."),
       push: PushModeSchema,
+      dryRun: DryRunSchema,
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -104,6 +117,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       const gitTop = pre.gitTop;
 
       const results: CommitResult[] = [];
+      const stagedFilesForCleanup: Set<string> = new Set();
 
       for (let i = 0; i < args.commits.length; i++) {
         const entry = args.commits[i];
@@ -145,6 +159,30 @@ export function registerBatchCommitTool(server: FastMCP): void {
           break;
         }
 
+        // Track staged files for cleanup in dry-run
+        if (args.dryRun) {
+          for (const file of entry.files) {
+            stagedFilesForCleanup.add(file);
+          }
+        }
+
+        // --- Dry-run mode: collect preview and unstage ---
+        if (args.dryRun) {
+          // Get diff stat for this staged entry
+          const diffStatResult = await spawnGitAsync(gitTop, ["diff", "--staged", "--stat"]);
+          const diffStat = diffStatResult.ok ? (diffStatResult.stdout || "").trim() : undefined;
+
+          results.push({
+            index: i,
+            ok: true,
+            message: entry.message,
+            files: entry.files,
+            staged: entry.files,
+            ...spreadDefined("diffStat", diffStat || undefined),
+          });
+          continue; // Skip actual commit in dry-run mode
+        }
+
         // --- Commit ---
         const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
         if (!commitResult.ok) {
@@ -174,14 +212,21 @@ export function registerBatchCommitTool(server: FastMCP): void {
         });
       }
 
+      // --- In dry-run mode, unstage all files ---
+      if (args.dryRun && stagedFilesForCleanup.size > 0) {
+        const filesToReset = Array.from(stagedFilesForCleanup);
+        await spawnGitAsync(gitTop, ["reset", "HEAD", "--", ...filesToReset]);
+      }
+
       const allOk = results.length === args.commits.length && results.every((r) => r.ok);
 
-      // --- Optional push after all commits succeed ---
+      // --- Optional push after all commits succeed (not in dry-run mode) ---
       const push: PushReport | undefined =
-        allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
+        !args.dryRun && allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
 
       if (args.format === "json") {
         return jsonRespond({
+          ...spreadWhen(args.dryRun, { dryRun: true }),
           ok: allOk,
           committed: results.filter((r) => r.ok).length,
           total: args.commits.length,
@@ -191,6 +236,8 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ...spreadDefined("sha", r.sha),
             message: r.message,
             files: r.files,
+            ...spreadDefined("staged", r.staged),
+            ...spreadDefined("diffStat", r.diffStat),
             ...spreadDefined("error", r.error),
             ...spreadDefined("detail", r.detail),
             ...spreadDefined("output", r.output),
@@ -210,9 +257,10 @@ export function registerBatchCommitTool(server: FastMCP): void {
 
       // --- Markdown ---
       const lines: string[] = [];
+      const dryRunPrefix = args.dryRun ? "DRY RUN — " : "";
       const header = allOk
-        ? `# Batch commit: ${results.length}/${args.commits.length} committed`
-        : `# Batch commit: ${results.filter((r) => r.ok).length}/${args.commits.length} committed (stopped on error)`;
+        ? `# Batch commit: ${dryRunPrefix}${results.length}/${args.commits.length} committed`
+        : `# Batch commit: ${dryRunPrefix}${results.filter((r) => r.ok).length}/${args.commits.length} committed (stopped on error)`;
       lines.push(header, "");
 
       for (const r of results) {
@@ -222,6 +270,13 @@ export function registerBatchCommitTool(server: FastMCP): void {
         if (!r.ok && r.detail) {
           lines.push(`  Error: ${r.error} — ${r.detail}`);
         }
+        if (args.dryRun && r.staged) {
+          lines.push(`  Staged: ${r.staged.join(", ")}`);
+        }
+        if (args.dryRun && r.diffStat) {
+          lines.push(`  Diff stat:`);
+          lines.push(`  ${r.diffStat.replace(/\n/g, "\n  ")}`);
+        }
         if (r.output) {
           lines.push(`  Output: ${r.output.replace(/\n/g, "\n  ")}`);
         }
@@ -230,6 +285,10 @@ export function registerBatchCommitTool(server: FastMCP): void {
       if (!allOk && results.length < args.commits.length) {
         const skipped = args.commits.length - results.length;
         lines.push("", `${skipped} remaining commit(s) skipped.`);
+      }
+
+      if (args.dryRun) {
+        lines.push("", "**DRY RUN — no commits written. All staged files have been unstaged.**");
       }
 
       if (push) {
