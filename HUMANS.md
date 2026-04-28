@@ -121,13 +121,54 @@ Example `git_parity` batch using the same pair in each sibling clone:
 
 `absoluteGitRoots` is read-only by design. Mutating tools such as **`batch_commit`**, **`git_push`**, **`git_merge`**, and **`git_cherry_pick`** omit it from their schema; use `workspaceRoot` or MCP roots for writes. Full parameter rules and error codes live in **[docs/mcp-tools.md](docs/mcp-tools.md#absoluteGitRoots-sibling-clones)**.
 
+## Prerequisites
+
+- **Git** on `PATH` (`git --version`). Missing git → all tools return `git_not_found`.
+- **Node.js ≥ 22** (for `npx`) or **Bun** (for `bunx`). See `engines` in `package.json`.
+- No other runtime dependencies; the server is a self-contained MCP stdio process.
+
+## Running the server
+
+The server is a **stdio** MCP process — your MCP client starts it. You do not run it directly. Quick start:
+
+```bash
+# npmjs (public, may lag tags)
+npx -y @rethunk/mcp-multi-root-git
+
+# GitHub Packages (CI-aligned, every tag)
+npx -y @rethunk-ai/mcp-multi-root-git   # requires ~/.npmrc with @rethunk-ai registry token
+```
+
+Add the server to your MCP client config under a stable name (e.g. `rethunk-git`). Full per-client config (Cursor, VS Code, Claude Desktop, Zed): **[docs/install.md](docs/install.md)**.
+
+## Common operations
+
+Call tools by their registered id (prefix depends on client config name):
+
+| Operation | Tool |
+|-----------|------|
+| Check status across workspace roots | `git_status` |
+| Status + ahead/behind for submodules | `git_inventory` |
+| Compare HEAD between path pairs | `git_parity` |
+| List preset names | `list_presets` |
+| View commit log | `git_log` |
+| View diff | `git_diff_summary` |
+| Create commits | `batch_commit` |
+| Push a branch | `git_push` |
+| Merge branches | `git_merge` |
+| Cherry-pick commits | `git_cherry_pick` |
+| Soft-reset HEAD | `git_reset_soft` |
+| Manage worktrees | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` |
+
+Full parameter tables and JSON shapes: **[docs/mcp-tools.md](docs/mcp-tools.md)**.
+
 ## `git_not_found`
 
-If **`git`** is missing or not runnable, tools and the presets resource respond with **`git_not_found`**. Prerequisites and `PATH`: **[docs/install.md](docs/install.md)**.
+If **`git`** is missing or not runnable, tools and the presets resource respond with **`git_not_found`**. Ensure `git` is on `PATH` in the environment that launches the MCP server.
 
 ## Installation
 
-**Package install and MCP clients:** **[docs/install.md](docs/install.md)**.
+**Full install instructions and MCP client wiring:** **[docs/install.md](docs/install.md)**.
 
 ## Development
 
