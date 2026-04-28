@@ -11,6 +11,7 @@ import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
+import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
 import { registerGitTagTool } from "./git-tag-tool.js";
 import {
@@ -32,6 +33,7 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitDiffTool(server);
   registerGitShowTool(server);
   registerGitWorktreeListTool(server);
+  registerGitStashListTool(server);
   // Mutating tools
   registerBatchCommitTool(server);
   registerGitPushTool(server);
@@ -41,6 +43,7 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitTagTool(server);
   registerGitWorktreeAddTool(server);
   registerGitWorktreeRemoveTool(server);
+  registerGitStashApplyTool(server);
   // Resources
   registerPresetsResource(server);
 }
