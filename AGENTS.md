@@ -62,6 +62,8 @@ Rules for LLMs operating in or against this repository.
 
 **Mutating tools require workspace-root confirmation** — `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
 
+**`batch_commit` atomic staging — single call per logical change** — Do NOT attempt incremental staging across multiple `batch_commit` calls. Each call is self-contained: it stages all files in all entries, commits them sequentially, and the moment the call completes, all commits have landed. Include all related files (for all related commit entries) in a single `batch_commit` call. A call cannot be resumed or extended by a later call — each is an independent transaction. If entry N fails, entries before N remain committed; entries after N are skipped (not rolled back).
+
 **`absoluteGitRoots` is read-only** — pass it only on read tools (`git_status`, `git_inventory`, `git_parity`, `git_log`, `git_diff_summary`, `list_presets`). Mutating tools reject this parameter.
 
 **Protected branches are enforced by the server** — do not attempt `git_worktree_add` with a branch name matching `main`, `master`, `dev`, `develop`, `stable`, `trunk`, `prod`, `production`, `release*`, or `hotfix*`. The server rejects such calls.

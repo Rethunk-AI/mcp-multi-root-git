@@ -179,6 +179,28 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 
 ---
 
+### `batch_commit` — atomic staging semantics
+
+**Critical for AI agents:** Each call to `batch_commit` is **self-contained and atomic per-commit entry**.
+
+- **All files in a single entry are staged together.** When you list `files: ["src/foo.ts", "src/bar.ts"]` in one commit entry, both are staged atomically as a unit with a single `git add` before the commit is created.
+- **Each commit entry is processed sequentially within the call.** The tool stages files, commits, then moves to the next entry. All entries within a single `batch_commit` call happen in one atomic MCP transaction.
+- **A single `batch_commit` call cannot be split across multiple MCP calls.** Do NOT attempt incremental staging like "call 1 with file A, then call 2 with file B hoping they stage together." Each call is independent — call 1's commit lands immediately; call 2's changes are a separate transaction.
+- **Failed entry stops the batch.** If staging or commit fails on entry N, the tool aborts and skips remaining entries. However, **entries that succeeded before the failure remain committed** — they are not rolled back.
+- **Include all files for a logical change in a single `batch_commit` call.** Group related files in each commit entry, list them all in the `files` array, and include all necessary entries in the `commits` array.
+
+Example: to commit two related changes atomically, pass both entries in one call:
+```json
+{
+  "commits": [
+    { "message": "feat: add foo module", "files": ["src/foo.ts", "tests/foo.test.ts"] },
+    { "message": "feat: integrate foo into bar", "files": ["src/bar.ts", "docs/foo.md"] }
+  ]
+}
+```
+
+Do NOT do this: make two separate calls hoping to stage files incrementally. That breaks the contract.
+
 ### `batch_commit` — parameters
 
 | Parameter | Type | Notes |
