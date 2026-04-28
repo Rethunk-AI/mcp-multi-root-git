@@ -31,6 +31,7 @@ interface CommitResult {
   files: string[];
   error?: string;
   detail?: string;
+  output?: string;
 }
 
 export interface PushReport {
@@ -39,6 +40,7 @@ export interface PushReport {
   upstream?: string;
   error?: string;
   detail?: string;
+  output?: string;
 }
 
 /**
@@ -66,7 +68,13 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
       detail: (pushResult.stderr || pushResult.stdout).trim(),
     };
   }
-  return { ok: true, branch, upstream: t.upstream };
+  const gitOutput = (pushResult.stdout || pushResult.stderr).trim();
+  return {
+    ok: true,
+    branch,
+    upstream: t.upstream,
+    ...spreadDefined("output", gitOutput || undefined),
+  };
 }
 
 export function registerBatchCommitTool(server: FastMCP): void {
@@ -124,13 +132,15 @@ export function registerBatchCommitTool(server: FastMCP): void {
         // --- Stage files ---
         const addResult = await spawnGitAsync(gitTop, ["add", "--", ...entry.files]);
         if (!addResult.ok) {
+          const gitOutput = (addResult.stderr || addResult.stdout).trim();
           results.push({
             index: i,
             ok: false,
             message: entry.message,
             files: entry.files,
             error: "stage_failed",
-            detail: (addResult.stderr || addResult.stdout).trim(),
+            detail: gitOutput,
+            ...spreadDefined("output", gitOutput || undefined),
           });
           break;
         }
@@ -138,25 +148,29 @@ export function registerBatchCommitTool(server: FastMCP): void {
         // --- Commit ---
         const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
         if (!commitResult.ok) {
+          const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
           results.push({
             index: i,
             ok: false,
             message: entry.message,
             files: entry.files,
             error: "commit_failed",
-            detail: (commitResult.stderr || commitResult.stdout).trim(),
+            detail: gitOutput,
+            ...spreadDefined("output", gitOutput || undefined),
           });
           break;
         }
 
         // --- Extract SHA from commit output ---
         const shaMatch = /\[[\w/.-]+\s+([0-9a-f]+)\]/.exec(commitResult.stdout);
+        const gitOutput = (commitResult.stdout || commitResult.stderr).trim();
         results.push({
           index: i,
           ok: true,
           sha: shaMatch?.[1],
           message: entry.message,
           files: entry.files,
+          ...spreadDefined("output", gitOutput || undefined),
         });
       }
 
@@ -179,6 +193,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
             files: r.files,
             ...spreadDefined("error", r.error),
             ...spreadDefined("detail", r.detail),
+            ...spreadDefined("output", r.output),
           })),
           ...spreadWhen(push !== undefined, {
             push: {
@@ -187,6 +202,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
               ...spreadDefined("upstream", push?.upstream),
               ...spreadDefined("error", push?.error),
               ...spreadDefined("detail", push?.detail),
+              ...spreadDefined("output", push?.output),
             },
           }),
         });
@@ -206,6 +222,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
         if (!r.ok && r.detail) {
           lines.push(`  Error: ${r.error} — ${r.detail}`);
         }
+        if (r.output) {
+          lines.push(`  Output: ${r.output.replace(/\n/g, "\n  ")}`);
+        }
       }
 
       if (!allOk && results.length < args.commits.length) {
@@ -219,6 +238,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
           lines.push(`Push: ✓ ${push.branch} → ${push.upstream}`);
         } else {
           lines.push(`Push: ✗ ${push.error}${push.detail ? ` — ${push.detail}` : ""}`);
+        }
+        if (push.output) {
+          lines.push(`  Output: ${push.output.replace(/\n/g, "\n  ")}`);
         }
       }
 

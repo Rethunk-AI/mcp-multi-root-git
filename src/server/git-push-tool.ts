@@ -106,6 +106,9 @@ export function registerGitPushTool(server: FastMCP): void {
       ]);
       const upstream = upstreamProbe.ok ? upstreamProbe.stdout.trim() : `${remote}/${branch}`;
 
+      // Append git output (stdout/stderr) if non-empty
+      const gitOutput = (pushResult.stdout || pushResult.stderr).trim();
+
       if (args.format === "json") {
         return jsonRespond({
           ok: true,
@@ -113,10 +116,15 @@ export function registerGitPushTool(server: FastMCP): void {
           remote,
           upstream,
           ...spreadDefined("setUpstream", args.setUpstream || undefined),
+          ...spreadDefined("output", gitOutput || undefined),
         });
       }
 
-      return `# Push\n✓ ${branch} → ${upstream}`;
+      let result = `# Push\n✓ ${branch} → ${upstream}`;
+      if (gitOutput) {
+        result += `\n\n${gitOutput}`;
+      }
+      return result;
     },
   });
 }
