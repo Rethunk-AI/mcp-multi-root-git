@@ -91,15 +91,17 @@ Omit any `cwd` / `workingDirectory` field unless your client requires it for unr
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `GIT_SUBPROCESS_PARALLELISM` | `4` | Number of parallel git subprocesses for inventory operations and `git_status` submodule rows. Increase on high-core machines or for slow network connections; decrease if system resources are constrained. |
+| `GIT_SUBPROCESS_PARALLELISM` | `4` | Number of parallel git subprocesses for inventory operations and `git_status` submodule rows. Valid range: 1 to 2×CPU count (auto-clamped to prevent runaway spawning). Increase on high-core machines to accelerate large fleet scans; decrease if system resources are constrained. |
 
 Set these in the environment where the MCP client launches the server (e.g. in your shell, in the MCP client config as `env`, or in a startup script).
 
-Example: Running the server with 8 parallel git processes:
+Example: Running the server with 8 parallel git processes on a 4-core machine:
 
 ```bash
 GIT_SUBPROCESS_PARALLELISM=8 npx -y @rethunk/mcp-multi-root-git
 ```
+
+On a 4-core machine (CPU count = 4), the max parallelism is clamped to 8 (2×4). The value requested is used if valid.
 
 ## Cursor
 

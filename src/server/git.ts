@@ -1,12 +1,26 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { cpus } from "node:os";
 import { join } from "node:path";
 
-/** Parallel git subprocesses for inventory rows and git_status submodule rows. */
-export const GIT_SUBPROCESS_PARALLELISM = parseInt(
-  process.env.GIT_SUBPROCESS_PARALLELISM ?? "4",
-  10,
-);
+/**
+ * Parallel git subprocesses for inventory rows and git_status submodule rows.
+ * Reads from GIT_SUBPROCESS_PARALLELISM env var (default 4), clamped to [1, 2×CPU_COUNT].
+ */
+function resolveGitSubprocessParallelism(): number {
+  const env = process.env.GIT_SUBPROCESS_PARALLELISM;
+  if (env) {
+    const n = Number.parseInt(env, 10);
+    if (!Number.isNaN(n) && n >= 1) {
+      const cpuCount = cpus().length;
+      const maxParallel = cpuCount * 2;
+      return Math.min(n, maxParallel);
+    }
+  }
+  return 4;
+}
+
+export const GIT_SUBPROCESS_PARALLELISM = resolveGitSubprocessParallelism();
 
 // ---------------------------------------------------------------------------
 // Git on PATH (lazy probe)
