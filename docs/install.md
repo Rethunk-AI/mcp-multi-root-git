@@ -10,6 +10,7 @@ This package is an MCP **stdio** server. The client starts the process and passe
 - [GitHub Packages](#github-packages)
 - [Ways to run the binary](#ways-to-run-the-binary)
 - [Configuration shape (stdio)](#configuration-shape-stdio)
+- [Environment variables](#environment-variables)
 - [Cursor](#cursor)
 - [Visual Studio Code (GitHub Copilot)](#visual-studio-code-github-copilot)
 - [Claude Desktop](#claude-desktop)
@@ -85,6 +86,20 @@ Register the server under a stable name (this documentation uses **`rethunk-git`
 **No `cwd`**
 
 Omit any `cwd` / `workingDirectory` field unless your client requires it for unrelated reasons. This server resolves repos from MCP **roots**, not from the process cwd.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GIT_SUBPROCESS_PARALLELISM` | `4` | Number of parallel git subprocesses for inventory operations and `git_status` submodule rows. Increase on high-core machines or for slow network connections; decrease if system resources are constrained. |
+
+Set these in the environment where the MCP client launches the server (e.g. in your shell, in the MCP client config as `env`, or in a startup script).
+
+Example: Running the server with 8 parallel git processes:
+
+```bash
+GIT_SUBPROCESS_PARALLELISM=8 npx -y @rethunk/mcp-multi-root-git
+```
 
 ## Cursor
 

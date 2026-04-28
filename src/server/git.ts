@@ -3,7 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Parallel git subprocesses for inventory rows and git_status submodule rows. */
-export const GIT_SUBPROCESS_PARALLELISM = 4;
+export const GIT_SUBPROCESS_PARALLELISM = parseInt(
+  process.env.GIT_SUBPROCESS_PARALLELISM ?? "4",
+  10,
+);
 
 // ---------------------------------------------------------------------------
 // Git on PATH (lazy probe)
