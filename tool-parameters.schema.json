@@ -454,10 +454,52 @@
                 "minItems": 1,
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "minLength": 1
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "File path relative to git root."
+                        },
+                        "lines": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991,
+                              "description": "Start line number (1-indexed)."
+                            },
+                            "to": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991,
+                              "description": "End line number (1-indexed, inclusive)."
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false,
+                          "description": "Line range to stage. Only hunks overlapping [from, to] are staged."
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "lines"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
-                "description": "Paths to stage, relative to the git root."
+                "description": "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging."
               }
             },
             "required": [
@@ -476,13 +518,19 @@
             "never",
             "after"
           ]
+        },
+        "dryRun": {
+          "default": false,
+          "description": "When true, stage files, collect preview (files staged, commit messages), return preview response without writing commits. Unstages any files that were staged for the preview. Response indicates DRY RUN mode.",
+          "type": "boolean"
         }
       },
       "required": [
         "allWorkspaceRoots",
         "format",
         "commits",
-        "push"
+        "push",
+        "dryRun"
       ],
       "additionalProperties": false
     },

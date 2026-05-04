@@ -2,6 +2,12 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- Regenerated **`tool-parameters.schema.json`** so `schema:tools:check` matches registered tools (CI).
+
 ## [2.3.4] — 2026-04-26
 
 Publication-prep patch for the `absoluteGitRoots` line.
