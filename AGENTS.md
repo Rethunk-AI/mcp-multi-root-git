@@ -58,7 +58,7 @@ Path confinement: [`src/repo-paths.ts`](src/repo-paths.ts) — extend tests when
 
 Rules for LLMs operating in or against this repository.
 
-**Prefer MCP tools over shell git** — use `rethunk-git_git_status`, `rethunk-git_git_log`, `rethunk-git_git_diff_summary`, etc. instead of shelling out to `git status`, `git log`, `git diff`. Shell git is acceptable only for operations the MCP tools do not cover (`git fetch`, `git stash`, `git rebase`) or when the MCP connection is unavailable.
+**End-user Git/MCP preference** (status/log/diff/commits): **`~/.claude/CLAUDE.md`** § **Git & GitHub** — same policy when dogfooding this server from a harness. Repo-local Cursor rule: [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc).
 
 **Mutating tools require workspace-root confirmation** — `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
 
@@ -74,12 +74,10 @@ Rules for LLMs operating in or against this repository.
 
 **Path confinement** — any tool accepting file paths must use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and include escaping-attempt tests.
 
-Cursor rule covering MCP-vs-shell selection: [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) (injected automatically via `alwaysApply: true`).
-
 ## Repo MCP entry (contributors)
 
 Dogfood from clone: [docs/install.md](docs/install.md) — *From source*.
 
-Repo ships `.cursor/` with alwaysApply rule [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) covering MCP-vs-shell usage. Rule does not re-link this file (already injected).
+Repo ships [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) (`alwaysApply`) for client-side selection; client Git policy is still **`~/.claude/CLAUDE.md`** § Git & GitHub (see **End-user Git/MCP preference** above).
 
 User-level skills may mention README for discovery. Canonical refs: tools/JSON → [docs/mcp-tools.md](docs/mcp-tools.md); install → [docs/install.md](docs/install.md); presets → [HUMANS.md](HUMANS.md).
