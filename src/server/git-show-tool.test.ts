@@ -29,7 +29,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "HEAD",
       format: "markdown",
     });
@@ -46,7 +46,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "HEAD~1",
       path: "file.txt",
       format: "markdown",
@@ -63,7 +63,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "HEAD",
       format: "json",
     });
@@ -77,7 +77,7 @@ describe("git_show_tool", () => {
   test("git show not_a_git_repository error for invalid path", async () => {
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: "/nonexistent/path",
+      workspaceRoot: "/nonexistent/path",
       ref: "HEAD",
     });
 
@@ -90,7 +90,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "invalid-ref-xyz",
     });
 
@@ -103,7 +103,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "HEAD",
       path: "file.txt",
       format: "json",
@@ -127,7 +127,7 @@ describe("git_show_tool", () => {
 
     const tool = captureTool(registerGitShowTool);
     const result = await tool({
-      wd: repo,
+      workspaceRoot: repo,
       ref: "HEAD",
       format: "json",
     });

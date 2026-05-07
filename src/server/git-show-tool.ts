@@ -1,8 +1,10 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { gateGit, gitTopLevel, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
 import { jsonRespond } from "./json.js";
+import { requireSingleRepo } from "./roots.js";
+import { WorkspacePickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,25 +145,25 @@ export function registerGitShowTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: z.object({
-      wd: z.string().describe("Working directory (git repository root or subdirectory)."),
-      ref: z.string().describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
-      path: z
-        .string()
-        .optional()
-        .describe(
-          "Optional file path to inspect at the ref. If provided, shows that path's content at the ref instead of the diff.",
-        ),
-      format: z.enum(["markdown", "json"]).optional().default("markdown"),
-    }),
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
+      .pick({
+        workspaceRoot: true,
+        rootIndex: true,
+        format: true,
+      })
+      .extend({
+        ref: z.string().describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
+        path: z
+          .string()
+          .optional()
+          .describe(
+            "Optional file path to inspect at the ref. If provided, shows that path's content at the ref instead of the diff.",
+          ),
+      }),
     execute: async (args) => {
-      const gg = gateGit();
-      if (!gg.ok) return jsonRespond(gg.body);
-
-      const top = gitTopLevel(args.wd);
-      if (!top) {
-        return jsonRespond({ error: "not_a_git_repository", path: args.wd });
-      }
+      const pre = requireSingleRepo(server, args);
+      if (!pre.ok) return jsonRespond(pre.error);
+      const top = pre.gitTop;
 
       const result = await runGitShow({
         top,

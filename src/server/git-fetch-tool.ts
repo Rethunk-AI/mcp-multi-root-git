@@ -11,6 +11,7 @@ import { WorkspacePickSchema } from "./schemas.js";
 // ---------------------------------------------------------------------------
 
 interface GitFetchResult {
+  ok: boolean;
   remote: string;
   updatedRefs: string[];
   newRefs: string[];
@@ -61,26 +62,35 @@ export function registerGitFetchTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: false, // Fetch modifies refs but not working tree; not strictly read-only but safe
     },
-    parameters: WorkspacePickSchema.extend({
-      remote: z
-        .string()
-        .optional()
-        .default("origin")
-        .describe("Remote to fetch from (default: origin)."),
-      branch: z.string().optional().describe("If specified: fetch only this branch (e.g. 'main')."),
-      prune: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("Pass --prune to remove deleted remote branches (default: false)."),
-      tags: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("Pass --tags to also fetch all tags (default: false)."),
-    }),
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
+      .pick({
+        workspaceRoot: true,
+        rootIndex: true,
+        format: true,
+      })
+      .extend({
+        remote: z
+          .string()
+          .optional()
+          .default("origin")
+          .describe("Remote to fetch from (default: origin)."),
+        branch: z
+          .string()
+          .optional()
+          .describe("If specified: fetch only this branch (e.g. 'main')."),
+        prune: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Pass --prune to remove deleted remote branches (default: false)."),
+        tags: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Pass --tags to also fetch all tags (default: false)."),
+      }),
     execute: async (args) => {
-      const pre = requireSingleRepo(server, args, undefined);
+      const pre = requireSingleRepo(server, args);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
@@ -112,6 +122,7 @@ export function registerGitFetchTool(server: FastMCP): void {
       const { updatedRefs, newRefs } = parseGitFetchOutput(result.stdout + result.stderr);
 
       const fetchResult: GitFetchResult = {
+        ok: result.ok,
         remote,
         updatedRefs,
         newRefs,

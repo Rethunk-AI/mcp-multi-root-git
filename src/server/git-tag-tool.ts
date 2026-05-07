@@ -60,24 +60,30 @@ export function registerGitTagTool(server: FastMCP): void {
       readOnlyHint: false,
       destructiveHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
-      tag: z.string().min(1).describe("Tag name (e.g. 'v1.2.3')."),
-      message: z
-        .string()
-        .optional()
-        .describe(
-          "If provided, create an annotated tag with this message. If absent, create a lightweight tag.",
-        ),
-      ref: z
-        .string()
-        .optional()
-        .describe("Commit/ref to tag (default: HEAD). Ignored if `delete` is true."),
-      delete: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("If true, delete the named tag instead of creating it."),
-    }),
+    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
+      .pick({
+        workspaceRoot: true,
+        rootIndex: true,
+        format: true,
+      })
+      .extend({
+        tag: z.string().min(1).describe("Tag name (e.g. 'v1.2.3')."),
+        message: z
+          .string()
+          .optional()
+          .describe(
+            "If provided, create an annotated tag with this message. If absent, create a lightweight tag.",
+          ),
+        ref: z
+          .string()
+          .optional()
+          .describe("Commit/ref to tag (default: HEAD). Ignored if `delete` is true."),
+        delete: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("If true, delete the named tag instead of creating it."),
+      }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
