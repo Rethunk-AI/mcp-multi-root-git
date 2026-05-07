@@ -4,26 +4,42 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-05-07
+
+New git MCP tools, better `batch_commit` ergonomics, published schema coverage for the full tool surface, and a broad docs/test refresh since `v2.3.4`.
+
 ### Added
 
-- Published parameter schemas and canonical docs for the remaining registered tools: **`git_diff`**, **`git_show`**, **`git_stash_list`**, **`git_stash_apply`**, **`git_fetch`**, and **`git_tag`**.
+- **New tools:** `git_fetch`, `git_diff`, `git_show`, `git_tag`, `git_stash_list`, and `git_stash_apply`.
+- **`batch_commit` enhancements:** `dryRun: true` preview mode plus hunk-level staging via `{ path, lines: { from, to } }`.
+- **Published per-tool schema artifacts:** `schemas/index.json` plus one JSON Schema file per tool alongside `tool-parameters.schema.json`.
 
 ### Changed
 
-- **`git_show`** now uses the standard single-repo workspace pick (`workspaceRoot` / `rootIndex`) instead of a raw `wd` parameter.
-- **`git_fetch`** and **`git_tag`** now align with the single-repo mutating-tool contract: no `absoluteGitRoots` or `allWorkspaceRoots`.
+- **`GIT_SUBPROCESS_PARALLELISM`** is now configurable via environment and clamps to a safe `2×CPU` maximum.
+- **`git_show`**, **`git_fetch`**, and **`git_tag`** now use the standard single-repo workspace pick (`workspaceRoot` / `rootIndex`) and omit multi-root-only parameters.
+- **Build / release tooling** now aligns on Bun `1.3.13`, updated dev dependencies, and the current prerelease tarball flow.
 
 ### Fixed
 
-- Regenerated **`tool-parameters.schema.json`** so `schema:tools:check` matches registered tools (CI).
-- **MCP roots** — Workspace root collection now scans active MCP sessions and dedupes `file://` roots, preserving global-install behavior across roots-capable clients instead of relying on a fixed server `cwd`.
-- **README schema docs** now correctly describe the shipped schemas as **draft 2020-12** and count all **20** published tool schemas.
-- **CI/release Bun pin** now matches `packageManager` (`bun@1.3.13`).
-- **`publish:preflight`** now writes temporary coverage output under the platform temp dir instead of a hard-coded `/tmp` path.
+- **MCP roots** — workspace root collection now scans active MCP sessions and dedupes `file://` roots instead of relying on a fixed server `cwd`.
+- **`git_push`** and **`batch_commit`** now surface raw git stdout/stderr on failure for easier recovery.
+- **Published schema snapshots** are now complete and in sync with the registered tool surface, including `schema:tools:check`.
+- **`publish:preflight`** now writes temporary coverage output under the platform temp directory instead of a hard-coded `/tmp` path.
 
 ### Documentation
 
+- **README / HUMANS / AGENTS / CONTRIBUTING / install docs** refreshed for the current tool surface, shipped schema artifacts, and contributor workflow.
+- **`SECURITY.md`** added with repository access, git-operation risk, and disclosure guidance.
+- **`docs/mcp-tools.md`** now documents the full tool surface, `batch_commit` atomic staging semantics, and the shipped schema artifacts.
 - **`TODO.md`** backlog entries now reflect genuine remaining gaps instead of listing already-implemented tools as missing.
+- **`specs/` scaffold** added with standard `active`, `done`, and `parked` layout for repo planning.
+- **CHANGELOG references** for `v2.3.2`–`v2.3.4` were restored.
+
+### Tests
+
+- Coverage expanded across `list_presets`, `git_parity`, `git_cherry_pick`, `git_merge`, `git_show`, schema generation, and roots handling.
+- The shared git test harness now reuses repo-init / commit helpers and speeds up fixture setup.
 
 ## [2.3.4] — 2026-04-26
 
@@ -161,6 +177,7 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[2.4.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.4.0
 [2.3.4]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.4
 [2.3.3]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.3
 [2.3.2]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.2
