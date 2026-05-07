@@ -35,9 +35,29 @@
       "description": "Parameter schema for the 'git_diff_summary' MCP tool."
     },
     {
+      "name": "git_diff",
+      "file": "git_diff.json",
+      "description": "Parameter schema for the 'git_diff' MCP tool."
+    },
+    {
+      "name": "git_show",
+      "file": "git_show.json",
+      "description": "Parameter schema for the 'git_show' MCP tool."
+    },
+    {
       "name": "git_worktree_list",
       "file": "git_worktree_list.json",
       "description": "Parameter schema for the 'git_worktree_list' MCP tool."
+    },
+    {
+      "name": "git_stash_list",
+      "file": "git_stash_list.json",
+      "description": "Parameter schema for the 'git_stash_list' MCP tool."
+    },
+    {
+      "name": "git_fetch",
+      "file": "git_fetch.json",
+      "description": "Parameter schema for the 'git_fetch' MCP tool."
     },
     {
       "name": "batch_commit",
@@ -65,6 +85,11 @@
       "description": "Parameter schema for the 'git_reset_soft' MCP tool."
     },
     {
+      "name": "git_tag",
+      "file": "git_tag.json",
+      "description": "Parameter schema for the 'git_tag' MCP tool."
+    },
+    {
       "name": "git_worktree_add",
       "file": "git_worktree_add.json",
       "description": "Parameter schema for the 'git_worktree_add' MCP tool."
@@ -73,6 +98,11 @@
       "name": "git_worktree_remove",
       "file": "git_worktree_remove.json",
       "description": "Parameter schema for the 'git_worktree_remove' MCP tool."
+    },
+    {
+      "name": "git_stash_apply",
+      "file": "git_stash_apply.json",
+      "description": "Parameter schema for the 'git_stash_apply' MCP tool."
     }
   ]
 }

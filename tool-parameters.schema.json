@@ -383,6 +383,103 @@
       ],
       "additionalProperties": false
     },
+    "git_diff": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "allWorkspaceRoots": {
+          "default": false,
+          "description": "Fan out across all MCP file roots.",
+          "type": "boolean"
+        },
+        "absoluteGitRoots": {
+          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "base": {
+          "description": "Base ref (e.g. \"main\", \"HEAD~3\"). Required for range diffs. If omitted and `staged: false`, shows unstaged changes.",
+          "type": "string"
+        },
+        "head": {
+          "description": "Head ref (e.g. \"feature-branch\"). If omitted, defaults to HEAD. Only used if `base` is provided.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Scope diff to a single file path (e.g. \"src/main.ts\").",
+          "type": "string"
+        },
+        "staged": {
+          "default": false,
+          "description": "If true, show staged changes (git diff --staged). Ignored if `base` is provided.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allWorkspaceRoots",
+        "format",
+        "staged"
+      ],
+      "additionalProperties": false
+    },
+    "git_show": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "description": "Commit reference (SHA, branch, tag, or any git rev-spec)."
+        },
+        "path": {
+          "description": "Optional file path to inspect at the ref. If provided, shows that path's content at the ref instead of the diff.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "ref"
+      ],
+      "additionalProperties": false
+    },
     "git_worktree_list": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -408,6 +505,84 @@
       },
       "required": [
         "format"
+      ],
+      "additionalProperties": false
+    },
+    "git_stash_list": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "git_fetch": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "remote": {
+          "default": "origin",
+          "description": "Remote to fetch from (default: origin).",
+          "type": "string"
+        },
+        "branch": {
+          "description": "If specified: fetch only this branch (e.g. 'main').",
+          "type": "string"
+        },
+        "prune": {
+          "default": false,
+          "description": "Pass --prune to remove deleted remote branches (default: false).",
+          "type": "boolean"
+        },
+        "tags": {
+          "default": false,
+          "description": "Pass --tags to also fetch all tags (default: false).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "remote",
+        "prune",
+        "tags"
       ],
       "additionalProperties": false
     },
@@ -760,6 +935,54 @@
       ],
       "additionalProperties": false
     },
+    "git_tag": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tag name (e.g. 'v1.2.3')."
+        },
+        "message": {
+          "description": "If provided, create an annotated tag with this message. If absent, create a lightweight tag.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "Commit/ref to tag (default: HEAD). Ignored if `delete` is true.",
+          "type": "string"
+        },
+        "delete": {
+          "default": false,
+          "description": "If true, delete the named tag instead of creating it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "tag",
+        "delete"
+      ],
+      "additionalProperties": false
+    },
     "git_worktree_add": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -853,6 +1076,48 @@
         "format",
         "path",
         "force"
+      ],
+      "additionalProperties": false
+    },
+    "git_stash_apply": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "index": {
+          "default": 0,
+          "description": "Stash index (defaults to 0 for stash@{0}).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pop": {
+          "default": false,
+          "description": "If true, runs `git stash pop` instead of `git stash apply` (removes stash after applying).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "index",
+        "pop"
       ],
       "additionalProperties": false
     }

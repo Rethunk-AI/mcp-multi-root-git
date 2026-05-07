@@ -4,13 +4,18 @@ import { z } from "zod";
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
+import { registerGitDiffTool } from "./git-diff-tool.js";
+import { registerGitFetchTool } from "./git-fetch-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
+import { registerGitShowTool } from "./git-show-tool.js";
+import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
+import { registerGitTagTool } from "./git-tag-tool.js";
 import {
   registerGitWorktreeAddTool,
   registerGitWorktreeListTool,
@@ -27,19 +32,29 @@ export const READ_ONLY_ABSOLUTE_ROOT_TOOLS = [
   "git_diff_summary",
 ] as const;
 
+export const READ_ONLY_SINGLE_REPO_TOOLS = [
+  "git_diff",
+  "git_show",
+  "git_worktree_list",
+  "git_stash_list",
+] as const;
+
 export const MUTATING_TOOLS = [
+  "git_fetch",
   "batch_commit",
   "git_push",
   "git_merge",
   "git_cherry_pick",
   "git_reset_soft",
+  "git_tag",
   "git_worktree_add",
   "git_worktree_remove",
+  "git_stash_apply",
 ] as const;
 
 export const ALL_PARAMETER_SCHEMA_TOOLS = [
   ...READ_ONLY_ABSOLUTE_ROOT_TOOLS,
-  "git_worktree_list",
+  ...READ_ONLY_SINGLE_REPO_TOOLS,
   ...MUTATING_TOOLS,
 ] as const;
 
@@ -85,14 +100,20 @@ export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> 
     registerListPresetsTool(server);
     registerGitLogTool(server);
     registerGitDiffSummaryTool(server);
+    registerGitDiffTool(server);
+    registerGitShowTool(server);
     registerGitWorktreeListTool(server);
+    registerGitStashListTool(server);
+    registerGitFetchTool(server);
     registerBatchCommitTool(server);
     registerGitPushTool(server);
     registerGitMergeTool(server);
     registerGitCherryPickTool(server);
     registerGitResetSoftTool(server);
+    registerGitTagTool(server);
     registerGitWorktreeAddTool(server);
     registerGitWorktreeRemoveTool(server);
+    registerGitStashApplyTool(server);
   });
 
   return Object.fromEntries(

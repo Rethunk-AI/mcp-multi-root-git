@@ -4,6 +4,7 @@ import {
   buildToolParameterSchemaDocument,
   MUTATING_TOOLS,
   READ_ONLY_ABSOLUTE_ROOT_TOOLS,
+  READ_ONLY_SINGLE_REPO_TOOLS,
 } from "./tool-parameter-schemas.js";
 
 describe("buildToolParameterSchemaDocument", () => {
@@ -12,7 +13,7 @@ describe("buildToolParameterSchemaDocument", () => {
     const toolNames = Object.keys(doc.tools).sort();
 
     expect(toolNames).toEqual(
-      [...READ_ONLY_ABSOLUTE_ROOT_TOOLS, "git_worktree_list", ...MUTATING_TOOLS].sort(),
+      [...READ_ONLY_ABSOLUTE_ROOT_TOOLS, ...READ_ONLY_SINGLE_REPO_TOOLS, ...MUTATING_TOOLS].sort(),
     );
     expect(doc.tools.git_push.properties).toHaveProperty("setUpstream");
   });
