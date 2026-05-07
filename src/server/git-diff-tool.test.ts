@@ -5,7 +5,21 @@
  * and generates appropriate labels for various diff scenarios.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { registerGitDiffTool } from "./git-diff-tool.js";
+import {
+  addCommit,
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+  mkTmpDir,
+} from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
 
 // Test parameter validation and arg building
 describe("git_diff tool parameter handling", () => {
@@ -101,5 +115,75 @@ describe("git_diff tool range labels", () => {
     const label = "main..feature (src/main.ts)";
     expect(label).toContain("main..feature");
     expect(label).toContain("(src/main.ts)");
+  });
+});
+
+describe("git_diff execute handler", () => {
+  test("returns unstaged diff in json format", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    appendFileSync(join(repo, "seed.txt"), "changed\n");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo, format: "json" });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
+
+    expect(parsed.range).toBe("unstaged changes");
+    expect(parsed.diff).toContain("+changed");
+  });
+
+  test("returns staged path-scoped diff in markdown format", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    appendFileSync(join(repo, "seed.txt"), "staged\n");
+    gitCmd(repo, "add", "seed.txt");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo, staged: true, path: "seed.txt" });
+
+    expect(text).toContain("# Diff: staged changes (seed.txt)");
+    expect(text).toContain("```diff");
+    expect(text).toContain("+staged");
+  });
+
+  test("returns range diff with implicit HEAD", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const base = gitCmd(repo, "rev-parse", "HEAD").trim();
+    addCommit(repo, "later.txt", "later\n", "chore: later");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo, base, format: "json" });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
+
+    expect(parsed.range).toBe(`${base}..HEAD`);
+    expect(parsed.diff).toContain("later.txt");
+  });
+
+  test("returns no changes message for clean unstaged markdown diff", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo });
+
+    expect(text).toContain("# Diff: unstaged changes");
+    expect(text).toContain("_(no changes)_");
+  });
+
+  test("rejects unsafe range tokens", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo, base: "main;rm", format: "json" });
+    const parsed = JSON.parse(text) as { error: string };
+
+    expect(parsed).toEqual({ error: "unsafe_range_token" });
+  });
+
+  test("returns not_a_git_repository for invalid workspaceRoot", async () => {
+    const plainDir = mkTmpDir("mcp-git-diff-plain-");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: plainDir, format: "json" });
+    const parsed = JSON.parse(text) as { error: string };
+
+    expect(parsed.error).toBe("not_a_git_repository");
   });
 });
