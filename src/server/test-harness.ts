@@ -88,10 +88,14 @@ export function writeTestGitConfig(repo: string): void {
 // Fake server
 // ---------------------------------------------------------------------------
 
-function makeFakeServer(): { server: FastMCP; tools: CapturedTool[] } {
+function makeFakeServer(roots: string[] = []): { server: FastMCP; tools: CapturedTool[] } {
   const tools: CapturedTool[] = [];
   const server = {
-    sessions: [],
+    sessions: [
+      {
+        roots: roots.map((uri) => ({ uri })),
+      },
+    ],
     addTool(tool: { name: string; parameters?: unknown; execute: ExecuteFn }) {
       tools.push({ name: tool.name, parameters: tool.parameters, execute: tool.execute });
     },
@@ -114,8 +118,9 @@ function makeFakeServer(): { server: FastMCP; tools: CapturedTool[] } {
 export function captureTool(
   register: (server: FastMCP) => void,
   toolName?: string,
+  roots: string[] = [],
 ): (args: AnyRecord) => Promise<string> {
-  const { server, tools } = makeFakeServer();
+  const { server, tools } = makeFakeServer(roots);
   register(server);
 
   const pick = toolName ? tools.find((t) => t.name === toolName) : tools[0];

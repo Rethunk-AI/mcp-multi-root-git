@@ -18,11 +18,15 @@ function uriToPath(uri: string): string | null {
 
 function listFileRoots(server: FastMCP): string[] {
   const sessions = server.sessions;
-  const roots = sessions[0]?.roots ?? [];
   const paths: string[] = [];
-  for (const root of roots) {
-    const p = uriToPath(root.uri);
-    if (p) paths.push(p);
+  const seen = new Set<string>();
+  for (const session of sessions) {
+    for (const root of session.roots ?? []) {
+      const p = uriToPath(root.uri);
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      paths.push(p);
+    }
   }
   return paths;
 }

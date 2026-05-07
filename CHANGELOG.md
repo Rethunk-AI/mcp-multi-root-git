@@ -7,6 +7,7 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 ### Fixed
 
 - Regenerated **`tool-parameters.schema.json`** so `schema:tools:check` matches registered tools (CI).
+- **MCP roots** — Workspace root collection now scans active MCP sessions and dedupes `file://` roots, preserving global-install behavior across roots-capable clients instead of relying on a fixed server `cwd`.
 
 ## [2.3.4] — 2026-04-26
 

@@ -537,7 +537,7 @@ Order applied when resolving which directory(ies) tools run against:
 2. **`rootIndex`** (0-based) — one `file://` MCP root when several exist.
 3. **`allWorkspaceRoots`: true** — every `file://` root; markdown output emits one `# {tool}` header with per-root subsections (`git_inventory` uses `### {gitTop}`; `git_status` uses `### MCP root: ...`), or combined JSON.
 4. **`preset`** set and multiple roots — first root whose git toplevel defines that preset (respecting **`workspaceRootHint`** on the preset entry when present).
-5. Otherwise the first `file://` root from MCP **`initialize`** / **`roots/list_changed`**.
+5. Otherwise the first `file://` root reported by the MCP client through **`roots/list`**.
 6. **`process.cwd()`** if no file roots (e.g. CI with explicit `workspaceRoot`).
 
-Roots come from the MCP session (**`FastMCP` with `roots: { enabled: true }`** in code); there is no fixed `cwd` in server config.
+Roots come from active MCP sessions (**`FastMCP` with `roots: { enabled: true }`** in code); there is no fixed `cwd` in server config. This is what allows one globally installed server to follow the workspace opened in VS Code, Claude Code, Cursor, or any other roots-capable MCP client.

@@ -54,6 +54,21 @@ describe("workspace root resolution", () => {
     expect(parsed.groups?.[1]?.mcpRoot).toBe(b);
   });
 
+  test("uses MCP client roots when workspaceRoot is omitted", async () => {
+    const a = mkTmpDir("mcp-root-a-");
+    const b = mkTmpDir("mcp-root-b-");
+    gitInitMain(a);
+    gitInitMain(b);
+    const run = captureTool(registerGitStatusTool, undefined, [
+      `file://${a}`,
+      "vscode-remote://ssh-remote/ignored",
+      `file://${b}`,
+    ]);
+    const text = await run({ allWorkspaceRoots: true, format: "json" });
+    const parsed = JSON.parse(text) as { groups?: { mcpRoot: string }[] };
+    expect(parsed.groups?.map((g) => g.mcpRoot)).toEqual([a, b]);
+  });
+
   test("absoluteGitRoots dedupes same repo (nested path + root)", async () => {
     const a = mkTmpDir("abs-root-dedupe-");
     gitInitMain(a);
