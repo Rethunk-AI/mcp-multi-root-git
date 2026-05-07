@@ -29,6 +29,11 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/list-presets-tool.ts`](src/server/list-presets-tool.ts) | `list_presets` |
 | [`src/server/git-log-tool.ts`](src/server/git-log-tool.ts) | `git_log` — v3 JSON shape: `sha` (full), `workspaceRoot`, no `sha7`/`ageRelative`, optional `email` |
 | [`src/server/git-diff-summary-tool.ts`](src/server/git-diff-summary-tool.ts) | `git_diff_summary` — structured token-efficient diff viewer; read-only |
+| [`src/server/git-diff-tool.ts`](src/server/git-diff-tool.ts) | `git_diff` — raw scoped diff text; read-only |
+| [`src/server/git-show-tool.ts`](src/server/git-show-tool.ts) | `git_show` — inspect commit message + diff or file content at a ref; read-only |
+| [`src/server/git-stash-tool.ts`](src/server/git-stash-tool.ts) | `git_stash_list`, `git_stash_apply` |
+| [`src/server/git-fetch-tool.ts`](src/server/git-fetch-tool.ts) | `git_fetch` — fetch remote refs without touching the working tree |
+| [`src/server/git-tag-tool.ts`](src/server/git-tag-tool.ts) | `git_tag` — create/delete annotated or lightweight tags |
 | [`src/server/git-worktree-tool.ts`](src/server/git-worktree-tool.ts) | `git_worktree_list`, `git_worktree_add`, `git_worktree_remove` |
 | [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating; exports `PushReport`, `runPushAfter` |
 | [`src/server/git-push-tool.ts`](src/server/git-push-tool.ts) | `git_push` — standalone push with optional upstream tracking |
@@ -44,7 +49,7 @@ IDEs injecting this as context: do not re-link from rules.
 - **No banner paragraphs** in shipped docs. Use normal titles + cross-links.
 - **JSON format version** (currently `"3"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false. v3 changes in `git_log`: `sha7` → `sha` (full SHA), `workspace_root` → `workspaceRoot`, `ageRelative` removed, `email` omitted when empty.
 - **Preset file:** keep `presets.ts` Zod schemas aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
-- **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned). Install/client wiring → [docs/install.md](docs/install.md) only. `.cursor/rules/rethunk-git-mcp.mdc` → only when *MCP-vs-shell* guidance changes.
+- **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned). Install/client wiring → [docs/install.md](docs/install.md) only.
 
 ## Validate + CI
 
@@ -58,9 +63,9 @@ Path confinement: [`src/repo-paths.ts`](src/repo-paths.ts) — extend tests when
 
 Rules for LLMs operating in or against this repository.
 
-**End-user Git/MCP preference** (status/log/diff/commits): **`~/.claude/CLAUDE.md`** § **Git & GitHub** — same policy when dogfooding this server from a harness. Repo-local Cursor rule: [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc).
+**End-user Git/MCP preference** (status/log/diff/commits): **`~/.claude/CLAUDE.md`** § **Git & GitHub** — same policy when dogfooding this server from a harness.
 
-**Mutating tools require workspace-root confirmation** — `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
+**Mutating tools require workspace-root confirmation** — `git_fetch`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft`, `git_tag`, and `git_stash_apply` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
 
 **`batch_commit` atomic staging — single call per logical change** — Do NOT attempt incremental staging across multiple `batch_commit` calls. Each call is self-contained: it stages all files in all entries, commits them sequentially, and the moment the call completes, all commits have landed. Include all related files (for all related commit entries) in a single `batch_commit` call. A call cannot be resumed or extended by a later call — each is an independent transaction. If entry N fails, entries before N remain committed; entries after N are skipped (not rolled back).
 
@@ -78,6 +83,6 @@ Rules for LLMs operating in or against this repository.
 
 Dogfood from clone: [docs/install.md](docs/install.md) — *From source*.
 
-Repo ships [`.cursor/rules/rethunk-git-mcp.mdc`](.cursor/rules/rethunk-git-mcp.mdc) (`alwaysApply`) for client-side selection; client Git policy is still **`~/.claude/CLAUDE.md`** § Git & GitHub (see **End-user Git/MCP preference** above).
+Client Git policy is still **`~/.claude/CLAUDE.md`** § Git & GitHub (see **End-user Git/MCP preference** above).
 
 User-level skills may mention README for discovery. Canonical refs: tools/JSON → [docs/mcp-tools.md](docs/mcp-tools.md); install → [docs/install.md](docs/install.md); presets → [HUMANS.md](HUMANS.md).

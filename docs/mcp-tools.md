@@ -17,14 +17,20 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format`. **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
+| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, optionally scoped to one path. Args: `base?`, `head?`, `path?`, `staged?`, plus single-repo workspace pick + `format`. **Read-only.** |
+| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff, or file content at `path` for that ref. Args: `ref`, `path?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
+| `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: single-repo workspace pick + `format`. **Read-only.** |
+| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus single-repo workspace pick + `format`. **Mutating — refs only.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. Workspace pick + `format`. **Mutating.** |
+| `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus single-repo workspace pick + `format`. **Mutating.** |
 | `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus workspace pick + `format`. **Mutating.** |
 | `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees. Args: `path`, `force?`, plus workspace pick + `format`. **Mutating.** |
 | `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus workspace pick + `format`. **Mutating — not idempotent.** |
-| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files then commits with the given message. Stops on first failure. Optional `push: "after"` pushes the current branch to its upstream once every commit lands. Args: `commits` (array of `{message, files}`), `push?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
+| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + workspace pick + `format`. **Mutating.** |
 | `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped). Args: `sources`, `onto?`, cleanup flags + workspace pick + `format`. **Mutating.** |
+| `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo. Args: `index?`, `pop?`, plus single-repo workspace pick + `format`. **Mutating.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -179,6 +185,122 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 
 ---
 
+### `git_diff` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. |
+| `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. |
+| `path` | string | — | Optional single file path to scope the diff. |
+| `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_diff` — JSON shape (`format: "json"`)
+
+```json
+{
+  "range": "HEAD~1..HEAD (src/server.ts)",
+  "diff": "diff --git a/src/server.ts b/src/server.ts\n..."
+}
+```
+
+### `git_diff` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_range_token` | `base` or `head` contains characters outside the argv-safe subset. |
+| `git_diff_failed` | `git diff` exited non-zero. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_show` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. |
+| `path` | string | Optional single path. When provided, the response shows that path's content at `ref` instead of the full commit diff. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_show` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ref": "HEAD",
+  "message": "feat: add tool",
+  "path": "src/server.ts",
+  "diff": "diff --git a/src/server.ts b/src/server.ts\n..."
+}
+```
+
+`path` is omitted when not requested. `diff` is omitted when `git show` returns only a commit message.
+
+### `git_show` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_show_failed` | `git show` exited non-zero (e.g. unknown ref). |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_stash_list` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_stash_list` — JSON shape (`format: "json"`)
+
+```json
+{
+  "stashes": [
+    { "index": 0, "message": "WIP on main: abc1234 feat: add tool", "sha": "abc1234" }
+  ]
+}
+```
+
+### `git_stash_list` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `stash_list_failed` | `git stash list` failed unexpectedly. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_fetch` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `remote` | string | `"origin"` | Remote to fetch from. |
+| `branch` | string | — | Optional branch/ref to fetch from that remote. |
+| `prune` | boolean | `false` | Pass `--prune` to remove deleted remote-tracking refs. |
+| `tags` | boolean | `false` | Pass `--tags` to also fetch all tags. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_fetch` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ok": true,
+  "remote": "origin",
+  "updatedRefs": ["abc1234..def5678  main       -> origin/main"],
+  "newRefs": ["[new tag]        v2.0.0     -> v2.0.0"],
+  "output": "From origin\n..."
+}
+```
+
+Fetch failures are reported as `ok: false` with the captured git output in `output`.
+
+### `git_fetch` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
 ### `batch_commit` — atomic staging semantics
 
 **Critical for AI agents:** Each call to `batch_commit` is **self-contained and atomic per-commit entry**.
@@ -205,8 +327,9 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `commits` | `{message: string, files: string[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is a path relative to the git root; all must stay within the git toplevel. |
+| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either a path relative to the git root or a `{path, lines}` object for hunk-level staging. All paths must stay within the git toplevel. |
 | `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. Enum reserved for future modes such as `"force-with-lease"`. |
+| `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
 | `workspaceRoot` | string | Explicit root; highest priority. |
 | `rootIndex` | int | Pick one of several MCP roots (0-based). |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
@@ -240,6 +363,8 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 ```
 
 On first failure `ok` is `false`, `committed` reflects only the entries that succeeded before the error, and the failing entry includes `error` and `detail` fields. Remaining entries are skipped and not included in `results`.
+
+When `dryRun: true`, the top-level response includes `dryRun: true`; successful `results[*]` entries omit `sha` and instead include `staged` and `diffStat`.
 
 The `push` object is present only when `push: "after"` was requested **and** every commit landed. On push failure the top-level `ok` stays `true` (the commits themselves succeeded) while `push.ok` is `false` and `push.error` carries the code.
 
@@ -421,6 +546,39 @@ For already-committed work, call **`git_push`** directly instead of creating an 
 
 ---
 
+### `git_tag` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `tag` | string | — | Tag name to create or delete. |
+| `message` | string | — | When provided, creates an annotated tag; otherwise creates a lightweight tag. |
+| `ref` | string | `HEAD` | Commit/ref to tag. Ignored when `delete: true`. |
+| `delete` | boolean | `false` | Delete the named tag instead of creating it. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_tag` — JSON shape (`format: "json"`)
+
+```json
+{ "tag": "v2.3.5", "type": "annotated", "sha": "a1b2c3d4e5f6..." }
+```
+
+For deletions, `type` is `"deleted"` and `sha` is an empty string.
+
+### `git_tag` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `tag_empty` | `tag` trimmed to an empty string. |
+| `tag_unsafe` | `tag` contains disallowed characters. |
+| `ref_unsafe` | `ref` contains disallowed characters. |
+| `ref_not_found` | `ref` did not resolve to a commit. |
+| `tag_create_failed` | `git tag` failed while creating the tag. |
+| `tag_delete_failed` | `git tag -d` failed. |
+| `tag_verification_failed` | The tag could not be read back after creation. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
 ### `git_reset_soft` — parameters
 
 | Parameter | Type | Notes |
@@ -442,6 +600,35 @@ For already-committed work, call **`git_push`** directly instead of creating an 
 | `working_tree_dirty` | Working tree has uncommitted/unstaged changes; clean up before resetting. |
 | `status_failed` | `git status` failed unexpectedly. |
 | `reset_failed` | `git reset --soft` failed (e.g. ref does not exist). |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_stash_apply` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `index` | int | `0` | Stash index to apply/pop (`stash@{index}`). |
+| `pop` | boolean | `false` | When `true`, runs `git stash pop` instead of `git stash apply`. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_stash_apply` — JSON shape (`format: "json"`)
+
+```json
+{
+  "applied": true,
+  "stashIndex": 0,
+  "popped": false,
+  "output": "On branch main\nChanges not staged for commit:\n..."
+}
+```
+
+`output` is omitted when git produced no stdout/stderr text.
+
+### `git_stash_apply` — error codes
+
+| Code | Meaning |
+|------|---------|
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---

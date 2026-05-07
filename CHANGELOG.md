@@ -4,10 +4,26 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Added
+
+- Published parameter schemas and canonical docs for the remaining registered tools: **`git_diff`**, **`git_show`**, **`git_stash_list`**, **`git_stash_apply`**, **`git_fetch`**, and **`git_tag`**.
+
+### Changed
+
+- **`git_show`** now uses the standard single-repo workspace pick (`workspaceRoot` / `rootIndex`) instead of a raw `wd` parameter.
+- **`git_fetch`** and **`git_tag`** now align with the single-repo mutating-tool contract: no `absoluteGitRoots` or `allWorkspaceRoots`.
+
 ### Fixed
 
 - Regenerated **`tool-parameters.schema.json`** so `schema:tools:check` matches registered tools (CI).
 - **MCP roots** — Workspace root collection now scans active MCP sessions and dedupes `file://` roots, preserving global-install behavior across roots-capable clients instead of relying on a fixed server `cwd`.
+- **README schema docs** now correctly describe the shipped schemas as **draft 2020-12** and count all **20** published tool schemas.
+- **CI/release Bun pin** now matches `packageManager` (`bun@1.3.13`).
+- **`publish:preflight`** now writes temporary coverage output under the platform temp dir instead of a hard-coded `/tmp` path.
+
+### Documentation
+
+- **`TODO.md`** backlog entries now reflect genuine remaining gaps instead of listing already-implemented tools as missing.
 
 ## [2.3.4] — 2026-04-26
 

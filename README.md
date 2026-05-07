@@ -14,7 +14,7 @@
 |-----|----------|
 | **[docs/install.md](docs/install.md)** | Single source for prerequisites, running the package, and every supported MCP client (plus from-source and troubleshooting) |
 | **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, `format` / JSON, resource URI, workspace root resolution (canonical reference) |
-| **[schemas/index.json](schemas/index.json)** | Published JSON schemas for all MCP tool parameters (JSON Schema draft-07 format) |
+| **[schemas/index.json](schemas/index.json)** | Published JSON schemas for all MCP tool parameters (JSON Schema draft 2020-12 format) |
 | **[HUMANS.md](HUMANS.md)** | Preset file, dev commands, CI, publishing |
 | **[AGENTS.md](AGENTS.md)** | Contributors: implementation map ([`src/server/`](src/server/) + entry [`src/server.ts`](src/server.ts)), contract bumps, CI |
 
@@ -22,10 +22,10 @@
 
 ## JSON Schemas
 
-All MCP tool parameters are published as JSON Schema (draft-07) documents in the **[`schemas/`](schemas/)** directory. Tools and validators can use these schemas to validate tool input arguments without reading source code.
+All MCP tool parameters are published as JSON Schema (draft 2020-12) documents in the **[`schemas/`](schemas/)** directory. Tools and validators can use these schemas to validate tool input arguments without reading source code.
 
 **Schema files:**
-- `schemas/index.json` — Index of all 14 tool schemas with file paths
+- `schemas/index.json` — Index of all 20 tool schemas with file paths
 - `schemas/{tool_name}.json` — Individual schema for each tool (e.g., `schemas/batch_commit.json`, `schemas/git_status.json`)
 
 For programmatic use, read `schemas/index.json` to discover available tools and their schema files.

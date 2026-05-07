@@ -202,7 +202,7 @@ For contributors working inside a clone of [mcp-multi-root-git](https://github.c
 1. **Dependencies, build, and CI parity:** **[HUMANS.md](../HUMANS.md)** — *Development* (`bun install`, `bun run build`, `bun run check`). Do not duplicate that workflow here.
 2. **Run the dev server** (no `dist/` required): from the repo root, **`bun src/server.ts`** (stdio MCP).
 
-**MCP registration for a local checkout:** point your client at that command (or at **`dist/server.js`** via `node` after `bun run build` — see HUMANS). **Cursor:** this repo may ship an example **`.cursor/mcp.json`** using `bun` + `["src/server.ts"]`; open the workspace at the repository root so relative args resolve.
+**MCP registration for a local checkout:** point your client at that command (or at **`dist/server.js`** via `node` after `bun run build` — see HUMANS). **Cursor:** add the command to either your user-scope or project-scope `mcp.json`, and open the workspace at the repository root so relative args resolve.
 
 **Reload** the MCP connection after changing server code.
 

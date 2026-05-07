@@ -2,75 +2,34 @@
 
 Feature asks driven by real pain points from agent sessions. Each item lists the motivating scenario and the expected tool shape.
 
-## High value — reduce Bash fallback
+## High value — deepen current tools
 
-### `batch_commit` — `stage` argument for path/hunk scoping
+### `git_diff` — multi-path + context controls
 
-**Pain:** `batch_commit` stages whole files atomically. Subagents asked to produce N commits from a single file edit cannot split post-hoc (sandbox blocks `git reset --soft`; `git rebase -i` is interactive).
-
-**Ask:** Allow scoped staging:
-
-```ts
-batch_commit({
-  stage: { paths: ["Makefile"], hunks: [{ file: "Makefile", lines: "120-180" }] },
-  message: "feat(make): add sbom target"
-})
-```
-
-Path-level `files: string[]` already exists per-entry on `batch_commit`. Remaining gap is hunk-level staging via `git add -p` patch interface.
-
-### `git_worktree_add` / `git_worktree_remove` / `git_worktree_list` ✓ implemented
-
-### `git_reset_soft` MCP tool ✓ implemented
-
-## Medium value — ergonomics
-
-### `git_diff` — scoped
-
-**Pain:** `git_diff_summary` is aggregate; sometimes need the actual diff text for a specific file/range. Currently Bash fallback.
+**Pain:** `git_diff` now covers a single optional path plus base/head or staged mode, but agents still sometimes need one call that spans multiple paths with explicit context width.
 
 **Ask:**
 
 ```ts
-git_diff({ paths?: string[], base?: "HEAD~1", target?: "HEAD", unified?: 3 })
+git_diff({ paths?: string[], base?: "HEAD~1", head?: "HEAD", unified?: 3 })
 ```
 
-### `git_show` MCP tool
+### `git_show` — stat / multi-path modes
 
-**Pain:** Inspecting a subagent branch's commits uses Bash `git show <sha>`. Should be covered.
+**Pain:** `git_show` now covers a ref plus one optional path, but some sessions only need `--stat` output or a filtered set of paths without full patch text.
 
 **Ask:**
 
 ```ts
-git_show({ ref: "sha", stat?: boolean, paths?: string[] })
+git_show({ ref: "sha", stat?: true, paths?: string[] })
 ```
 
-### `batch_commit` — `dry_run: true`
-
-**Pain:** Agent wants to verify staging is what it thinks before committing. Today: commit, inspect, reset (blocked), retry.
-
-**Ask:** `dry_run: true` reports what would be committed (files, message, diff summary) without writing.
-
-## Low value — nice to have
-
-### `git_stash_apply` / `git_stash_list` MCP tools
-
-Currently Bash. Stash flows come up occasionally in agent sessions when a conflict needs to be set aside.
-
-### `git_tag` MCP tool
-
-For release workflows: `git_tag({ name: "v0.6.0", message: "Release 0.6.0", signed?: false })`.
+## Medium value — nice to have
 
 ### `git_fetch` MCP tool
 
-With structured output: `{ updated: [{ ref, oldSha, newSha }], newRefs: [...] }`.
+Current output is string-based (`updatedRefs[]`, `newRefs[]`). Remaining gap is richer structured deltas:
 
-## Non-tool asks
-
-### Document `batch_commit` atomic-stage semantics
-
-In `docs/` README: state clearly that `batch_commit` stages listed files atomically before creating the commit, so N back-to-back calls to `batch_commit` on the same file cannot produce N commits with distinct content. Agents routinely expect per-call incremental semantics.
-
-### Publish JSON schemas for all MCP tool args
-
-Helps agents validate calls locally before invoking. Also eases codegen for skill builders.
+```ts
+git_fetch({ updated: [{ ref, oldSha, newSha }], newRefs: [...] })
+```
