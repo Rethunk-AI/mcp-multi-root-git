@@ -107,7 +107,7 @@ On a 4-core machine (CPU count = 4), the max parallelism is clamped to 8 (2×4).
 
 **User scope (all workspaces):** `~/.cursor/mcp.json` on macOS/Linux, or `%USERPROFILE%\.cursor\mcp.json` on Windows.
 
-**Project scope:** `.cursor/mcp.json` in the workspace (often committed for team dogfooding).
+**Project scope:** `.cursor/mcp.json` in the workspace (use when a team wants repo-local MCP wiring).
 
 Cursor uses a top-level **`mcpServers`** object:
 

@@ -55,19 +55,21 @@ If you installed from **GitHub Packages**, use **`./node_modules/@rethunk-ai/mcp
 
 ## Tool parameter schema artifact
 
-The package ships **`tool-parameters.schema.json`**, a generated JSON Schema snapshot of every registered tool's parameter schema. Maintainers regenerate it with:
+The package ships **`tool-parameters.schema.json`**, a generated JSON Schema snapshot of every registered tool's parameter schema, plus the published **`schemas/`** directory with **`schemas/index.json`** and one per-tool JSON Schema file. Maintainers regenerate them with:
 
 ```bash
 bun run schema:tools
+bun run schema:individual
 ```
 
 CI and `prepublishOnly` use:
 
 ```bash
 bun run schema:tools:check
+bun run schema:individual
 ```
 
-This artifact is for inspection, drift checks, and clients that want an offline schema snapshot. Runtime MCP schema discovery remains the source of truth for connected clients.
+These artifacts are for inspection, drift checks, code generation, and clients that want offline schema snapshots. Runtime MCP schema discovery remains the source of truth for connected clients.
 
 **Layouts:**
 
@@ -152,9 +154,15 @@ Call tools by their registered id (prefix depends on client config name):
 | Compare HEAD between path pairs | `git_parity` |
 | List preset names | `list_presets` |
 | View commit log | `git_log` |
-| View diff | `git_diff_summary` |
+| View structured diff | `git_diff_summary` |
+| View raw diff text | `git_diff` |
+| Inspect commit content | `git_show` |
+| List stashes | `git_stash_list` |
+| Apply or pop a stash | `git_stash_apply` |
+| Fetch remote refs | `git_fetch` |
 | Create commits | `batch_commit` |
 | Push a branch | `git_push` |
+| Create or delete tags | `git_tag` |
 | Merge branches | `git_merge` |
 | Cherry-pick commits | `git_cherry_pick` |
 | Soft-reset HEAD | `git_reset_soft` |
@@ -191,7 +199,7 @@ Before tagging, run the clean-tree preflight from the release commit:
 bun run publish:preflight
 ```
 
-It verifies the `package.json` version has a matching `CHANGELOG.md` section, generated tool schemas are current, build/check/coverage pass, and `npm pack --dry-run` includes the expected package files.
+It verifies the `package.json` version has a matching `CHANGELOG.md` section, both schema artifacts are current, build/check/coverage pass, and `npm pack --dry-run` includes the expected package files.
 
 ### npmjs (manual) — maintainers only
 

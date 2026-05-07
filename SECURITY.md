@@ -16,7 +16,7 @@ When reporting a vulnerability, please include:
 
 ## Scope & Risk Profile
 
-`mcp-multi-root-git` is an MCP server that exposes git operations (status, log, diff, commit, push, merge) to LLMs. It has security implications due to git workflow access and repository state modification.
+`mcp-multi-root-git` is an MCP server that exposes git operations (status, log, diff, show, fetch, commit, push, merge, stash, tag, and reset) to LLMs. It has security implications due to git workflow access and repository state modification.
 
 ### Git Repository Access
 - **Critical:** Server operates on local git repositories with user permissions
@@ -25,13 +25,13 @@ When reporting a vulnerability, please include:
 - Token/credential handling for remote operations (push, pull)
 
 ### Write Operations Risk
-- **High:** `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick` modify repository state
-- These operations can rewrite history, overwrite branches, lose commits if misused
-- Implement safeguards against destructive operations (force-push, rebase on shared branches)
-- Validate branch names and merge targets before operations
+- **High:** `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft`, `git_tag`, `git_stash_apply`, and `git_fetch` modify repository state or refs
+- These operations can rewrite history, overwrite refs, lose commits if misused, or apply changes the operator did not intend
+- Implement safeguards against destructive operations (force-push, reset misuse, unsafe merge targets)
+- Validate branch names, refs, stash indices, and merge targets before operations
 
 ### Repository Credentials
-- **Medium:** Push operations require git credentials (SSH keys, PAT tokens, or git credentials storage)
+- **Medium:** Push and fetch operations may require git credentials (SSH keys, PAT tokens, or git credentials storage)
 - SSH agent socket access required for SSH authentication
 - Credentials should never be logged or exposed
 - Validate that credentials are not embedded in code or environment
@@ -67,8 +67,8 @@ When reporting a vulnerability, please include:
 - Document credential setup requirements
 
 ### Dependency Management
-- Keep git CLI up-to-date for security patches
-- Monitor `simple-git` or git wrapper library for security updates
+- Keep the git CLI, Node.js runtime, and Bun toolchain up-to-date for security patches
+- Monitor core dependencies such as `fastmcp` and `zod` for security advisories
 - Run `bun audit` regularly; address high/critical vulnerabilities
 
 ### Multi-Root Workspace Setup
@@ -114,4 +114,4 @@ If a security vulnerability is discovered:
 
 ---
 
-**Last updated:** 2026-04-27
+**Last updated:** 2026-05-07

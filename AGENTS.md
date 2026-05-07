@@ -9,6 +9,7 @@ IDEs injecting this as context: do not re-link from rules.
 - Tools, JSON shape, resources, root resolution → [docs/mcp-tools.md](docs/mcp-tools.md)
 - Dev setup, CI, commit conventions → [CONTRIBUTING.md](CONTRIBUTING.md)
 - Presets, auth, publish → [HUMANS.md](HUMANS.md)
+- Spec layout for repo planning → [specs/README.md](specs/README.md)
 
 ## Implementation map
 
@@ -41,7 +42,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/git-cherry-pick-tool.ts`](src/server/git-cherry-pick-tool.ts) | `git_cherry_pick` — mutating |
 | [`src/server/git-reset-soft-tool.ts`](src/server/git-reset-soft-tool.ts) | `git_reset_soft` — soft-reset; mutating |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
-| [`src/server/tool-parameter-schemas.ts`](src/server/tool-parameter-schemas.ts) | `buildToolParameterSchemaDocument`, `captureToolParameterSchemas`; backs `tool-parameters.schema.json` |
+| [`src/server/tool-parameter-schemas.ts`](src/server/tool-parameter-schemas.ts) | `buildToolParameterSchemaDocument`, `captureToolParameterSchemas`; backs `tool-parameters.schema.json` and published `schemas/*.json` snapshots |
 | [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop` |
 
 ## Changing contracts
@@ -49,7 +50,7 @@ IDEs injecting this as context: do not re-link from rules.
 - **No banner paragraphs** in shipped docs. Use normal titles + cross-links.
 - **JSON format version** (currently `"3"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false. v3 changes in `git_log`: `sha7` → `sha` (full SHA), `workspace_root` → `workspaceRoot`, `ageRelative` removed, `email` omitted when empty.
 - **Preset file:** keep `presets.ts` Zod schemas aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
-- **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned). Install/client wiring → [docs/install.md](docs/install.md) only.
+- **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned), then regenerate the shipped schema artifacts (`tool-parameters.schema.json`, `schemas/index.json`, `schemas/*.json`). Install/client wiring → [docs/install.md](docs/install.md) only.
 
 ## Validate + CI
 
