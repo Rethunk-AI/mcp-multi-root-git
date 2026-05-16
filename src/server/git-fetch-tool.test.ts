@@ -1,12 +1,26 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
- * Unit tests for git_fetch tool output parsing and behavior.
- * These are integration-style tests that validate output structure
- * without requiring a live git repository.
+ * Tests for git_fetch tool: output parsing (unit) + execute path (integration).
  */
 
-// Simulated parseGitFetchOutput function for testing
+import { registerGitFetchTool } from "./git-fetch-tool.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithUpstream,
+  mkTmpDir,
+} from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
+
+// ---------------------------------------------------------------------------
+// Unit: parseGitFetchOutput (local copy to test parsing logic in isolation)
+// ---------------------------------------------------------------------------
+
 function parseGitFetchOutput(output: string): { updatedRefs: string[]; newRefs: string[] } {
   const lines = output.split("\n");
   const updatedRefs: string[] = [];
@@ -62,7 +76,6 @@ describe("git_fetch parseGitFetchOutput", () => {
     expect(result.updatedRefs.length).toBe(1);
     expect(result.updatedRefs).toContain("abc1234..def5678  main       -> origin/main");
     expect(result.newRefs.length).toBe(2);
-    // New refs include both [new branch] and [new tag] lines
     expect(result.newRefs).toEqual([
       expect.stringContaining("[new branch]"),
       expect.stringContaining("[new tag]"),
@@ -96,8 +109,6 @@ Some other message`;
  - [deleted]       origin/old-branch`;
 
     const result = parseGitFetchOutput(output);
-    // Deleted branches typically don't have " -> " in output, so won't be captured as updatedRefs
-    // This is expected behavior
     expect(result.updatedRefs).toEqual([]);
     expect(result.newRefs).toEqual([]);
   });
@@ -121,5 +132,76 @@ Some other message`;
     expect(result.updatedRefs[0]).toContain("refs/pull/123/head");
     expect(result.newRefs.length).toBe(1);
     expect(result.newRefs[0]).toContain("[new ref]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration: execute path via captureTool
+// ---------------------------------------------------------------------------
+
+describe("git_fetch execute handler", () => {
+  test("not_a_git_repository returns error in json format", async () => {
+    const plain = mkTmpDir("mcp-plain-fetch-");
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: plain, format: "json" });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("not_a_git_repository");
+  });
+
+  test("fetch from local bare remote succeeds (already up to date)", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-work-", "mcp-fetch-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: work, format: "json" });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      remote: string;
+      updatedRefs: string[];
+      newRefs: string[];
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.remote).toBe("origin");
+    expect(Array.isArray(parsed.updatedRefs)).toBe(true);
+    expect(Array.isArray(parsed.newRefs)).toBe(true);
+  });
+
+  test("fetch picks up new branch pushed to remote", async () => {
+    const { work, remote } = makeRepoWithUpstream("mcp-fetch-work2-", "mcp-fetch-remote2-");
+
+    // Push a new branch to the bare remote directly.
+    const cloneDir = mkTmpDir("mcp-fetch-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeFileSync(join(cloneDir, "extra.ts"), "export const x = 1;\n");
+    gitCmd(cloneDir, "checkout", "-b", "feature-new");
+    gitCmd(cloneDir, "add", "extra.ts");
+    gitCmd(cloneDir, "commit", "-m", "feat: extra");
+    gitCmd(cloneDir, "push", "origin", "feature-new");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: work, format: "json" });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      newRefs: string[];
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.newRefs.some((r) => r.includes("feature-new"))).toBe(true);
+  });
+
+  test("fetch markdown output contains success status", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-md-", "mcp-fetch-md-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: work });
+    expect(text).toContain("Git fetch from");
+    expect(text).toContain("Success");
+  });
+
+  test("fetch with invalid remote returns ok:false in json", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-bad-", "mcp-fetch-bad-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: work, format: "json", remote: "no-such-remote" });
+    const parsed = JSON.parse(text) as { ok: boolean };
+    expect(parsed.ok).toBe(false);
   });
 });
