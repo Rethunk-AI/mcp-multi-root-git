@@ -5,14 +5,84 @@
  * through the integration tests for git_merge and git_cherry_pick.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
+  isContentEquivalentlyMergedInto,
   isProtectedBranch,
   isSafeGitAncestorRef,
   isSafeGitRangeToken,
   isSafeGitRefToken,
 } from "./git-refs.js";
+import { cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
+
+afterEach(cleanupTmpPaths);
+
+// ---------------------------------------------------------------------------
+// Integration: isContentEquivalentlyMergedInto
+// ---------------------------------------------------------------------------
+
+function makeRepo(): string {
+  return makeRepoWithSeed("mcp-git-refs-test-");
+}
+
+function addFile(dir: string, name: string, content: string, msg: string): void {
+  writeFileSync(join(dir, name), content);
+  gitCmd(dir, "add", name);
+  gitCmd(dir, "commit", "-m", msg);
+}
+
+describe("isContentEquivalentlyMergedInto", () => {
+  test("returns true when branch is a direct ancestor of target (fast-forward merged)", async () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+
+    // Create feature branch at same commit, then add another commit on main.
+    gitCmd(dir, "checkout", "-b", "feature");
+    addFile(dir, "b.ts", "const b = 2;\n", "feat: b");
+    gitCmd(dir, "checkout", "main");
+    gitCmd(dir, "merge", "--ff-only", "feature");
+
+    expect(await isContentEquivalentlyMergedInto(dir, "feature", "main")).toBe(true);
+  });
+
+  test("returns false when branch has commits not on target", async () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+    gitCmd(dir, "checkout", "-b", "feature");
+    addFile(dir, "b.ts", "const b = 2;\n", "feat: b");
+    gitCmd(dir, "checkout", "main");
+    // Do NOT merge — feature is ahead of main.
+
+    expect(await isContentEquivalentlyMergedInto(dir, "feature", "main")).toBe(false);
+  });
+
+  test("returns true when cherry-picked commits are content-equivalent (different SHA)", async () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: base");
+
+    // Feature branch adds a commit.
+    gitCmd(dir, "checkout", "-b", "feature");
+    addFile(dir, "b.ts", "const b = 2;\n", "feat: b");
+    const featureSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    // Main advances so cherry-pick produces a different SHA.
+    gitCmd(dir, "checkout", "main");
+    addFile(dir, "c.ts", "const c = 3;\n", "feat: unrelated");
+    gitCmd(dir, "cherry-pick", featureSha);
+
+    expect(await isContentEquivalentlyMergedInto(dir, "feature", "main")).toBe(true);
+  });
+
+  test("returns false for unsafe ref tokens", async () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+    expect(await isContentEquivalentlyMergedInto(dir, "-bad-branch", "main")).toBe(false);
+    expect(await isContentEquivalentlyMergedInto(dir, "main", "-bad-target")).toBe(false);
+  });
+});
 
 describe("isProtectedBranch", () => {
   test("exact protected names are protected", () => {
