@@ -34,6 +34,229 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
+---
+
+### `git_status` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `includeSubmodules` | boolean | `true` | When `true`, reads `.gitmodules` at each git toplevel and runs `git status --short -b` for each checked-out submodule in parallel. Set `false` to skip submodule discovery entirely. |
+| `workspaceRoot` | string | — | Explicit root; highest priority. |
+| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
+| `absoluteGitRoots` | string[] | — | Explicit list of absolute paths; replaces normal workspace pick. Max 256. Read-only tools only. |
+| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+
+### `git_status` — JSON shape (`format: "json"`)
+
+```json
+{
+  "groups": [{
+    "mcpRoot": "/abs/workspace",
+    "repos": [
+      { "label": ".", "path": "/abs/workspace", "statusText": "## main...origin/main\nM src/foo.ts", "ok": true },
+      { "label": "sub", "path": "/abs/workspace/sub", "statusText": "## main...origin/main", "ok": true }
+    ]
+  }]
+}
+```
+
+One `groups` entry per resolved root. Each `repos` entry has `label` (relative path, `"."` for the root), `path` (absolute), `statusText` (full `git status --short -b` output), and `ok` (`false` when git failed or the submodule is not checked out).
+
+### `git_status` — error codes
+
+Error payloads appear as top-level JSON or inline in individual repo rows (`ok: false`):
+
+| Code / statusText | Context | Meaning |
+|-------------------|---------|---------|
+| `git_not_found` | top-level | `git` binary not on `PATH`. |
+| `not_a_git_repository` | repo row `statusText` | Root is not inside a git repository. |
+| `(submodule path escapes repository — rejected)` | repo row `statusText` | `.gitmodules` path resolves outside the git toplevel (security guard). |
+| `(no .git — submodule not checked out?)` | repo row `statusText` | Submodule directory exists but has no `.git` — not initialized. |
+| `root_index_out_of_range` | top-level | `rootIndex` exceeds the number of MCP file roots. |
+| `absolute_git_roots_exclusive` | top-level | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
+| `invalid_absolute_git_root` | top-level | An `absoluteGitRoots` entry is not a git-recognized directory. |
+| `absolute_git_roots_too_many` | top-level | More than 256 entries in `absoluteGitRoots`. |
+| `absolute_git_roots_empty` | top-level | `absoluteGitRoots` resolved to zero toplevels. |
+
+---
+
+### `git_inventory` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with `absoluteGitRoots` or `preset`. |
+| `preset` | string | — | Preset name from `.rethunk/git-mcp-presets.json`. Loads `nestedRoots` from the preset's entry. Cannot combine with `absoluteGitRoots`. |
+| `presetMerge` | boolean | `false` | When `true`, merge inline `nestedRoots` with preset roots instead of replacing. |
+| `remote` | string | — | Fixed remote for ahead/behind tracking. Must be paired with `branch`. |
+| `branch` | string | — | Fixed branch for ahead/behind tracking. Must be paired with `remote`. When both are absent the tool uses each repo's `@{u}` upstream. |
+| `maxRoots` | int | `64` | Max nested roots to process (1–256). Roots beyond the limit are omitted; `nestedRootsTruncated: true` and `nestedRootsOmittedCount` are set on the group. |
+| `workspaceRoot` | string | — | Explicit root; highest priority. |
+| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
+| `absoluteGitRoots` | string[] | — | Explicit list; replaces normal workspace pick. Cannot combine with `nestedRoots` or `preset`. |
+| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+
+### `git_inventory` — JSON shape (`format: "json"`)
+
+```json
+{
+  "inventories": [{
+    "workspace_root": "/abs/path",
+    "entries": [{
+      "label": ".",
+      "path": "/abs/path",
+      "upstreamMode": "auto",
+      "branchStatus": "## main...origin/main",
+      "headAbbrev": "a1b2c3d",
+      "upstreamRef": "origin/main",
+      "ahead": "2",
+      "behind": "0"
+    }],
+    "nestedRootsTruncated": true,
+    "nestedRootsOmittedCount": 3,
+    "upstream": { "mode": "fixed", "remote": "origin", "branch": "main" }
+  }]
+}
+```
+
+`nestedRootsTruncated` / `nestedRootsOmittedCount` present only when `maxRoots` cut the list. `upstream` object present only when `remote`+`branch` were supplied (fixed mode). `presetSchemaVersion` present only when a preset was loaded. See *v2/v3 field omission* for `entries[*]` optional fields.
+
+### `git_inventory` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `remote_branch_mismatch` | Only one of `remote` / `branch` was provided; supply both or neither. |
+| `invalid_remote_or_branch` | `remote` or `branch` contains characters outside the safe token set. |
+| `absolute_git_roots_nested_or_preset_conflict` | `absoluteGitRoots` combined with `nestedRoots` or `preset`. |
+| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
+| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` combined with a `preset` argument. |
+| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
+| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
+| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
+| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `preset_not_found` | Named preset does not exist in the preset file. |
+| `invalid_json` | Preset file contains invalid JSON. |
+| `invalid_schema` | Preset file fails schema validation. |
+
+Skip entries (individual repos that could not be inventoried) appear inline in `entries[*]` with `skipReason` rather than as top-level errors.
+
+---
+
+### `git_parity` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `pairs` | `{left: string, right: string, label?: string}[]` | Path pairs to compare. `left` and `right` are relative to the workspace git toplevel. `label` is optional display name; defaults to `"left / right"`. At least one pair required (via inline `pairs` or `preset`). |
+| `preset` | string | Preset name from `.rethunk/git-mcp-presets.json`. Loads `parityPairs` from the preset's entry. |
+| `presetMerge` | boolean | Default `false`. When `true`, merge inline `pairs` with preset pairs instead of replacing. |
+| `workspaceRoot` | string | Explicit root; highest priority. |
+| `rootIndex` | int | Pick one of several MCP roots (0-based). |
+| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
+| `absoluteGitRoots` | string[] | Explicit list of absolute paths; replaces normal workspace pick. Useful for checking parity across sibling clones. |
+| `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
+
+### `git_parity` — JSON shape (`format: "json"`)
+
+```json
+{
+  "parity": [{
+    "workspace_root": "/abs/path",
+    "status": "MISMATCH",
+    "pairs": [
+      {
+        "label": "shared",
+        "leftPath": "/abs/path/left",
+        "rightPath": "/abs/path/right",
+        "match": true,
+        "sha": "a1b2c3d4e5f6…"
+      },
+      {
+        "label": "config",
+        "leftPath": "/abs/path/cfg-a",
+        "rightPath": "/abs/path/cfg-b",
+        "match": false,
+        "leftSha": "a1b2c3d…",
+        "rightSha": "f9e8d7c…"
+      }
+    ]
+  }]
+}
+```
+
+`status` is `"OK"` when every pair matches, `"MISMATCH"` when any pair differs or errors. On a match, `sha` carries the common HEAD SHA. On a mismatch, `leftSha` / `rightSha` carry the differing SHAs. On error (path escape or `git rev-parse HEAD` failure), `error` carries a description string and both SHA fields are absent. `presetSchemaVersion` is present when a preset was loaded.
+
+### `git_parity` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `no_pairs` | Neither inline `pairs` nor a preset with `parityPairs` was supplied. |
+| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
+| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` combined with a `preset` argument. |
+| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
+| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
+| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
+| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `preset_not_found` | Named preset does not exist in the preset file. |
+| `invalid_json` | Preset file contains invalid JSON. |
+| `invalid_schema` | Preset file fails schema validation. |
+
+Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, not as top-level error codes.
+
+---
+
+### `list_presets` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `workspaceRoot` | string | Explicit root; highest priority. |
+| `rootIndex` | int | Pick one of several MCP roots (0-based). |
+| `allWorkspaceRoots` | boolean | Default `false`. Fan out across all MCP roots. |
+| `absoluteGitRoots` | string[] | Explicit list; replaces normal workspace pick. |
+| `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
+
+### `list_presets` — JSON shape (`format: "json"`)
+
+```json
+{
+  "roots": [{
+    "workspaceRoot": "/abs/workspace",
+    "gitTop": "/abs/workspace",
+    "presetFile": "/abs/workspace/.rethunk/git-mcp-presets.json",
+    "fileExists": true,
+    "presetSchemaVersion": "1",
+    "presets": [
+      {
+        "name": "monorepo",
+        "nestedRootsCount": 5,
+        "parityPairsCount": 2,
+        "workspaceRootHint": "/abs/workspace"
+      }
+    ]
+  }]
+}
+```
+
+`gitTop` is `null` when the workspace root is not inside a git repository. `presetSchemaVersion` is omitted when absent. `workspaceRootHint` is omitted when not set. When `fileExists: false` the `presets` array is empty and no `error` is present. When the file exists but fails to load, `error` contains a structured error object and `presets` is empty.
+
+### `list_presets` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `not_a_git_repository` | Root is not inside a git repository (reported inline in the `roots[*].error` field, not top-level). |
+| `invalid_json` | Preset file is not valid JSON (inline in `roots[*].error`). |
+| `invalid_schema` | Preset file fails schema validation (inline in `roots[*].error`). |
+| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
+| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
+| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
+| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
+| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+
+---
+
 ## JSON responses
 
 Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
