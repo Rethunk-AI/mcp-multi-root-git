@@ -32,7 +32,7 @@ async function runGitShow(opts: {
 }): Promise<ShowJson | { error: string }> {
   const { top, ref, path } = opts;
 
-  // Build git show args. Start with --no-patch to get just the commit message.
+  // Build git show args. Shows commit message + full diff (or file content when path given).
   const showArgs: string[] = ["show", ref];
 
   if (path) {

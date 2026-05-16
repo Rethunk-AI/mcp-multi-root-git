@@ -457,8 +457,9 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 |-----------|------|-------|
 | `sources` | `string[]` | Source specs. 1–50 entries. Each entry is one of: a full/short SHA, an `A..B` / `A...B` range, or a branch name. Branch names expand to `onto..<branch>` (oldest-first). |
 | `onto` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
-| `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally (`git branch -d`) when it is fully merged into the destination by SHA-reachability (not patch-equivalence). Protected names always skipped; never touches remote refs. |
+| `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally. Deletion uses **patch-id equivalence** by default — correct for cherry-pick workflows where SHA differs but diff is identical. Protected names always skipped; never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped. |
+| `strictMergedRefEquality` | boolean | Default `false`. When `true`, branch deletion uses strict SHA-reachability (`git branch -d` ancestry semantics) instead of patch-id equivalence. Use when you need git's exact ancestry guarantee rather than content equivalence. |
 | `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
 
 ### `git_cherry_pick` — JSON shape (`format: "json"`)

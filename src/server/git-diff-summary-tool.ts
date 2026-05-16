@@ -106,10 +106,26 @@ function extractFileInfo(
   oldPath?: string;
   status: FileDiff["status"];
 } {
-  // Parse "diff --git a/X b/Y"
-  const headerMatch = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
-  const aPath = headerMatch?.[1] ?? "";
-  const bPath = headerMatch?.[2] ?? aPath;
+  // Parse "diff --git a/X b/Y". For non-renames X === Y; use midpoint split so
+  // paths containing " b/" (e.g. "src/b/file.ts") are not mis-parsed by a greedy regex.
+  const prefix = "diff --git a/";
+  const raw = header.startsWith(prefix) ? header.slice(prefix.length) : "";
+  const midLen = (raw.length - " b/".length) / 2;
+  let aPath = "";
+  let bPath = "";
+  if (Number.isInteger(midLen) && midLen > 0) {
+    const candidate = raw.slice(0, midLen);
+    if (raw.slice(midLen) === ` b/${candidate}`) {
+      aPath = candidate;
+      bPath = candidate;
+    }
+  }
+  if (!aPath) {
+    // Fall back for renames (aPath ≠ bPath); rename paths also come from body lines.
+    const headerMatch = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
+    aPath = headerMatch?.[1] ?? "";
+    bPath = headerMatch?.[2] ?? aPath;
+  }
 
   let status: FileDiff["status"] = "modified";
   let oldPath: string | undefined;

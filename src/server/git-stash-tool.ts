@@ -51,11 +51,14 @@ export function registerGitStashListTool(server: FastMCP): void {
         const line = lines[i];
         if (line) {
           const parts = line.split("|");
-          if (parts.length >= 3 && parts[1] && parts[2]) {
+          // parts[0] = stash@{N}, last part = short SHA, middle = message (may contain "|")
+          const sha = parts[parts.length - 1];
+          const message = parts.slice(1, -1).join("|");
+          if (parts.length >= 3 && message && sha) {
             stashes.push({
               index: i,
-              message: parts[1],
-              sha: parts[2],
+              message,
+              sha,
             });
           }
         }

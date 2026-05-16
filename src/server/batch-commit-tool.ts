@@ -100,7 +100,9 @@ function extractOverlappingHunks(
     if (hunkMatch) {
       const newStart = Number.parseInt(hunkMatch[1] || "0", 10);
       const newCount = Number.parseInt(hunkMatch[2] || "1", 10);
-      const hunkEnd = newStart + newCount - 1;
+      // newCount=0 means pure deletion; hunkEnd must equal newStart so ranges
+      // that include newStart correctly capture the deletion.
+      const hunkEnd = newCount === 0 ? newStart : newStart + newCount - 1;
 
       // Check if hunk overlaps with requested line range
       const hasOverlap = !(hunkEnd < fromLine || newStart > toLine);
