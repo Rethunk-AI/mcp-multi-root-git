@@ -4,6 +4,37 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-05-15
+
+Bug-fix and documentation release; includes one new `git_log` output format.
+
+### Added
+
+- **`git_log` `format: "oneline"`** — minimal `<sha7> <subject>` output per commit for low-token post-commit verification. Multi-root output uses `### repo (branch)` separators; single-root output emits one line per commit with no headers.
+
+### Fixed
+
+- **`git_stash_list`**: format string used for-each-ref placeholders (`%(subject)`, `%(objectname:short)`) instead of git-log format (`%s`, `%h`), printing literal placeholder text as the stash message.
+- **`git_stash_list`**: stash message containing `|` caused the SHA field to be parsed as a mid-message fragment; SHA is now always the last pipe-separated field.
+- **`batch_commit`**: deleted tracked files (missing on disk) could not be staged; now staged via `git rm --cached`. Combining `{ path, lines }` with a deleted file is validated as an error.
+- **`batch_commit` hunk-level staging**: `newCount=0` pure-deletion hunks were excluded from line ranges that included the deletion point (`hunkEnd` was `newStart-1`); now `hunkEnd = newStart` for zero-count hunks.
+- **`git_diff_summary`**: diff header regex mis-parsed file paths containing ` b/` (e.g. `src/b/file.ts`), reporting wrong path and zero stats; now uses midpoint-symmetry split for non-renames, falls back to regex for renames.
+- **`git_diff_summary`**: `git diff --stat` bar-graph character counting is scaled to terminal width and under-reports for large files; replaced with `git diff --numstat` for exact addition/deletion counts.
+- **`git_cherry_pick`**: branch deletion after cherry-pick now uses patch-id equivalence by default so source branches with differing SHAs but identical content are correctly detected as merged. Pass `strictMergedRefEquality: true` for strict SHA-reachability semantics.
+- **`parseGitSubmodulePaths`**: non-regular files at `.gitmodules` (character devices, sockets — common in Claude Code / sandbox environments) are now rejected via `lstatSync().isFile()` before `readFileSync`, preventing `EACCES` errors.
+
+### Tests
+
+- Integration tests added for `git_stash_list`, `git_stash_apply`, `git_fetch`, `git_status`, `git_inventory`, and `git_parity` execute paths.
+- `isContentEquivalentlyMergedInto` integration tests via real git repos with cherry-picked and diverged histories.
+- `batch_commit` dryRun tests covering deleted-file unstaging.
+
+### Documentation
+
+- **`git_status`, `git_inventory`, `git_parity`, `list_presets`** now have complete parameter tables, JSON shape examples, and error code tables in `docs/mcp-tools.md`.
+- **`git_cherry_pick`** `strictMergedRefEquality` parameter added to docs; `deleteMergedBranches` description corrected (default is patch-id equivalence, not SHA-reachability).
+- **`batch_commit`** `files` parameter and `stage_failed` error code updated to document deleted-file staging path.
+
 ## [2.4.0] — 2026-05-07
 
 New git MCP tools, better `batch_commit` ergonomics, published schema coverage for the full tool surface, and a broad docs/test refresh since `v2.3.4`.
