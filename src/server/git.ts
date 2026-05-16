@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 
@@ -91,6 +91,13 @@ export function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text:
 export function parseGitSubmodulePaths(gitRoot: string): string[] {
   const f = join(gitRoot, ".gitmodules");
   if (!existsSync(f)) return [];
+  // Skip non-regular files (character devices, sockets, etc.) — common in
+  // Claude Code sandbox environments where stub device files shadow paths.
+  try {
+    if (!lstatSync(f).isFile()) return [];
+  } catch {
+    return [];
+  }
   let text: string;
   try {
     text = readFileSync(f, "utf8");
