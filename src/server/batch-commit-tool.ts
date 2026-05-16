@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
@@ -27,7 +29,9 @@ const CommitEntrySchema = z.object({
     .array(FileEntrySchema)
     .min(1)
     .describe(
-      "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging.",
+      "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging. " +
+        "Deleted files (missing on disk but tracked in HEAD) are staged as removals via `git rm --cached`. " +
+        "Combining { path, lines } with a deleted file is an error.",
     ),
 });
 
@@ -152,6 +156,25 @@ async function stageFile(
   filePath: string,
   lines?: { from: number; to: number },
 ): Promise<{ ok: boolean; error?: string }> {
+  const absPath = resolvePathForRepo(filePath, gitTop);
+  const fileOnDisk = existsSync(absPath);
+
+  if (!fileOnDisk) {
+    if (lines) {
+      return { ok: false, error: "cannot stage line range for deleted file" };
+    }
+    // File missing on disk — stage as removal if tracked in HEAD
+    const lsResult = await spawnGitAsync(gitTop, ["ls-files", "--error-unmatch", "--", filePath]);
+    if (!lsResult.ok) {
+      return { ok: false, error: `pathspec '${filePath}' did not match any files` };
+    }
+    const rmResult = await spawnGitAsync(gitTop, ["rm", "--cached", "--", filePath]);
+    return {
+      ok: rmResult.ok,
+      error: rmResult.ok ? undefined : (rmResult.stderr || rmResult.stdout).trim(),
+    };
+  }
+
   if (!lines) {
     // Simple case: stage the whole file
     const addResult = await spawnGitAsync(gitTop, ["add", "--", filePath]);

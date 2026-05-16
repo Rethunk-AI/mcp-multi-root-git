@@ -703,4 +703,105 @@ describe("batch_commit line-range staging", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Deletion staging (deleted tracked files)
+// ---------------------------------------------------------------------------
+
+describe("batch_commit deletion staging", () => {
+  test("stages deleted tracked file via git rm --cached", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    writeFileSync(join(dir, "delete-me.ts"), "const gone = 1;\n");
+    gitCmd(dir, "add", "base.ts", "delete-me.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Delete the file from disk
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(join(dir, "delete-me.ts"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "fix: remove delete-me", files: ["delete-me.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // Verify file is no longer tracked
+    const lsResult = await spawnGitAsync(dir, ["ls-files", "delete-me.ts"]);
+    expect(lsResult.stdout.trim()).toBe("");
+  });
+
+  test("commit mixing edits and deletions succeeds atomically", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "keep.ts"), "const k = 0;\n");
+    writeFileSync(join(dir, "gone.ts"), "const g = 1;\n");
+    gitCmd(dir, "add", "keep.ts", "gone.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify keep.ts, delete gone.ts
+    writeFileSync(join(dir, "keep.ts"), "const k = 99;\n");
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(join(dir, "gone.ts"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "fix: edit + delete", files: ["keep.ts", "gone.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // gone.ts untracked, keep.ts updated
+    const lsGone = await spawnGitAsync(dir, ["ls-files", "gone.ts"]);
+    expect(lsGone.stdout.trim()).toBe("");
+  });
+
+  test("lines + deleted file returns stage_failed with descriptive error", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    writeFileSync(join(dir, "gone.ts"), "const g = 1;\n");
+    gitCmd(dir, "add", "base.ts", "gone.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(join(dir, "gone.ts"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: [{ path: "gone.ts", lines: { from: 1, to: 5 } }] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ error?: string; detail?: string }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+    expect(parsed.results[0]?.detail).toContain("deleted");
+  });
+
+  test("untracked missing file still fails with pathspec error", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: ["never-existed.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+  });
+});
+
 let _seq = 0;
