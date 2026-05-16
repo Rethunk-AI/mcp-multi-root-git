@@ -29,10 +29,12 @@
     },
     "format": {
       "default": "markdown",
+      "description": "`markdown` (default): headed sections per root. `json`: structured groups array. `oneline`: `<sha7> <subject>` per line, no headers (single-root) or `### repo (branch)` separator per group (multi-root). Lowest-token option for post-commit verification.",
       "type": "string",
       "enum": [
         "markdown",
-        "json"
+        "json",
+        "oneline"
       ]
     },
     "since": {

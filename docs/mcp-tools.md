@@ -15,7 +15,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args (`absoluteGitRoots` cannot combine with `preset`/`nestedRoots`). **Read-only.** |
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args (`absoluteGitRoots` for sibling clone batches). **Read-only.** |
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
-| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format`. **Read-only.** |
+| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
 | `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, optionally scoped to one path. Args: `base?`, `head?`, `path?`, `staged?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff, or file content at `path` for that ref. Args: `ref`, `path?`, plus single-repo workspace pick + `format`. **Read-only.** |
@@ -74,7 +74,7 @@ To keep responses compact, **optional fields are omitted when they would be empt
 | `workspaceRoot` | string | — | Explicit root; highest priority. |
 | `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
 | `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
-| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+| `format` | `"markdown"` \| `"json"` \| `"oneline"` | `"markdown"` | Output format. `oneline` returns `<sha7> <subject>` per line with no headers (single root) or `### repo (branch)` separators per group (multi-root). Lowest-token option for post-commit verification. |
 
 ### `git_log` — JSON shape (`format: "json"`)
 

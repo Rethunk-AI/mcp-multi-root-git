@@ -203,6 +203,23 @@ async function runGitLog(opts: {
 // Markdown rendering
 // ---------------------------------------------------------------------------
 
+function renderLogOneline(group: LogResult, multiRoot: boolean): string {
+  const lines: string[] = [];
+  if (multiRoot) {
+    lines.push(`### ${group.repo} (${group.branch})`);
+  }
+  for (const c of group.commits) {
+    lines.push(`${c.sha.slice(0, 7)} ${c.subject}`);
+  }
+  if (group.commits.length === 0) {
+    lines.push("(no commits)");
+  }
+  if (group.truncated) {
+    lines.push(`(+${group.omittedCount} more)`);
+  }
+  return lines.join("\n");
+}
+
 function renderLogMarkdown(group: LogResult, filterSummary: string): string {
   const lines: string[] = [];
   lines.push(`### ${group.repo} (${group.branch})${filterSummary ? `  —  ${filterSummary}` : ""}`);
@@ -243,6 +260,15 @@ export function registerGitLogTool(server: FastMCP): void {
       readOnlyHint: true,
     },
     parameters: WorkspacePickSchema.extend({
+      format: z
+        .enum(["markdown", "json", "oneline"])
+        .optional()
+        .default("markdown")
+        .describe(
+          "`markdown` (default): headed sections per root. " +
+            "`json`: structured groups array. " +
+            "`oneline`: `<sha7> <subject>` per line, no headers (single-root) or `### repo (branch)` separator per group (multi-root). Lowest-token option for post-commit verification.",
+        ),
       since: z
         .string()
         .optional()
@@ -344,6 +370,23 @@ export function registerGitLogTool(server: FastMCP): void {
           } as LogGroupJson;
         });
         return jsonRespond({ groups } as unknown as Record<string, unknown>);
+      }
+
+      // Oneline
+      if (args.format === "oneline") {
+        const multiRoot = results.length > 1;
+        const chunks: string[] = [];
+        for (const r of results) {
+          if (r._error) {
+            chunks.push(
+              multiRoot ? `### ${r.workspaceRoot}\n(error: ${r.error})` : `(error: ${r.error})`,
+            );
+            continue;
+          }
+          const { _error: _e, ...group } = r;
+          chunks.push(renderLogOneline(group, multiRoot));
+        }
+        return chunks.join("\n\n");
       }
 
       // Markdown

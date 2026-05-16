@@ -266,10 +266,12 @@
         },
         "format": {
           "default": "markdown",
+          "description": "`markdown` (default): headed sections per root. `json`: structured groups array. `oneline`: `<sha7> <subject>` per line, no headers (single-root) or `### repo (branch)` separator per group (multi-root). Lowest-token option for post-commit verification.",
           "type": "string",
           "enum": [
             "markdown",
-            "json"
+            "json",
+            "oneline"
           ]
         },
         "since": {
@@ -674,7 +676,7 @@
                     }
                   ]
                 },
-                "description": "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging."
+                "description": "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging. Deleted files (missing on disk but tracked in HEAD) are staged as removals via `git rm --cached`. Combining { path, lines } with a deleted file is an error."
               }
             },
             "required": [

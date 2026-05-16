@@ -371,4 +371,39 @@ describe("git_log execute handler", () => {
     expect(commits.length).toBe(1);
     expect(commits[0]?.subject).toContain("important");
   });
+
+  test("format: oneline returns sha7 + subject lines, no headers (single root)", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.ts", "feat: alpha");
+    addCommit(dir, "b.ts", "feat: beta");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({ workspaceRoot: dir, format: "oneline", since: SINCE_WIDE });
+
+    const lines = text.split("\n").filter((l) => l.trim());
+    // Most recent first: beta then alpha
+    expect(lines[0]).toMatch(/^[0-9a-f]{7} feat: beta$/);
+    expect(lines[1]).toMatch(/^[0-9a-f]{7} feat: alpha$/);
+    // No markdown headers or root paths
+    expect(text).not.toContain("#");
+    expect(text).not.toContain("_root:");
+  });
+
+  test("format: oneline multi-root prefixes each group with ### repo (branch)", async () => {
+    const dir1 = makeRepo();
+    const dir2 = makeRepo();
+    addCommit(dir1, "x.ts", "feat: in-repo1");
+    addCommit(dir2, "y.ts", "feat: in-repo2");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      absoluteGitRoots: [dir1, dir2],
+      format: "oneline",
+      since: SINCE_WIDE,
+    });
+
+    expect(text).toContain("### ");
+    expect(text).toContain("feat: in-repo1");
+    expect(text).toContain("feat: in-repo2");
+  });
 });
