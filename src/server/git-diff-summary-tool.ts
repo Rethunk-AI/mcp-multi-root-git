@@ -55,22 +55,25 @@ interface DiffSummary {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse `git diff --stat` output into per-file stats.
- * Format: " path/to/file | N ++++---"
- * Final line: " N files changed, N insertions(+), N deletions(-)"
+ * Parse `git diff --numstat` output into exact per-file counts.
+ * Format per line: "<additions>\t<deletions>\t<path>"
+ * Binary files emit "-\t-\t<path>" and are recorded as 0/0.
  */
-function parseStatOutput(stat: string): Map<string, { additions: number; deletions: number }> {
+function parseNumstatOutput(
+  numstat: string,
+): Map<string, { additions: number; deletions: number }> {
   const result = new Map<string, { additions: number; deletions: number }>();
-  for (const line of stat.split("\n")) {
-    // Skip the summary line and blank lines
-    if (!line.includes("|")) continue;
-    const pipeIdx = line.indexOf("|");
-    const filePart = line.slice(0, pipeIdx).trim();
-    const statPart = line.slice(pipeIdx + 1).trim();
-    // statPart looks like "5 ++---" or "3 +++", count + and -
-    const additions = (statPart.match(/\+/g) ?? []).length;
-    const deletions = (statPart.match(/-/g) ?? []).length;
-    result.set(filePart, { additions, deletions });
+  for (const line of numstat.split("\n")) {
+    const parts = line.split("\t");
+    if (parts.length < 3) continue;
+    const [addStr, delStr, ...pathParts] = parts;
+    const filePath = pathParts.join("\t");
+    if (!filePath) continue;
+    const additions = addStr === "-" ? 0 : Number.parseInt(addStr ?? "0", 10);
+    const deletions = delStr === "-" ? 0 : Number.parseInt(delStr ?? "0", 10);
+    if (!Number.isNaN(additions) && !Number.isNaN(deletions)) {
+      result.set(filePath, { additions, deletions });
+    }
   }
   return result;
 }
@@ -269,15 +272,15 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       }
       const diffArgs = diffArgsResult.args;
 
-      // --- Run git diff --stat ---
-      const statResult = await spawnGitAsync(gitTop, ["diff", "--stat", ...diffArgs]);
+      // --- Run git diff --numstat for exact addition/deletion counts ---
+      const statResult = await spawnGitAsync(gitTop, ["diff", "--numstat", ...diffArgs]);
       if (!statResult.ok) {
         return jsonRespond({
           error: "git_diff_failed",
           detail: (statResult.stderr || statResult.stdout).trim(),
         });
       }
-      const statMap = parseStatOutput(statResult.stdout);
+      const statMap = parseNumstatOutput(statResult.stdout);
 
       // --- Run git diff ---
       const diffResult = await spawnGitAsync(gitTop, ["diff", ...diffArgs]);
