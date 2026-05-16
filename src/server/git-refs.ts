@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 import { spawnGitAsync } from "./git.js";
 
 // ---------------------------------------------------------------------------
@@ -126,6 +128,81 @@ export async function isFullyMergedInto(
   if (!isSafeGitRefToken(branch) || !isSafeGitRefToken(target)) return false;
   const r = await spawnGitAsync(cwd, ["merge-base", "--is-ancestor", branch, target]);
   return r.ok;
+}
+
+/**
+ * Returns the git patch-id for a single commit, or undefined on failure.
+ * Uses execFileSync to pipe `git diff-tree --patch -r <sha>` into `git patch-id --stable`.
+ */
+function commitPatchId(cwd: string, sha: string): string | undefined {
+  try {
+    const diff = execFileSync("git", ["diff-tree", "--patch", "-r", sha], {
+      cwd,
+      encoding: "utf8",
+    });
+    const out = execFileSync("git", ["patch-id", "--stable"], {
+      cwd,
+      encoding: "utf8",
+      input: diff,
+    });
+    return out.trim().split(" ")[0] || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Returns true when every commit reachable from `branch` but not from `target` has a
+ * patch-equivalent commit already in `target` (content-equivalent merge check for
+ * cherry-pick workflows where SHA differs but diff is identical).
+ *
+ * Falls back to ref-equality (`isFullyMergedInto`) when patch-id comparison fails.
+ */
+export async function isContentEquivalentlyMergedInto(
+  cwd: string,
+  branch: string,
+  target: string,
+): Promise<boolean> {
+  if (!isSafeGitRefToken(branch) || !isSafeGitRefToken(target)) return false;
+
+  // Fast path: ref equality (normal merge).
+  const refMerged = await spawnGitAsync(cwd, ["merge-base", "--is-ancestor", branch, target]);
+  if (refMerged.ok) return true;
+
+  // Collect commits in branch not reachable from target.
+  const srcList = await spawnGitAsync(cwd, ["rev-list", "--no-merges", `${branch}`, `^${target}`]);
+  if (!srcList.ok) return false;
+  const srcShas = srcList.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (srcShas.length === 0) return true; // nothing to check
+
+  // Build patch-id set for target commits since merge-base.
+  const base = await spawnGitAsync(cwd, ["merge-base", branch, target]);
+  if (!base.ok) return false;
+  const baseSha = base.stdout.trim();
+
+  const destList = await spawnGitAsync(cwd, ["rev-list", "--no-merges", `${baseSha}..${target}`]);
+  if (!destList.ok) return false;
+  const destShas = destList.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const destPatchIds = new Set<string>();
+  for (const sha of destShas) {
+    const patchId = commitPatchId(cwd, sha);
+    if (patchId) destPatchIds.add(patchId);
+  }
+
+  // Every source commit must have its patch-id present in destination.
+  for (const sha of srcShas) {
+    const patchId = commitPatchId(cwd, sha);
+    if (!patchId || !destPatchIds.has(patchId)) return false;
+  }
+
+  return true;
 }
 
 /**

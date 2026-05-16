@@ -6,6 +6,7 @@ import {
   commitListBetween,
   conflictPaths,
   getCurrentBranch,
+  isContentEquivalentlyMergedInto,
   isFullyMergedInto,
   isProtectedBranch,
   isSafeGitRangeToken,
@@ -150,8 +151,11 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       "Play commits from one or more sources onto a destination. Sources may be SHAs, " +
       "`A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). " +
       "Commits already reachable from the destination are skipped. Refuses on dirty tree; " +
-      "stops on the first conflict and reports paths. Optional flags auto-delete fully " +
-      "merged source branches and their worktrees, skipping protected names.",
+      "stops on the first conflict and reports paths. Optional flags auto-delete source " +
+      "branches and worktrees after success; deletion uses patch-id equivalence by default " +
+      "(content-identical commits with different SHAs are treated as merged, which is the " +
+      "normal cherry-pick outcome). Pass `strictMergedRefEquality: true` for strict `git branch -d` " +
+      "ancestry semantics. Protected branch names always skipped.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -186,6 +190,17 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         .describe(
           "After success, remove any local worktree attached to a branch-kind source " +
             "(`git worktree remove`). Protected tails always skipped.",
+        ),
+      strictMergedRefEquality: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "When false (default), branch deletion uses patch-id equivalence: a source branch " +
+            "is deleted when every commit it contains has a content-equivalent commit on the " +
+            "destination (same diff, different SHA — the normal cherry-pick outcome). " +
+            "Set to true to require strict ref ancestry (`git branch -d` semantics), which " +
+            "will refuse deletion after a cherry-pick because the SHA differs.",
         ),
     }),
     execute: async (args) => {
@@ -286,10 +301,20 @@ export function registerGitCherryPickTool(server: FastMCP): void {
           }
 
           if (args.deleteMergedBranches) {
-            const merged = await isFullyMergedInto(gitTop, src.raw, onto);
-            if (merged) {
-              const r = await spawnGitAsync(gitTop, ["branch", "-d", src.raw]);
-              if (r.ok) src.branchDeleted = true;
+            if (args.strictMergedRefEquality) {
+              const merged = await isFullyMergedInto(gitTop, src.raw, onto);
+              if (merged) {
+                const r = await spawnGitAsync(gitTop, ["branch", "-d", src.raw]);
+                if (r.ok) src.branchDeleted = true;
+              }
+            } else {
+              const merged = await isContentEquivalentlyMergedInto(gitTop, src.raw, onto);
+              if (merged) {
+                // -D required: git branch -d checks ref ancestry (fails after cherry-pick),
+                // but we've already verified content equivalence via patch-id.
+                const r = await spawnGitAsync(gitTop, ["branch", "-D", src.raw]);
+                if (r.ok) src.branchDeleted = true;
+              }
             }
           }
         }

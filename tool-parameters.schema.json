@@ -886,6 +886,11 @@
           "default": false,
           "description": "After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped.",
           "type": "boolean"
+        },
+        "strictMergedRefEquality": {
+          "default": false,
+          "description": "When false (default), branch deletion uses patch-id equivalence: a source branch is deleted when every commit it contains has a content-equivalent commit on the destination (same diff, different SHA — the normal cherry-pick outcome). Set to true to require strict ref ancestry (`git branch -d` semantics), which will refuse deletion after a cherry-pick because the SHA differs.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -893,7 +898,8 @@
         "format",
         "sources",
         "deleteMergedBranches",
-        "deleteMergedWorktrees"
+        "deleteMergedWorktrees",
+        "strictMergedRefEquality"
       ],
       "additionalProperties": false
     },

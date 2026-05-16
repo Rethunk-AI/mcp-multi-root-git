@@ -263,7 +263,7 @@ describe("git_cherry_pick conflicts", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_cherry_pick cleanup", () => {
-  test("deleteMergedBranches deletes fully-merged non-protected branch", async () => {
+  test("deleteMergedBranches deletes branch via patch-id after cherry-pick", async () => {
     const dir = makeRepo();
     createBranchWithCommits(dir, "feature/a", [{ path: "a.txt", body: "a\n", message: "feat: a" }]);
 
@@ -279,14 +279,11 @@ describe("git_cherry_pick cleanup", () => {
       results: Array<{ branchDeleted?: boolean }>;
     };
     expect(parsed.ok).toBe(true);
-    // After cherry-pick, feature/a's only commit is reachable from main as a cherry
-    // (different SHA). `git branch -d` uses merge-base --is-ancestor, which requires
-    // the original SHA to be reachable. Cherry-picked commits have NEW SHAs,
-    // so the original is NOT an ancestor → branch is NOT deleted. Verify this.
-    expect(parsed.results[0]?.branchDeleted).toBeUndefined();
-    // Branch still exists.
+    // After cherry-pick the SHA differs (different committer date), so git branch -d
+    // would refuse. Patch-id comparison detects content equivalence → branch deleted.
+    expect(parsed.results[0]?.branchDeleted).toBe(true);
     const branches = gitCmd(dir, "branch").trim();
-    expect(branches).toContain("feature/a");
+    expect(branches).not.toContain("feature/a");
   });
 
   test("deleteMergedBranches skips protected 'dev' name even if merged", async () => {
@@ -336,6 +333,72 @@ describe("git_cherry_pick cleanup", () => {
 // ---------------------------------------------------------------------------
 // Guardrails
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Patch-id cleanup (deleteMergedBranches after cherry-pick)
+// ---------------------------------------------------------------------------
+
+describe("git_cherry_pick patch-id branch deletion", () => {
+  test("deleteMergedBranches deletes branch after cherry-pick despite SHA mismatch", async () => {
+    const dir = makeRepo();
+    // Create feature branch from seed
+    createBranchWithCommits(dir, "feature/cp", [
+      { path: "cp.txt", body: "content\n", message: "feat: cherry-pick me" },
+    ]);
+    // Add an unrelated commit to main so cherry-pick will have a different parent → different SHA
+    writeFileSync(join(dir, "unrelated.txt"), "extra\n");
+    gitCmd(dir, "add", "unrelated.txt");
+    gitCmd(dir, "commit", "-m", "chore: unrelated on main");
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/cp"],
+      deleteMergedBranches: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ source: string; branchDeleted?: boolean }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.branchDeleted).toBe(true);
+
+    // Branch should be gone
+    const branches = gitCmd(dir, "branch");
+    expect(branches).not.toContain("feature/cp");
+  });
+
+  test("strictMergedRefEquality: true skips deletion after cherry-pick (SHA mismatch)", async () => {
+    const dir = makeRepo();
+    createBranchWithCommits(dir, "feature/strict", [
+      { path: "strict.txt", body: "strict\n", message: "feat: strict" },
+    ]);
+    // Add unrelated commit so parent differs → different SHA after cherry-pick
+    writeFileSync(join(dir, "unrelated2.txt"), "extra\n");
+    gitCmd(dir, "add", "unrelated2.txt");
+    gitCmd(dir, "commit", "-m", "chore: diverge main");
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/strict"],
+      deleteMergedBranches: true,
+      strictMergedRefEquality: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ source: string; branchDeleted?: boolean }>;
+    };
+    expect(parsed.ok).toBe(true);
+    // Branch NOT deleted because SHA differs
+    expect(parsed.results[0]?.branchDeleted).toBeUndefined();
+
+    const branches = gitCmd(dir, "branch");
+    expect(branches).toContain("feature/strict");
+  });
+});
 
 describe("git_cherry_pick guardrails", () => {
   test("working_tree_dirty refuses unstaged changes", async () => {
