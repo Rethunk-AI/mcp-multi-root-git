@@ -29,11 +29,8 @@ export function registerGitStashListTool(server: FastMCP): void {
       const { gitTop } = pre;
 
       // List all stashes: git stash list --format='%(refname:short)|%(subject)|%(objectname:short)'
-      const r = await spawnGitAsync(gitTop, [
-        "stash",
-        "list",
-        "--format=%(refname:short)|%(subject)|%(objectname:short)",
-      ]);
+      // git stash list uses git-log format (%s, %h) not for-each-ref format %(subject).
+      const r = await spawnGitAsync(gitTop, ["stash", "list", "--format=%gd|%s|%h"]);
 
       if (!r.ok) {
         // If there are no stashes, git still returns ok=true with empty output
