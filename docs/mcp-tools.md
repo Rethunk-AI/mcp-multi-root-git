@@ -327,7 +327,7 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either a path relative to the git root or a `{path, lines}` object for hunk-level staging. All paths must stay within the git toplevel. |
+| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged; or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel. |
 | `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. Enum reserved for future modes such as `"force-with-lease"`. |
 | `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
 | `workspaceRoot` | string | Explicit root; highest priority. |
@@ -373,7 +373,7 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 | Code | Meaning |
 |------|---------|
 | `path_escapes_repository` | One of the listed file paths resolves outside the git toplevel. |
-| `stage_failed` | `git add` failed (e.g. untracked path or permission error). |
+| `stage_failed` | Staging failed. `git add` error for modified/new files; `git rm --cached` error for deleted files (e.g. path never tracked in HEAD); `{path, lines}` on a deleted file. |
 | `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
