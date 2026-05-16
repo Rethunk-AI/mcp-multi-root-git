@@ -22,7 +22,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
 | [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema`, `MAX_INVENTORY_ROOTS_DEFAULT`, **`MAX_ABSOLUTE_GIT_ROOTS`** (256), optional **`absoluteGitRoots`** on workspace pick |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
-| [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `conflictPaths` |
+| [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `isContentEquivalentlyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `inferRemoteFromUpstream`; `conflictPaths` |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below |
 | [`src/server/git-status-tool.ts`](src/server/git-status-tool.ts) | `git_status` |
 | [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `git_inventory` |
