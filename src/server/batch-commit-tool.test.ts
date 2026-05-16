@@ -17,7 +17,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
@@ -563,6 +563,72 @@ describe("batch_commit dryRun mode", () => {
     // Verify commit was written
     const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
     expect(logResult.stdout).toContain("feat: add new");
+  });
+
+  test("dryRun: true with deleted file unstages cleanly after preview", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "keep.ts"), "const k = 0;\n");
+    writeFileSync(join(dir, "gone.ts"), "const g = 1;\n");
+    gitCmd(dir, "add", "keep.ts", "gone.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    rmSync(join(dir, "gone.ts"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [{ message: "fix: remove gone", files: ["gone.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      dryRun: boolean;
+      ok: boolean;
+      results: Array<{ ok: boolean; staged?: string[] }>;
+    };
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.staged).toEqual(["gone.ts"]);
+
+    // Cleanup must leave deletion unstaged (not staged, not committed)
+    const status = await spawnGitAsync(dir, ["status", "--short"]);
+    expect(status.stdout).not.toContain("D  gone.ts"); // not staged
+    expect(status.stdout).toContain(" D gone.ts"); // unstaged deletion
+    const log = await spawnGitAsync(dir, ["log", "--oneline"]);
+    expect(log.stdout).not.toContain("fix: remove gone");
+  });
+
+  test("dryRun: true with mixed edits and deletions unstages all cleanly", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "edit.ts"), "const e = 0;\n");
+    writeFileSync(join(dir, "del.ts"), "const d = 1;\n");
+    gitCmd(dir, "add", "edit.ts", "del.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "edit.ts"), "const e = 99;\n");
+    rmSync(join(dir, "del.ts"));
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [
+        { message: "fix: edit", files: ["edit.ts"] },
+        { message: "fix: delete", files: ["del.ts"] },
+      ],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ ok: boolean }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results).toHaveLength(2);
+
+    // Both files must be unstaged after cleanup
+    const status = await spawnGitAsync(dir, ["status", "--short"]);
+    expect(status.stdout).not.toContain("M  edit.ts");
+    expect(status.stdout).not.toContain("D  del.ts");
+    expect(status.stdout).toContain(" M edit.ts");
+    expect(status.stdout).toContain(" D del.ts");
   });
 });
 
