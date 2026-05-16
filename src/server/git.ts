@@ -91,7 +91,12 @@ export function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text:
 export function parseGitSubmodulePaths(gitRoot: string): string[] {
   const f = join(gitRoot, ".gitmodules");
   if (!existsSync(f)) return [];
-  const text = readFileSync(f, "utf8");
+  let text: string;
+  try {
+    text = readFileSync(f, "utf8");
+  } catch {
+    return [];
+  }
   const paths: string[] = [];
   for (const line of text.split("\n")) {
     const m = /^\s*path\s*=\s*(.+)\s*$/.exec(line);
