@@ -7,13 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitParityTool } from "./git-parity-tool.js";
-import {
-  captureTool,
-  cleanupTmpPaths,
-  gitCmd,
-  gitInitMain,
-  mkTmpDir,
-} from "./test-harness.js";
+import { captureTool, cleanupTmpPaths, gitCmd, gitInitMain, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
