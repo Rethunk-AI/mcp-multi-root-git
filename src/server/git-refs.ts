@@ -29,17 +29,23 @@ const PROTECTED_EXACT = new Set([
   "trunk",
   "prod",
   "production",
-  "HEAD",
+  "head",
 ]);
 
 const PROTECTED_PATTERN = /^(release|hotfix)[-/].+$/i;
 
 /** True when a branch name is on the protected list and must not be auto-deleted. */
 export function isProtectedBranch(name: string): boolean {
-  const t = name.trim();
-  if (t === "") return true;
-  if (PROTECTED_EXACT.has(t)) return true;
-  return PROTECTED_PATTERN.test(t);
+  // Normalize: trim whitespace, strip leading refs/heads/ prefix, then lowercase.
+  const trimmed = name.trim();
+  if (trimmed === "") return true;
+  const stripped = trimmed.startsWith("refs/heads/")
+    ? trimmed.slice("refs/heads/".length)
+    : trimmed;
+  const normalized = stripped.toLowerCase();
+  if (normalized === "") return true;
+  if (PROTECTED_EXACT.has(normalized)) return true;
+  return PROTECTED_PATTERN.test(normalized);
 }
 
 // ---------------------------------------------------------------------------

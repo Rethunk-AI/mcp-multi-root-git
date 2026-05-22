@@ -47,21 +47,22 @@ export function registerGitStashListTool(server: FastMCP): void {
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line) {
-          const parts = line.split("|");
-          // parts[0] = stash@{N}, last part = short SHA, middle = message (may contain "|")
-          const sha = parts[parts.length - 1];
-          const message = parts.slice(1, -1).join("|");
-          if (parts.length >= 3 && message && sha) {
-            stashes.push({
-              index: i,
-              message,
-              sha,
-            });
-          }
+      for (const line of lines) {
+        const parts = line.split("|");
+        // parts[0] = stash@{N}, last part = short SHA, middle = message (may contain "|")
+        const sha = parts[parts.length - 1];
+        const message = parts.slice(1, -1).join("|");
+        // Parse the real stash index from the canonical stash@{N} ref in parts[0].
+        const indexMatch = parts[0] ? /stash@\{(\d+)\}/.exec(parts[0]) : null;
+        if (!indexMatch || parts.length < 3 || !message || !sha) {
+          // Malformed line — skip without affecting index tracking.
+          continue;
         }
+        stashes.push({
+          index: Number(indexMatch[1]),
+          message,
+          sha,
+        });
       }
 
       if (args.format === "json") {

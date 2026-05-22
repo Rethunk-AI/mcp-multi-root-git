@@ -123,6 +123,23 @@ describe("isProtectedBranch", () => {
     // Pattern requires at least one char after release[-/]
     expect(isProtectedBranch("release")).toBe(false);
   });
+
+  test("refs/heads/ prefix is stripped before checking", () => {
+    expect(isProtectedBranch("refs/heads/main")).toBe(true);
+    expect(isProtectedBranch("refs/heads/master")).toBe(true);
+    expect(isProtectedBranch("refs/heads/develop")).toBe(true);
+    expect(isProtectedBranch("refs/heads/feature/auth")).toBe(false);
+  });
+
+  test("case-insensitive matching for exact names", () => {
+    expect(isProtectedBranch("Main")).toBe(true);
+    expect(isProtectedBranch("MAIN")).toBe(true);
+    expect(isProtectedBranch("MASTER")).toBe(true);
+    expect(isProtectedBranch("Master")).toBe(true);
+    expect(isProtectedBranch("HEAD")).toBe(true);
+    expect(isProtectedBranch("head")).toBe(true);
+    expect(isProtectedBranch("Prod")).toBe(true);
+  });
 });
 
 describe("isSafeGitRefToken", () => {

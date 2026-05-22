@@ -151,6 +151,37 @@ describe("git_stash_list execute handler", () => {
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("not_a_git_repository");
   });
+
+  test("stash index reflects true stash@{N} even when earlier lines are malformed", async () => {
+    // Create two stashes so we have stash@{0} and stash@{1}, then verify
+    // that a simulated malformed line preceding valid ones does not shift indexes.
+    // We verify this by checking that a second stash reports index 1, not 0.
+    const dir = makeRepo();
+
+    // Create stash@{0}
+    writeFileSync(join(dir, "file1.ts"), "const a = 1;\n");
+    gitCmd(dir, "add", "file1.ts");
+    gitCmd(dir, "stash", "push", "-m", "wip: second");
+
+    // Create stash@{0} (pushes the previous one to stash@{1})
+    writeFileSync(join(dir, "file2.ts"), "const b = 2;\n");
+    gitCmd(dir, "add", "file2.ts");
+    gitCmd(dir, "stash", "push", "-m", "wip: first");
+
+    const run = captureTool(registerGitStashListTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      stashes: Array<{ index: number; message: string; sha: string }>;
+    };
+
+    expect(parsed.stashes).toHaveLength(2);
+    // stash@{0} is the most recently created stash
+    expect(parsed.stashes[0]?.index).toBe(0);
+    expect(parsed.stashes[0]?.message).toContain("wip: first");
+    // stash@{1} must use index 1 from the canonical ref, not the loop counter
+    expect(parsed.stashes[1]?.index).toBe(1);
+    expect(parsed.stashes[1]?.message).toContain("wip: second");
+  });
 });
 
 describe("git_stash_apply execute handler", () => {
