@@ -24,6 +24,7 @@
     },
     "ref": {
       "type": "string",
+      "minLength": 1,
       "description": "Commit reference (SHA, branch, tag, or any git rev-spec)."
     },
     "path": {

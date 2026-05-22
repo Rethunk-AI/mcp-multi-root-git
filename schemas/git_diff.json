@@ -14,19 +14,6 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "allWorkspaceRoots": {
-      "default": false,
-      "description": "Fan out across all MCP file roots.",
-      "type": "boolean"
-    },
-    "absoluteGitRoots": {
-      "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
-      "maxItems": 256,
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "format": {
       "default": "markdown",
       "type": "string",
@@ -54,7 +41,6 @@
     }
   },
   "required": [
-    "allWorkspaceRoots",
     "format",
     "staged"
   ],
