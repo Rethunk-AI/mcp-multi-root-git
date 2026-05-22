@@ -31,6 +31,9 @@ jobs:
       - name: Tool schema snapshot check
         run: bun run schema:tools:check
 
+      - name: Individual tool schema snapshot check
+        run: bun run schema:individual:check
+
       - name: Unit tests with coverage
         run: |
           bun run test:coverage 2>&1 | tee /tmp/coverage.txt

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,14 +23,17 @@ function formatSchema(toolName: string, schema: Record<string, unknown>): string
 }
 
 function main(): void {
-  // Ensure schemas directory exists
-  mkdirSync(SCHEMAS_DIR, { recursive: true });
+  const checkOnly = process.argv.includes("--check");
+
+  // Ensure schemas directory exists (write mode only)
+  if (!checkOnly) mkdirSync(SCHEMAS_DIR, { recursive: true });
 
   // Get all tool schemas
   const doc = buildToolParameterSchemaDocument();
   const toolSchemas = doc.tools;
 
-  // Write individual schema files for each tool
+  // Build the expected content for every file, then either write or compare.
+  const expected = new Map<string, string>();
   const schemaMetadata: Array<{
     name: string;
     file: string;
@@ -44,12 +47,7 @@ function main(): void {
       continue;
     }
 
-    const fileName = `${toolName}.json`;
-    const filePath = join(SCHEMAS_DIR, fileName);
-    const content = formatSchema(toolName, schema);
-    writeFileSync(filePath, content);
-    console.log(`Wrote ${filePath}`);
-
+    expected.set(join(SCHEMAS_DIR, `${toolName}.json`), formatSchema(toolName, schema));
     schemaMetadata.push({
       name: toolName,
       file: `${toolName}.json`,
@@ -57,22 +55,49 @@ function main(): void {
     });
   }
 
-  // Write index.json
   const indexPath = join(SCHEMAS_DIR, "index.json");
-  const indexContent = `${JSON.stringify(
-    {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      title: "@rethunk/mcp-multi-root-git tool schemas index",
-      description: "Index of all available MCP tool parameter schemas.",
-      generatedBy: "scripts/generate-individual-schemas.ts",
-      tools: schemaMetadata,
-    },
-    null,
-    2,
-  )}\n`;
+  expected.set(
+    indexPath,
+    `${JSON.stringify(
+      {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        title: "@rethunk/mcp-multi-root-git tool schemas index",
+        description: "Index of all available MCP tool parameter schemas.",
+        generatedBy: "scripts/generate-individual-schemas.ts",
+        tools: schemaMetadata,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
-  writeFileSync(indexPath, indexContent);
-  console.log(`Wrote ${indexPath}`);
+  if (checkOnly) {
+    const stale: string[] = [];
+    for (const [filePath, content] of expected) {
+      let current: string | undefined;
+      try {
+        current = readFileSync(filePath, "utf8");
+      } catch {
+        current = undefined;
+      }
+      if (current !== content) stale.push(filePath);
+    }
+    if (stale.length > 0) {
+      process.stderr.write(
+        `Individual schema artifacts are out of date. Run bun run schema:individual.\n${stale
+          .map((f) => `  - ${f}`)
+          .join("\n")}\n`,
+      );
+      process.exit(1);
+    }
+    console.log(`All ${expected.size} individual schema artifacts are up to date.`);
+    return;
+  }
+
+  for (const [filePath, content] of expected) {
+    writeFileSync(filePath, content);
+    console.log(`Wrote ${filePath}`);
+  }
   console.log(`Generated schemas for ${schemaMetadata.length} tools.`);
 }
 
