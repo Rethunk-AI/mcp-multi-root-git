@@ -196,6 +196,19 @@ describe("git_fetch execute handler", () => {
     expect(text).toContain("Success");
   });
 
+  test("leading-dash remote is rejected with unsafe_remote_token", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-inject-", "mcp-fetch-inject-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      remote: "--upload-pack=/tmp/x",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("unsafe_remote_token");
+  });
+
   test("fetch with invalid remote returns ok:false in json", async () => {
     const { work } = makeRepoWithUpstream("mcp-fetch-bad-", "mcp-fetch-bad-remote-");
 

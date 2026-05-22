@@ -114,6 +114,33 @@ describe("git_show_tool", () => {
     expect(parsed.ref).toBe("HEAD");
   });
 
+  test("git show rejects leading-dash ref injection", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "--output=/tmp/x",
+    });
+
+    expect(result).toContain("unsafe_ref_token");
+  });
+
+  test("git show rejects path that escapes repo", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "HEAD",
+      path: "../../etc/passwd",
+    });
+
+    expect(result).toContain("path_escapes_repo");
+  });
+
   test("git show commit message with multiline content", async () => {
     const repo = makeRepo();
     writeFileSync(join(repo, "file.txt"), "content\n");

@@ -1,7 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { spawnGitAsync } from "./git.js";
+import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -100,6 +100,14 @@ export function registerGitFetchTool(server: FastMCP): void {
       const branch = args.branch?.trim();
       const prune = args.prune === true;
       const tags = args.tags === true;
+
+      // Validate remote and branch to prevent argument injection.
+      if (!isSafeGitUpstreamToken(remote)) {
+        return jsonRespond({ error: "unsafe_remote_token", remote });
+      }
+      if (branch && !isSafeGitUpstreamToken(branch)) {
+        return jsonRespond({ error: "unsafe_ref_token", branch });
+      }
 
       // Build git fetch command
       const fetchArgs: string[] = ["fetch"];

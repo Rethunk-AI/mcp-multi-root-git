@@ -1,7 +1,9 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { spawnGitAsync } from "./git.js";
+import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -152,7 +154,10 @@ export function registerGitShowTool(server: FastMCP): void {
         format: true,
       })
       .extend({
-        ref: z.string().describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
+        ref: z
+          .string()
+          .min(1)
+          .describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
         path: z
           .string()
           .optional()
@@ -164,6 +169,17 @@ export function registerGitShowTool(server: FastMCP): void {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
       const top = pre.gitTop;
+
+      if (!isSafeGitAncestorRef(args.ref)) {
+        return jsonRespond({ error: "unsafe_ref_token", ref: args.ref });
+      }
+
+      if (args.path !== undefined) {
+        const resolved = resolvePathForRepo(args.path, top);
+        if (!assertRelativePathUnderTop(args.path, resolved, top)) {
+          return jsonRespond({ error: "path_escapes_repo", path: args.path });
+        }
+      }
 
       const result = await runGitShow({
         top,

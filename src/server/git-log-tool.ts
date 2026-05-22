@@ -4,6 +4,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } from "./git.js";
+import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -319,6 +320,11 @@ export function registerGitLogTool(server: FastMCP): void {
         if (p.split("").some((c) => c.charCodeAt(0) === 0) || /[\n\r;|&`$<>]/.test(p)) {
           return jsonRespond({ error: "invalid_paths", path: p });
         }
+      }
+
+      // Validate branch — reject leading-dash and other injection attempts.
+      if (args.branch && !isSafeGitAncestorRef(args.branch)) {
+        return jsonRespond({ error: "unsafe_ref_token", branch: args.branch });
       }
 
       const maxCommits = Math.min(args.maxCommits ?? DEFAULT_MAX_COMMITS, MAX_COMMITS_HARD_CAP);

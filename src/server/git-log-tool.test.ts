@@ -389,6 +389,21 @@ describe("git_log execute handler", () => {
     expect(text).not.toContain("_root:");
   });
 
+  test("leading-dash branch is rejected with unsafe_ref_token", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: commit A");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      branch: "--output=/tmp/x",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("unsafe_ref_token");
+  });
+
   test("format: oneline multi-root prefixes each group with ### repo (branch)", async () => {
     const dir1 = makeRepo();
     const dir2 = makeRepo();
