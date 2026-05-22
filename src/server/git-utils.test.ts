@@ -140,6 +140,30 @@ describe("parseGitSubmodulePaths", () => {
     const paths = parseGitSubmodulePaths(dir);
     expect(paths).toEqual(["vendor/a", "vendor/b"]);
   });
+
+  test("does not collect path = lines outside a [submodule] section", () => {
+    const dir = makeRepo();
+    // A stray "path = ..." under a non-submodule section must be ignored.
+    writeFileSync(
+      join(dir, ".gitmodules"),
+      '[core]\n\tpath = should-be-ignored\n[submodule "real"]\n\tpath = vendor/real\n\turl = https://example.com/real.git\n',
+      "utf8",
+    );
+    const paths = parseGitSubmodulePaths(dir);
+    expect(paths).toEqual(["vendor/real"]);
+    expect(paths).not.toContain("should-be-ignored");
+  });
+
+  test("strips inline comments from path values", () => {
+    const dir = makeRepo();
+    writeFileSync(
+      join(dir, ".gitmodules"),
+      '[submodule "lib"]\n\tpath = vendor/lib ; inline comment\n\turl = https://example.com/lib.git\n',
+      "utf8",
+    );
+    const paths = parseGitSubmodulePaths(dir);
+    expect(paths).toEqual(["vendor/lib"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

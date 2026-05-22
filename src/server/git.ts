@@ -105,9 +105,21 @@ export function parseGitSubmodulePaths(gitRoot: string): string[] {
     return [];
   }
   const paths: string[] = [];
-  for (const line of text.split("\n")) {
-    const m = /^\s*path\s*=\s*(.+)\s*$/.exec(line);
-    if (m?.[1]) paths.push(m[1].trim());
+  let inSubmoduleSection = false;
+  for (const rawLine of text.split("\n")) {
+    // Strip inline and whole-line comments (; and #)
+    const commentIdx = rawLine.search(/\s*[;#]/);
+    const line = commentIdx >= 0 ? rawLine.slice(0, commentIdx) : rawLine;
+    // Track INI section header
+    const sectionMatch = /^\s*\[(.+)\]\s*$/.exec(line);
+    if (sectionMatch) {
+      inSubmoduleSection = /^submodule\s+"/.test(sectionMatch[1] ?? "");
+      continue;
+    }
+    // Only collect path = lines inside a [submodule "..."] section
+    if (!inSubmoduleSection) continue;
+    const m = /^\s*path\s*=\s*(.+?)\s*$/.exec(line);
+    if (m?.[1]) paths.push(m[1]);
   }
   return paths;
 }

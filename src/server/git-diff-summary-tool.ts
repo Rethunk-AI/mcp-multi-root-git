@@ -141,6 +141,12 @@ function extractFileInfo(
     status = "renamed";
     const fromMatch = /^rename from (.+)$/m.exec(body);
     oldPath = fromMatch?.[1];
+    // Prefer the authoritative "rename to <path>" body line over the greedy
+    // header regex split, which mis-parses paths containing the literal " b/".
+    const toMatch = /^rename to (.+)$/m.exec(body);
+    if (toMatch?.[1]) {
+      bPath = toMatch[1];
+    }
   }
 
   const path = status === "deleted" ? aPath : bPath;
@@ -225,7 +231,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: WorkspacePickSchema.omit({ allWorkspaceRoots: true }).extend({
       range: z
         .string()
         .optional()

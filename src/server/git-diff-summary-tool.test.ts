@@ -69,9 +69,23 @@ function extractFileInfo(
   oldPath?: string;
   status: "modified" | "added" | "deleted" | "renamed";
 } {
-  const headerMatch = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
-  const aPath = headerMatch?.[1] ?? "";
-  const bPath = headerMatch?.[2] ?? aPath;
+  const prefix = "diff --git a/";
+  const raw = header.startsWith(prefix) ? header.slice(prefix.length) : "";
+  const midLen = (raw.length - " b/".length) / 2;
+  let aPath = "";
+  let bPath = "";
+  if (Number.isInteger(midLen) && midLen > 0) {
+    const candidate = raw.slice(0, midLen);
+    if (raw.slice(midLen) === ` b/${candidate}`) {
+      aPath = candidate;
+      bPath = candidate;
+    }
+  }
+  if (!aPath) {
+    const headerMatch = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
+    aPath = headerMatch?.[1] ?? "";
+    bPath = headerMatch?.[2] ?? aPath;
+  }
 
   let status: "modified" | "added" | "deleted" | "renamed" = "modified";
   let oldPath: string | undefined;
@@ -84,6 +98,10 @@ function extractFileInfo(
     status = "renamed";
     const fromMatch = /^rename from (.+)$/m.exec(body);
     oldPath = fromMatch?.[1];
+    const toMatch = /^rename to (.+)$/m.exec(body);
+    if (toMatch?.[1]) {
+      bPath = toMatch[1];
+    }
   }
 
   const path = status === "deleted" ? aPath : bPath;
@@ -281,6 +299,21 @@ describe("extractFileInfo", () => {
     expect(path).toBe("new.ts");
     expect(status).toBe("renamed");
     expect(oldPath).toBe("old.ts");
+  });
+
+  test("rename whose new path contains ' b/' parses with correct new path", () => {
+    // Header: "diff --git a/src/old.ts b/src/b/new.ts"
+    // Greedy regex would split at the first " b/" giving bPath="src/b/new.ts" — but only
+    // because the new path happens to start with "src/b/". For a path like
+    // "src/b/widget.ts" the greedy split produces the wrong aPath/bPath pair when
+    // aPath !== bPath. The fix must prefer "rename to" from the body.
+    const header = "diff --git a/src/old.ts b/src/b/widget.ts";
+    const body =
+      "similarity index 90%\nrename from src/old.ts\nrename to src/b/widget.ts\n--- a/src/old.ts\n+++ b/src/b/widget.ts";
+    const { path, status, oldPath } = extractFileInfo(header, body);
+    expect(status).toBe("renamed");
+    expect(path).toBe("src/b/widget.ts");
+    expect(oldPath).toBe("src/old.ts");
   });
 });
 
