@@ -2,26 +2,30 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [2.6.0] — 2026-05-22
+
+Security-hardening and correctness release surfaced by a full-repo critical review.
 
 ### Security
 
-- **Argument-injection hardening** — `git_show`, `git_log`, and `git_fetch` now validate ref/branch/remote tokens against the argv-safe subset before invoking git, returning `unsafe_ref_token` or `unsafe_remote_token` on rejection.
-- **`isProtectedBranch` normalization** — branch name comparison now strips leading `refs/heads/` before matching protected patterns.
+- **Argument-injection hardening** — `git_show`, `git_log`, and `git_fetch` passed caller-supplied ref/branch/remote values straight into git argv. A value beginning with `-` is parsed by git as an option (`--output=<path>` writes an arbitrary file; `--upload-pack=<cmd>` on fetch runs a command). These read tools now validate those tokens against the argv-safe subset before invoking git, returning `unsafe_ref_token`, `unsafe_remote_token`, or `path_escapes_repo` on rejection — the same gate already applied to the mutating tools.
+- **`isProtectedBranch` normalization** — input is now normalized (trim, strip leading `refs/heads/`, lowercase) before matching, so `refs/heads/main`, `Main`, and `MAIN` are all recognized as protected. Previously the exact-name set was case-sensitive and a `refs/heads/` prefix evaded it entirely.
 
 ### Fixed
 
-- **`batch_commit`** — worktree-related staging failures no longer leave the index in a dirty state; dry-run mode now correctly unstages all staged content after preview.
-- **`git_stash_list`** — stash index was off-by-one when entries contained embedded `|` characters; index is now always read from the first pipe-separated field.
-- **`git_diff_summary`** — rename-aware path parsing now correctly handles file paths containing ` b/` (e.g. `src/b/file.ts`).
-- **`.gitmodules` parser** — non-regular files at `.gitmodules` (character devices, sockets) are now skipped via `lstatSync().isFile()` to prevent `EACCES` errors in sandboxed environments.
-- **`git_inventory` / `git_parity` v3 JSON** — `workspace_root` field corrected to `workspaceRoot` (camelCase) consistent with `git_log` and the v3 contract.
+- **`batch_commit` linked worktrees** — hunk-level staging wrote its scratch patch under `${gitTop}/.git/`, which fails with `ENOTDIR` in a linked worktree (where `.git` is a file). The scratch path is now resolved via `git rev-parse --absolute-git-dir`, correct for both normal repos and worktrees.
+- **`batch_commit` dry run** — preview cleanup ran an unconditional `git reset HEAD --` over every touched path, silently unstaging work the caller had staged before invoking. A pre-staged snapshot is now taken first; cleanup resets only paths the dry run itself staged.
+- **`git_stash_list` index** — `index` was taken from the loop counter, so a malformed entry dropped by the parse guard shifted every later index and `git_stash_apply` could target the wrong stash. The index is now parsed from the canonical `stash@{N}` ref.
+- **`git_diff_summary` rename parsing** — the new path of a rename whose path contained the substring ` b/` was mis-reported because the greedy `diff --git` header regex split at the wrong point; the authoritative `rename to` body line is now used.
+- **`.gitmodules` parser** — `parseGitSubmodulePaths` matched any `path =` line regardless of INI section and ignored comments; it now tracks `[submodule]` sections and strips `;`/`#` comments.
+- **`git_inventory` / `git_parity` v3 JSON** — `workspace_root` field corrected to `workspaceRoot` (camelCase), completing the v3 contract rename already applied to `git_log`.
 
 ### Changed
 
 - **`git_tag` error codes renamed** — `tag_empty` → `empty_tag_name`, `tag_unsafe` → `unsafe_tag_token`, `ref_unsafe` → `unsafe_ref_token`; consistent with the server-wide naming convention.
-- **`git_diff` multi-root parameters removed** — `absoluteGitRoots` and `allWorkspaceRoots` are no longer accepted by `git_diff`; it is now a pure single-repo tool (identical posture to `git_show`). Use `workspaceRoot` or `rootIndex` to select the target repo.
+- **`git_diff` multi-root parameters removed** — `absoluteGitRoots` and `allWorkspaceRoots` are no longer accepted by `git_diff`; it is now a pure single-repo tool (identical posture to `git_show`). Use `workspaceRoot` or `rootIndex` to select the target repo. `git_diff_summary` keeps single-entry `absoluteGitRoots` and drops only `allWorkspaceRoots`.
 - **`MCP_JSON_FORMAT_VERSION` constant** — `"3"` is now an exported constant in `src/server.ts` and surfaced in the FastMCP `instructions` field, making the format version discoverable from the MCP `initialize` response.
+- **CI** — the 20 published per-tool `schemas/*.json` artifacts are now drift-checked on every PR via a new `schema:individual:check` step; previously only `tool-parameters.schema.json` was gated.
 
 ## [2.5.0] — 2026-05-15
 
