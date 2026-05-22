@@ -26,7 +26,7 @@ git_show({ ref: "sha", stat?: true, paths?: string[] })
 
 ## Medium value — nice to have
 
-### `git_fetch` MCP tool
+### `git_fetch` — structured ref deltas
 
 Current output is string-based (`updatedRefs[]`, `newRefs[]`). Remaining gap is richer structured deltas:
 

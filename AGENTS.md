@@ -48,7 +48,7 @@ IDEs injecting this as context: do not re-link from rules.
 ## Changing contracts
 
 - **No banner paragraphs** in shipped docs. Use normal titles + cross-links.
-- **JSON format version** (currently `"3"`, discoverable via MCP `initialize`): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false. v3 changes in `git_log`: `sha7` → `sha` (full SHA), `workspace_root` → `workspaceRoot`, `ageRelative` removed, `email` omitted when empty.
+- **JSON format version** (currently `"3"`, exported as `MCP_JSON_FORMAT_VERSION` in `src/server.ts` and surfaced via the FastMCP `instructions` field — discoverable from the MCP `initialize` response): bump on incompatible JSON changes (renamed/nested/omitted fields). Document migration here + [docs/mcp-tools.md](docs/mcp-tools.md). v2 removed the `rethunkGitMcp` envelope; payloads are minified; optional fields omitted when empty/null/false. v3 changes in `git_log`: `sha7` → `sha` (full SHA), `workspace_root` → `workspaceRoot`, `ageRelative` removed, `email` omitted when empty.
 - **Preset file:** keep `presets.ts` Zod schemas aligned with [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json).
 - **Public tool surface:** rename/add → update [docs/mcp-tools.md](docs/mcp-tools.md) + [README.md](README.md) (if mentioned), then regenerate the shipped schema artifacts (`tool-parameters.schema.json`, `schemas/index.json`, `schemas/*.json`). Install/client wiring → [docs/install.md](docs/install.md) only.
 
@@ -66,7 +66,7 @@ Rules for LLMs operating in or against this repository.
 
 **End-user Git/MCP preference** (status/log/diff/commits): **`~/.claude/CLAUDE.md`** § **Git & GitHub** — same policy when dogfooding this server from a harness.
 
-**Mutating tools require workspace-root confirmation** — `git_fetch`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft`, `git_tag`, and `git_stash_apply` operate only on roots confirmed by `requireGitAndRoots` / `requireSingleRepo`. Never pass caller-supplied absolute paths to mutating tools; use `workspaceRoot` or MCP roots.
+**Mutating tools use `workspaceRoot` as trusted operator input** — `git_fetch`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft`, `git_tag`, and `git_stash_apply` operate on roots resolved via `requireGitAndRoots` / `requireSingleRepo`. Pass the target repo as `workspaceRoot` (trusted caller input) or via MCP roots. The `absoluteGitRoots` bulk multi-root parameter is not accepted by mutating tools — passing it is rejected.
 
 **`batch_commit` atomic staging — single call per logical change** — Do NOT attempt incremental staging across multiple `batch_commit` calls. Each call is self-contained: it stages all files in all entries, commits them sequentially, and the moment the call completes, all commits have landed. Include all related files (for all related commit entries) in a single `batch_commit` call. A call cannot be resumed or extended by a later call — each is an independent transaction. If entry N fails, entries before N remain committed; entries after N are skipped (not rolled back).
 
@@ -76,7 +76,7 @@ Rules for LLMs operating in or against this repository.
 
 **Never force-push** — `git_push` has no force-push mode by design. `git_merge` with `strategy: "ff-only"` will fail cleanly rather than force.
 
-**Contract bumps need documentation** — if a JSON output shape changes incompatibly, bump `MCP_JSON_FORMAT_VERSION` in `src/server.ts` and document the migration in both this file and [docs/mcp-tools.md](docs/mcp-tools.md).
+**Contract bumps need documentation** — if a JSON output shape changes incompatibly, bump the `MCP_JSON_FORMAT_VERSION` constant in `src/server.ts` (it is surfaced in the server `instructions` field and discoverable via MCP `initialize`) and document the migration in both this file and [docs/mcp-tools.md](docs/mcp-tools.md).
 
 **Path confinement** — any tool accepting file paths must use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and include escaping-attempt tests.
 

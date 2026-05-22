@@ -17,7 +17,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
-| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, optionally scoped to one path. Args: `base?`, `head?`, `path?`, `staged?`, plus single-repo workspace pick + `format`. **Read-only.** |
+| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, optionally scoped to one path. Args: `workspaceRoot`, `rootIndex`, `format`, `base?`, `head?`, `path?`, `staged?`. No `absoluteGitRoots` or `allWorkspaceRoots`. **Read-only.** |
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff, or file content at `path` for that ref. Args: `ref`, `path?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
 | `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: single-repo workspace pick + `format`. **Read-only.** |
@@ -259,7 +259,7 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`**; server + format version are discoverable via MCP `initialize`. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
 The package also ships **`tool-parameters.schema.json`**, generated from the registered Zod parameter schemas via `bun run schema:tools`, plus the published **`schemas/`** directory (`schemas/index.json` + one JSON Schema per tool) via `bun run schema:individual`. Connected MCP clients should still prefer live schema discovery from `initialize` / tool listing; the shipped artifacts are for offline inspection, drift checks, and code generation.
 
@@ -282,7 +282,7 @@ To keep responses compact, **optional fields are omitted when they would be empt
 
 - Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). It is retained only where it carries parse output (the `invalid_json` preset branch).
 
-**When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*.
+**When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*. The constant lives in `src/server.ts` and is surfaced via the server `instructions` field (discoverable from the MCP `initialize` response).
 
 ### `git_log` — parameters
 
@@ -335,6 +335,7 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 | `invalid_since` | The `since` string contains shell metacharacters and was rejected. |
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
+| `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
 | `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
 | `absolute_git_roots_exclusive` | `absoluteGitRoots` was combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
@@ -416,7 +417,11 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. |
 | `path` | string | — | Optional single file path to scope the diff. |
 | `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot` | string | — | Explicit root; highest priority. |
+| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
+
+`git_diff` is a single-repo tool. It does not accept `absoluteGitRoots` or `allWorkspaceRoots`; use `workspaceRoot` or `rootIndex` to select the target repo.
 
 ### `git_diff` — JSON shape (`format: "json"`)
 
@@ -462,6 +467,8 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 
 | Code | Meaning |
 |------|---------|
+| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
+| `path_escapes_repo` | `path` resolves outside the git toplevel. |
 | `git_show_failed` | `git show` exited non-zero (e.g. unknown ref). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
@@ -520,6 +527,8 @@ Fetch failures are reported as `ok: false` with the captured git output in `outp
 
 | Code | Meaning |
 |------|---------|
+| `unsafe_remote_token` | `remote` contains characters outside the argv-safe subset. |
+| `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
@@ -792,9 +801,9 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 
 | Code | Meaning |
 |------|---------|
-| `tag_empty` | `tag` trimmed to an empty string. |
-| `tag_unsafe` | `tag` contains disallowed characters. |
-| `ref_unsafe` | `ref` contains disallowed characters. |
+| `empty_tag_name` | `tag` trimmed to an empty string. |
+| `unsafe_tag_token` | `tag` contains disallowed characters. |
+| `unsafe_ref_token` | `ref` contains disallowed characters. |
 | `ref_not_found` | `ref` did not resolve to a commit. |
 | `tag_create_failed` | `git tag` failed while creating the tag. |
 | `tag_delete_failed` | `git tag -d` failed. |

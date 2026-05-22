@@ -4,6 +4,25 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Security
+
+- **Argument-injection hardening** — `git_show`, `git_log`, and `git_fetch` now validate ref/branch/remote tokens against the argv-safe subset before invoking git, returning `unsafe_ref_token` or `unsafe_remote_token` on rejection.
+- **`isProtectedBranch` normalization** — branch name comparison now strips leading `refs/heads/` before matching protected patterns.
+
+### Fixed
+
+- **`batch_commit`** — worktree-related staging failures no longer leave the index in a dirty state; dry-run mode now correctly unstages all staged content after preview.
+- **`git_stash_list`** — stash index was off-by-one when entries contained embedded `|` characters; index is now always read from the first pipe-separated field.
+- **`git_diff_summary`** — rename-aware path parsing now correctly handles file paths containing ` b/` (e.g. `src/b/file.ts`).
+- **`.gitmodules` parser** — non-regular files at `.gitmodules` (character devices, sockets) are now skipped via `lstatSync().isFile()` to prevent `EACCES` errors in sandboxed environments.
+- **`git_inventory` / `git_parity` v3 JSON** — `workspace_root` field corrected to `workspaceRoot` (camelCase) consistent with `git_log` and the v3 contract.
+
+### Changed
+
+- **`git_tag` error codes renamed** — `tag_empty` → `empty_tag_name`, `tag_unsafe` → `unsafe_tag_token`, `ref_unsafe` → `unsafe_ref_token`; consistent with the server-wide naming convention.
+- **`git_diff` multi-root parameters removed** — `absoluteGitRoots` and `allWorkspaceRoots` are no longer accepted by `git_diff`; it is now a pure single-repo tool (identical posture to `git_show`). Use `workspaceRoot` or `rootIndex` to select the target repo.
+- **`MCP_JSON_FORMAT_VERSION` constant** — `"3"` is now an exported constant in `src/server.ts` and surfaced in the FastMCP `instructions` field, making the format version discoverable from the MCP `initialize` response.
+
 ## [2.5.0] — 2026-05-15
 
 Bug-fix and documentation release; includes one new `git_log` output format.
