@@ -630,6 +630,31 @@ describe("batch_commit dryRun mode", () => {
     expect(status.stdout).toContain(" M edit.ts");
     expect(status.stdout).toContain(" D del.ts");
   });
+
+  test("dryRun: true leaves pre-staged file still staged after cleanup", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    writeFileSync(join(dir, "pre.ts"), "const p = 0;\n");
+    gitCmd(dir, "add", "base.ts", "pre.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify both files — stage only pre.ts before invoking dry run
+    writeFileSync(join(dir, "pre.ts"), "const p = 99;\n");
+    writeFileSync(join(dir, "new.ts"), "export const n = 1;\n");
+    gitCmd(dir, "add", "pre.ts"); // pre-existing staged change
+
+    const run = captureTool(registerBatchCommitTool);
+    await run({
+      workspaceRoot: dir,
+      dryRun: true,
+      commits: [{ message: "feat: add new", files: ["new.ts"] }],
+    });
+
+    // new.ts must be unstaged (dry-run file); pre.ts must remain staged
+    const statusResult = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(statusResult.stdout).toContain("pre.ts"); // still staged — pre-existing
+    expect(statusResult.stdout).not.toContain("new.ts"); // cleaned up by dry-run
+  });
 });
 
 // ---------------------------------------------------------------------------

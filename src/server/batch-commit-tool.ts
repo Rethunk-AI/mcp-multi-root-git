@@ -197,8 +197,15 @@ async function stageFile(
     return { ok: false, error: "No hunks found in line range" };
   }
 
-  // Write partial patch to temp file in the git repo and apply it to the index
-  const tempPatchFile = `${gitTop}/.git/.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`;
+  // Resolve the real git dir (works for linked worktrees where .git is a file, not a dir)
+  const gitDirResult = await spawnGitAsync(gitTop, ["rev-parse", "--absolute-git-dir"]);
+  if (!gitDirResult.ok) {
+    return { ok: false, error: (gitDirResult.stderr || gitDirResult.stdout).trim() };
+  }
+  const gitDir = gitDirResult.stdout.trim();
+
+  // Write partial patch to temp file in the git dir and apply it to the index
+  const tempPatchFile = `${gitDir}/.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`;
   const { writeFileSync, unlinkSync } = await import("node:fs");
   writeFileSync(tempPatchFile, partialPatch, "utf8");
 
@@ -304,6 +311,21 @@ export function registerBatchCommitTool(server: FastMCP): void {
       const results: CommitResult[] = [];
       const stagedFilesForCleanup: Set<string> = new Set();
 
+      // Snapshot already-staged paths BEFORE the preview loop so dry-run cleanup
+      // doesn't unstage files the caller had staged before invoking.
+      let preStagedPaths: Set<string> = new Set();
+      if (args.dryRun) {
+        const snapResult = await spawnGitAsync(gitTop, ["diff", "--cached", "--name-only"]);
+        if (snapResult.ok) {
+          preStagedPaths = new Set(
+            snapResult.stdout
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          );
+        }
+      }
+
       for (let i = 0; i < args.commits.length; i++) {
         const entry = args.commits[i];
         if (!entry) break;
@@ -366,10 +388,13 @@ export function registerBatchCommitTool(server: FastMCP): void {
           break;
         }
 
-        // Track staged files for cleanup in dry-run
+        // Track staged files for cleanup in dry-run, excluding paths that were
+        // already staged before this call (so pre-existing staged state survives).
         if (args.dryRun) {
           for (const path of filePaths) {
-            stagedFilesForCleanup.add(path);
+            if (!preStagedPaths.has(path)) {
+              stagedFilesForCleanup.add(path);
+            }
           }
         }
 
