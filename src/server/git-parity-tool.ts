@@ -35,7 +35,7 @@ export function registerGitParityTool(server: FastMCP): void {
       }
 
       const results: {
-        workspace_root: string;
+        workspaceRoot: string;
         presetSchemaVersion?: string;
         status: "OK" | "MISMATCH";
         pairs: {
@@ -59,7 +59,7 @@ export function registerGitParityTool(server: FastMCP): void {
           const err = jsonRespond(errPayload);
           if (args.format === "json") {
             results.push({
-              workspace_root: workspaceRoot,
+              workspaceRoot: workspaceRoot,
               status: "MISMATCH",
               pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: err }],
             });
@@ -142,7 +142,7 @@ export function registerGitParityTool(server: FastMCP): void {
         }
 
         results.push({
-          workspace_root: top,
+          workspaceRoot: top,
           ...spreadDefined("presetSchemaVersion", parityPresetSchemaVersion),
           status: allOk ? "OK" : "MISMATCH",
           pairs: pairResults,

@@ -73,7 +73,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       const useFixed = upstream.mode === "fixed";
 
       const allJson: {
-        workspace_root: string;
+        workspaceRoot: string;
         presetSchemaVersion?: string;
         upstream?: { mode: "fixed"; remote: string; branch: string };
         entries: InventoryEntryJson[];
@@ -87,7 +87,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           const err = { error: "not_a_git_repository", path: workspaceRoot };
           if (args.format === "json") {
             allJson.push({
-              workspace_root: workspaceRoot,
+              workspaceRoot: workspaceRoot,
               ...(upstream.mode === "fixed" ? { upstream } : {}),
               entries: [
                 makeSkipEntry(workspaceRoot, workspaceRoot, upstream.mode, JSON.stringify(err)),
@@ -157,7 +157,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
 
         if (args.format === "json") {
           allJson.push({
-            workspace_root: top,
+            workspaceRoot: top,
             ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
             ...spreadWhen(nestedRootsTruncated, {
               nestedRootsTruncated: true,

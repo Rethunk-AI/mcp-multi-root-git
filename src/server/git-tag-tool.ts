@@ -91,12 +91,12 @@ export function registerGitTagTool(server: FastMCP): void {
 
       const tag = args.tag.trim();
       if (!tag) {
-        return jsonRespond({ error: "tag_empty" });
+        return jsonRespond({ error: "empty_tag_name" });
       }
 
       // Validate tag name: no shell metacharacters
       if (!isSafeGitUpstreamToken(tag)) {
-        return jsonRespond({ error: "tag_unsafe", tag });
+        return jsonRespond({ error: "unsafe_tag_token", tag });
       }
 
       // Handle deletion
@@ -123,7 +123,7 @@ export function registerGitTagTool(server: FastMCP): void {
       // Determine the ref to tag (default HEAD)
       const ref = (args.ref ?? "HEAD").trim();
       if (!isSafeGitUpstreamToken(ref)) {
-        return jsonRespond({ error: "ref_unsafe", ref });
+        return jsonRespond({ error: "unsafe_ref_token", ref });
       }
 
       // Get the SHA of the ref to tag

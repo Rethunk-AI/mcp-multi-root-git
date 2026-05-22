@@ -19,7 +19,7 @@ type InventoryEntry = {
 };
 
 type InventoryGroup = {
-  workspace_root: string;
+  workspaceRoot: string;
   entries: InventoryEntry[];
   nestedRootsTruncated?: boolean;
   nestedRootsOmittedCount?: number;

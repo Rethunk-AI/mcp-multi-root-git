@@ -47,9 +47,9 @@ describe("git_parity", () => {
     });
 
     const parsed = JSON.parse(text) as {
-      parity?: { workspace_root: string; status: string; pairs: { match: boolean }[] }[];
+      parity?: { workspaceRoot: string; status: string; pairs: { match: boolean }[] }[];
     };
-    expect(parsed.parity?.map((entry) => entry.workspace_root)).toEqual([a.root, b.root]);
+    expect(parsed.parity?.map((entry) => entry.workspaceRoot)).toEqual([a.root, b.root]);
     expect(parsed.parity?.map((entry) => entry.status)).toEqual(["OK", "OK"]);
     expect(parsed.parity?.flatMap((entry) => entry.pairs.map((pair) => pair.match))).toEqual([
       true,

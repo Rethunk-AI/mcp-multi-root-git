@@ -216,6 +216,6 @@ describe("git_tag execute handler", () => {
     });
     const parsed = JSON.parse(text) as { error: string; tag: string };
 
-    expect(parsed).toEqual({ error: "tag_unsafe", tag: "v1.0.0;rm" });
+    expect(parsed).toEqual({ error: "unsafe_tag_token", tag: "v1.0.0;rm" });
   });
 });
