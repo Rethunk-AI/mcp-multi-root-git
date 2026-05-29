@@ -31,13 +31,26 @@
       "type": "string"
     },
     "path": {
-      "description": "Scope diff to a single file path (e.g. \"src/main.ts\").",
+      "description": "Scope diff to a single file path (e.g. \"src/main.ts\"). For multiple files, prefer `paths`. If both `path` and `paths` are given, they are unioned.",
       "type": "string"
+    },
+    "paths": {
+      "description": "Scope diff to multiple file paths (e.g. [\"src/a.ts\", \"src/b.ts\"]). Each path is validated and must lie within the repository root. If both `path` and `paths` are given, they are unioned.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "staged": {
       "default": false,
       "description": "If true, show staged changes (git diff --staged). Ignored if `base` is provided.",
       "type": "boolean"
+    },
+    "unified": {
+      "description": "Number of context lines to show around each change (passed as -U<n> to git diff). Defaults to git's built-in default (3). Use 0 for no context.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
     }
   },
   "required": [

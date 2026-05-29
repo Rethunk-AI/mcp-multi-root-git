@@ -15,7 +15,10 @@ import { WorkspacePickSchema } from "./schemas.js";
 interface ShowJson {
   ref: string;
   path?: string;
+  paths?: string[];
+  stat?: boolean;
   message: string;
+  statOutput?: string;
   diff?: string;
 }
 
@@ -24,23 +27,37 @@ interface ShowJson {
 // ---------------------------------------------------------------------------
 
 /**
- * Run git show for a single ref, optionally limiting to a specific path.
- * Returns commit message and diff (or file content if path is specified).
+ * Run git show for a single ref, optionally limiting to specific paths and/or
+ * showing only the --stat diffstat rather than the full patch.
+ * Returns commit message and diff/stat output.
  */
 async function runGitShow(opts: {
   top: string;
   ref: string;
   path?: string;
+  paths?: string[];
+  stat?: boolean;
 }): Promise<ShowJson | { error: string }> {
-  const { top, ref, path } = opts;
+  const { top, ref, path, paths, stat } = opts;
 
-  // Build git show args. Shows commit message + full diff (or file content when path given).
-  const showArgs: string[] = ["show", ref];
+  // Merge single path + paths array into a unified list (deduped, order preserved).
+  const effectivePaths: string[] = [];
+  if (path) effectivePaths.push(path);
+  if (paths) {
+    for (const p of paths) {
+      if (!effectivePaths.includes(p)) effectivePaths.push(p);
+    }
+  }
 
-  if (path) {
-    // When path is specified, show that path at the ref without --no-patch
-    // to get the full content at that ref
-    showArgs.push("--", path);
+  // Build git show args. Shows commit message + full diff (or --stat diffstat).
+  const showArgs: string[] = ["show"];
+  if (stat) {
+    showArgs.push("--stat");
+  }
+  showArgs.push(ref);
+
+  if (effectivePaths.length > 0) {
+    showArgs.push("--", ...effectivePaths);
   }
 
   const r = await spawnGitAsync(top, showArgs);
@@ -55,10 +72,9 @@ async function runGitShow(opts: {
   // - Blank line
   // - Commit message (may contain multiple lines and blank lines)
   // - Blank line (separator before diff)
-  // - Diff (if --no-patch not used) or file content
+  // - Diff or --stat diffstat section
   const output = r.stdout;
   let message = "";
-  let diff = "";
 
   const lines = output.split("\n");
   let inHeader = true;
@@ -76,9 +92,16 @@ async function runGitShow(opts: {
       continue;
     }
 
-    // In message: collect until we see "diff --git" which marks the start of the diff section
     if (inMessage) {
-      if (line.startsWith("diff --git")) {
+      // In stat mode: content starts at the first line that looks like a stat entry
+      // (indented file path) or the summary line "N files changed".
+      // In diff mode: content starts at "diff --git".
+      const isStatLine =
+        stat &&
+        (line.match(/^\s+\S.*\|/) !== null || line.match(/^\s*\d+ files? changed/) !== null);
+      const isDiffLine = !stat && line.startsWith("diff --git");
+
+      if (isStatLine || isDiffLine) {
         inMessage = false;
         contentLines.push(line);
       } else {
@@ -91,17 +114,25 @@ async function runGitShow(opts: {
   }
 
   message = messageLines.join("\n").trim();
-  diff = contentLines.join("\n").trim();
+  const contentStr = contentLines.join("\n").trim();
 
   const result: ShowJson = {
     ref,
     message,
   };
-  if (path) {
+  // Reflect single legacy path (for backward-compat) and new paths[] in result.
+  if (path && !paths) {
     result.path = path;
+  } else if (effectivePaths.length > 0) {
+    result.paths = effectivePaths;
   }
-  if (diff) {
-    result.diff = diff;
+  if (stat) {
+    result.stat = true;
+    if (contentStr) {
+      result.statOutput = contentStr;
+    }
+  } else if (contentStr) {
+    result.diff = contentStr;
   }
   return result;
 }
@@ -115,6 +146,11 @@ function renderShowMarkdown(result: ShowJson): string {
   lines.push(`# git show ${result.ref}`);
   if (result.path) {
     lines.push(`_path: ${result.path}_`);
+  } else if (result.paths && result.paths.length > 0) {
+    lines.push(`_paths: ${result.paths.join(", ")}_`);
+  }
+  if (result.stat) {
+    lines.push("_mode: stat_");
   }
   lines.push("");
   lines.push("## Commit message");
@@ -123,7 +159,14 @@ function renderShowMarkdown(result: ShowJson): string {
   lines.push(result.message);
   lines.push("```");
 
-  if (result.diff) {
+  if (result.stat && result.statOutput) {
+    lines.push("");
+    lines.push("## Stat");
+    lines.push("");
+    lines.push("```");
+    lines.push(result.statOutput);
+    lines.push("```");
+  } else if (result.diff) {
     lines.push("");
     lines.push("## Diff");
     lines.push("");
@@ -143,7 +186,7 @@ export function registerGitShowTool(server: FastMCP): void {
   server.addTool({
     name: "git_show",
     description:
-      "Inspect commit content by ref/SHA. Returns commit message and diff (or file content at a specific path).",
+      "Inspect commit content by ref/SHA. Returns commit message and diff (or --stat diffstat when stat:true). Optionally filter to specific paths via path or paths[].",
     annotations: {
       readOnlyHint: true,
     },
@@ -162,7 +205,19 @@ export function registerGitShowTool(server: FastMCP): void {
           .string()
           .optional()
           .describe(
-            "Optional file path to inspect at the ref. If provided, shows that path's content at the ref instead of the diff.",
+            "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
+          ),
+        paths: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
+          ),
+        stat: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true, show --stat diffstat (files changed summary) instead of the full patch.",
           ),
       }),
     execute: async (args) => {
@@ -170,21 +225,32 @@ export function registerGitShowTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const top = pre.gitTop;
 
-      if (!isSafeGitAncestorRef(args.ref)) {
+      if (!isSafeGitAncestorRef(args.ref as string)) {
         return jsonRespond({ error: "unsafe_ref_token", ref: args.ref });
       }
 
       if (args.path !== undefined) {
-        const resolved = resolvePathForRepo(args.path, top);
-        if (!assertRelativePathUnderTop(args.path, resolved, top)) {
+        const resolved = resolvePathForRepo(args.path as string, top);
+        if (!assertRelativePathUnderTop(args.path as string, resolved, top)) {
           return jsonRespond({ error: "path_escapes_repo", path: args.path });
+        }
+      }
+
+      if (Array.isArray(args.paths)) {
+        for (const p of args.paths as string[]) {
+          const resolved = resolvePathForRepo(p, top);
+          if (!assertRelativePathUnderTop(p, resolved, top)) {
+            return jsonRespond({ error: "path_escapes_repo", path: p });
+          }
         }
       }
 
       const result = await runGitShow({
         top,
-        ref: args.ref,
-        path: args.path,
+        ref: args.ref as string,
+        path: args.path as string | undefined,
+        paths: args.paths as string[] | undefined,
+        stat: args.stat as boolean | undefined,
       });
 
       if ("error" in result) {

@@ -163,4 +163,65 @@ describe("git_show_tool", () => {
     expect(parsed.message).toContain("feat: add file");
     expect(parsed.message).toContain("detailed description");
   });
+
+  test("git show stat:true returns diffstat not full patch", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "alpha.ts", "const x = 1;\n", "feat: add alpha");
+    addCommit(repo, "beta.ts", "const y = 2;\n", "feat: add beta");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "HEAD",
+      stat: true,
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result);
+    expect(parsed.stat).toBe(true);
+    expect(parsed.message).toContain("feat: add beta");
+    // statOutput should be present (contains the diffstat summary line)
+    expect(typeof parsed.statOutput).toBe("string");
+    expect(parsed.statOutput).toContain("changed");
+    // Full patch content should NOT appear in statOutput
+    expect(parsed.statOutput ?? "").not.toContain("diff --git");
+    expect(parsed.diff).toBeUndefined();
+  });
+
+  test("git show paths[] filters diff to specified files", async () => {
+    const repo = makeRepo();
+    // Commit two files in one commit
+    writeFileSync(join(repo, "a.txt"), "aaa\n");
+    writeFileSync(join(repo, "b.txt"), "bbb\n");
+    gitCmd(repo, "add", "a.txt", "b.txt");
+    gitCmd(repo, "commit", "-m", "feat: add a and b");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "HEAD",
+      paths: ["a.txt"],
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result);
+    expect(parsed.paths).toEqual(["a.txt"]);
+    // Diff should mention a.txt but NOT b.txt
+    expect(parsed.diff).toContain("a.txt");
+    expect(parsed.diff ?? "").not.toContain("b.txt");
+  });
+
+  test("git show rejects path in paths[] that escapes repo", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "HEAD",
+      paths: ["safe.txt", "../../etc/shadow"],
+    });
+
+    expect(result).toContain("path_escapes_repo");
+  });
 });

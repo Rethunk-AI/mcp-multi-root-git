@@ -165,7 +165,7 @@ describe("git_fetch execute handler", () => {
     expect(Array.isArray(parsed.newRefs)).toBe(true);
   });
 
-  test("fetch picks up new branch pushed to remote", async () => {
+  test("fetch picks up new branch pushed to remote — newRefs and created populated", async () => {
     const { work, remote } = makeRepoWithUpstream("mcp-fetch-work2-", "mcp-fetch-remote2-");
 
     // Push a new branch to the bare remote directly.
@@ -182,9 +182,53 @@ describe("git_fetch execute handler", () => {
     const parsed = JSON.parse(text) as {
       ok: boolean;
       newRefs: string[];
+      created?: Array<{ ref: string; newSha: string; flag: string }>;
     };
     expect(parsed.ok).toBe(true);
+    // Legacy field still present
     expect(parsed.newRefs.some((r) => r.includes("feature-new"))).toBe(true);
+    // Structured created field populated when --porcelain is supported
+    if (parsed.created !== undefined) {
+      expect(parsed.created.length).toBeGreaterThan(0);
+      const entry = parsed.created.find((c) => c.ref.includes("feature-new"));
+      expect(entry).toBeDefined();
+      expect(typeof entry?.newSha).toBe("string");
+      expect(entry?.newSha.length).toBeGreaterThan(0);
+      expect(entry?.flag).toBe("*");
+    }
+  });
+
+  test("fetch picks up updated ref — updated field populated with oldSha/newSha", async () => {
+    const { work, remote } = makeRepoWithUpstream("mcp-fetch-upd-", "mcp-fetch-upd-remote-");
+
+    // Push an additional commit to main on the remote via a second clone
+    const cloneDir = mkTmpDir("mcp-fetch-upd-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeFileSync(join(cloneDir, "update.ts"), "export const y = 2;\n");
+    gitCmd(cloneDir, "add", "update.ts");
+    gitCmd(cloneDir, "commit", "-m", "feat: update");
+    gitCmd(cloneDir, "push", "origin", "main");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({ workspaceRoot: work, format: "json" });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      updatedRefs: string[];
+      updated?: Array<{ ref: string; oldSha: string; newSha: string; flag: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    // Legacy field shows update
+    expect(parsed.updatedRefs.length).toBeGreaterThan(0);
+    // Structured updated field populated when --porcelain is supported
+    if (parsed.updated !== undefined) {
+      expect(parsed.updated.length).toBeGreaterThan(0);
+      const entry = parsed.updated[0];
+      expect(typeof entry?.oldSha).toBe("string");
+      expect(typeof entry?.newSha).toBe("string");
+      expect(entry?.oldSha).not.toBe(entry?.newSha);
+      expect(entry?.oldSha.length).toBeGreaterThan(0);
+      expect(entry?.newSha.length).toBeGreaterThan(0);
+    }
   });
 
   test("fetch markdown output contains success status", async () => {

@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
-import { jsonRespond } from "./json.js";
+import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -10,12 +10,33 @@ import { WorkspacePickSchema } from "./schemas.js";
 // Types
 // ---------------------------------------------------------------------------
 
+interface UpdatedRefDelta {
+  ref: string;
+  oldSha: string;
+  newSha: string;
+  flag: string;
+}
+
+interface CreatedRefDelta {
+  ref: string;
+  newSha: string;
+  flag: string;
+}
+
+interface PrunedRefDelta {
+  ref: string;
+}
+
 interface GitFetchResult {
   ok: boolean;
   remote: string;
   updatedRefs: string[];
   newRefs: string[];
   output: string;
+  // Structured deltas — present only when non-empty (v3 "omit when empty" convention)
+  updated?: UpdatedRefDelta[];
+  created?: CreatedRefDelta[];
+  pruned?: PrunedRefDelta[];
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +68,67 @@ function parseGitFetchOutput(output: string): { updatedRefs: string[]; newRefs: 
   }
 
   return { updatedRefs, newRefs };
+}
+
+const ZEROS_SHA = "0000000000000000000000000000000000000000";
+
+/**
+ * Parse `git fetch --porcelain` stdout.
+ *
+ * Machine-readable lines have the form:
+ *   <flag><SP><old-sha><SP><new-sha><SP><local-ref>
+ *
+ * Flags:
+ *   ' ' = fast-forward update
+ *   '+' = forced update
+ *   '*' = new ref
+ *   '-' = pruned (deleted)
+ *   '!' = rejected
+ *   '=' = up-to-date (no change)
+ *   't' = tag update
+ */
+function parsePorcelainOutput(stdout: string): {
+  updated: UpdatedRefDelta[];
+  created: CreatedRefDelta[];
+  pruned: PrunedRefDelta[];
+} {
+  const updated: UpdatedRefDelta[] = [];
+  const created: CreatedRefDelta[] = [];
+  const pruned: PrunedRefDelta[] = [];
+
+  for (const line of stdout.split("\n")) {
+    if (!line) continue;
+    // Porcelain lines: flag(1) + space(1) + old-sha + space + new-sha + space + ref
+    // Minimum viable line: 1 flag + 1 space + at least some content
+    if (line.length < 3) continue;
+
+    const flag = line[0];
+    const rest = line.slice(2); // skip "flag " prefix
+    const parts = rest.split(" ");
+    // Expected: [old-sha, new-sha, ref...]
+    if (parts.length < 3) continue;
+
+    const oldSha = parts[0] ?? "";
+    const newSha = parts[1] ?? "";
+    const ref = parts.slice(2).join(" ");
+
+    if (!ref) continue;
+
+    if (flag === "-") {
+      pruned.push({ ref });
+    } else if (flag === "*" || oldSha === ZEROS_SHA) {
+      // New ref: flag is '*' OR old-sha is all-zeros
+      created.push({ ref, newSha, flag: flag ?? "*" });
+    } else if (flag === " " || flag === "+" || flag === "t") {
+      // Update: old and new differ
+      if (oldSha !== newSha) {
+        updated.push({ ref, oldSha, newSha, flag: flag ?? " " });
+      }
+    }
+    // '!' (rejected) and '=' (up-to-date) are intentionally ignored
+  }
+
+  return { updated, created, pruned };
 }
 
 // ---------------------------------------------------------------------------
@@ -109,25 +191,72 @@ export function registerGitFetchTool(server: FastMCP): void {
         return jsonRespond({ error: "unsafe_ref_token", branch });
       }
 
-      // Build git fetch command
-      const fetchArgs: string[] = ["fetch"];
+      // Build base fetch args (without --porcelain for now)
+      const baseArgs: string[] = ["fetch"];
 
       if (prune) {
-        fetchArgs.push("--prune");
+        baseArgs.push("--prune");
       }
 
       if (tags) {
-        fetchArgs.push("--tags");
+        baseArgs.push("--tags");
       }
 
-      fetchArgs.push(remote);
+      baseArgs.push(remote);
 
       if (branch) {
-        fetchArgs.push(branch);
+        baseArgs.push(branch);
       }
 
-      const result = await spawnGitAsync(gitTop, fetchArgs);
-      const { updatedRefs, newRefs } = parseGitFetchOutput(result.stdout + result.stderr);
+      // --- Attempt structured fetch with --porcelain (requires git >= 2.41) ---
+      let structured: {
+        updated: UpdatedRefDelta[];
+        created: CreatedRefDelta[];
+        pruned: PrunedRefDelta[];
+      } | null = null;
+      let result: { ok: boolean; stdout: string; stderr: string };
+
+      const porcelainArgs = ["fetch", "--porcelain"];
+      if (prune) porcelainArgs.push("--prune");
+      if (tags) porcelainArgs.push("--tags");
+      porcelainArgs.push(remote);
+      if (branch) porcelainArgs.push(branch);
+
+      const porcelainResult = await spawnGitAsync(gitTop, porcelainArgs);
+
+      if (
+        !porcelainResult.ok &&
+        (porcelainResult.stderr.includes("unknown option") ||
+          porcelainResult.stderr.includes("unknown switch") ||
+          porcelainResult.stderr.includes("invalid option"))
+      ) {
+        // --porcelain not supported: fall back to plain fetch
+        result = await spawnGitAsync(gitTop, baseArgs);
+        structured = null;
+      } else {
+        // Use porcelain result (ok or actual fetch error)
+        result = porcelainResult;
+        if (porcelainResult.ok || !porcelainResult.stderr.includes("unknown option")) {
+          structured = parsePorcelainOutput(porcelainResult.stdout);
+        }
+      }
+
+      // Legacy string-line parse: use combined output when porcelain is unavailable.
+      // When porcelain succeeded, derive legacy fields from structured data so
+      // that callers who rely on updatedRefs/newRefs still get useful values.
+      let updatedRefs: string[];
+      let newRefs: string[];
+      if (structured !== null) {
+        // Derive legacy string arrays from structured deltas
+        updatedRefs = structured.updated.map(
+          (d) => `${d.oldSha.slice(0, 7)}..${d.newSha.slice(0, 7)}  ${d.ref}`,
+        );
+        newRefs = structured.created.map((d) => `[new ref] ${d.ref} -> ${d.newSha.slice(0, 7)}`);
+      } else {
+        const parsed = parseGitFetchOutput(result.stdout + result.stderr);
+        updatedRefs = parsed.updatedRefs;
+        newRefs = parsed.newRefs;
+      }
 
       const fetchResult: GitFetchResult = {
         ok: result.ok,
@@ -135,6 +264,15 @@ export function registerGitFetchTool(server: FastMCP): void {
         updatedRefs,
         newRefs,
         output: (result.stdout + result.stderr).trim(),
+        ...spreadWhen(structured !== null && structured.updated.length > 0, {
+          updated: structured?.updated ?? [],
+        }),
+        ...spreadWhen(structured !== null && structured.created.length > 0, {
+          created: structured?.created ?? [],
+        }),
+        ...spreadWhen(structured !== null && structured.pruned.length > 0, {
+          pruned: structured?.pruned ?? [],
+        }),
       };
 
       if (args.format === "json") {
@@ -152,21 +290,45 @@ export function registerGitFetchTool(server: FastMCP): void {
 
       lines.push("", "**Status**: Success", "");
 
-      if (updatedRefs.length > 0) {
+      // Prefer structured deltas in markdown when available
+      if (structured !== null && structured.updated.length > 0) {
+        lines.push("## Updated refs", "");
+        for (const d of structured.updated) {
+          lines.push(`- \`${d.ref}\` ${d.oldSha.slice(0, 7)}→${d.newSha.slice(0, 7)}`);
+        }
+      } else if (updatedRefs.length > 0) {
         lines.push("## Updated refs", "");
         for (const ref of updatedRefs) {
           lines.push(`- ${ref}`);
         }
       }
 
-      if (newRefs.length > 0) {
+      if (structured !== null && structured.created.length > 0) {
+        lines.push("", "## New refs", "");
+        for (const d of structured.created) {
+          lines.push(`- \`${d.ref}\` (new, ${d.newSha.slice(0, 7)})`);
+        }
+      } else if (newRefs.length > 0) {
         lines.push("", "## New refs", "");
         for (const ref of newRefs) {
           lines.push(`- ${ref}`);
         }
       }
 
-      if (updatedRefs.length === 0 && newRefs.length === 0 && result.stdout.trim()) {
+      if (structured !== null && structured.pruned.length > 0) {
+        lines.push("", "## Pruned refs", "");
+        for (const d of structured.pruned) {
+          lines.push(`- \`${d.ref}\` (deleted)`);
+        }
+      }
+
+      if (
+        updatedRefs.length === 0 &&
+        newRefs.length === 0 &&
+        (structured === null ||
+          (structured.updated.length === 0 && structured.created.length === 0)) &&
+        result.stdout.trim()
+      ) {
         lines.push("", "## Output", "", "```", result.stdout.trim(), "```");
       }
 
