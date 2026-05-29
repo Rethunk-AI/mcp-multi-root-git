@@ -1,6 +1,8 @@
 import type { FastMCP } from "fastmcp";
 
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
+import { registerGitBlameTool } from "./git-blame-tool.js";
+import { registerGitBranchListTool } from "./git-branch-list-tool.js";
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitDiffTool } from "./git-diff-tool.js";
@@ -10,6 +12,7 @@ import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
+import { registerGitReflogTool } from "./git-reflog-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
 import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
@@ -36,6 +39,9 @@ export function registerRethunkGitTools(server: FastMCP): void {
   registerGitWorktreeListTool(server);
   registerGitStashListTool(server);
   registerGitFetchTool(server);
+  registerGitBlameTool(server);
+  registerGitBranchListTool(server);
+  registerGitReflogTool(server);
   // Mutating tools
   registerBatchCommitTool(server);
   registerGitPushTool(server);
