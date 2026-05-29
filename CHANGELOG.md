@@ -2,6 +2,17 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.7.0] — 2026-05-29
+
+Feature release: deepens three read tools per recurring agent pain points (TODO.md) and hardens the git subprocess layer. All changes are additive — no JSON format-version bump.
+
+### Added
+
+- **`git_diff` — multi-path + context control** — new `paths: string[]` scopes the diff to multiple files (unioned with the legacy single `path`), and `unified: number` (0–100) sets the context-line width (`-U<n>`). Path confinement is now enforced on every path input, returning `path_escapes_repo` on escape.
+- **`git_show` — stat + multi-path modes** — new `stat: true` returns a `--stat` diffstat (commit message + per-file counts, no full patch), and `paths: string[]` filters the shown patch/stat to specific files, with the same path-confinement guarantees as single `path`.
+- **`git_fetch` — structured ref deltas** — emits `updated: [{ ref, oldSha, newSha, flag }]`, `created: [{ ref, newSha, flag }]`, and `pruned: [{ ref }]` parsed from `git fetch --porcelain` (git ≥ 2.41). On older git the option is detected as unsupported and the tool falls back to the legacy line parse; the string `updatedRefs` / `newRefs` fields are retained for back-compat in both modes.
+- **`GIT_SUBPROCESS_TIMEOUT_MS`** — `spawnGitAsync` now accepts an optional `{ timeoutMs, signal }` argument and applies a default timeout (120000 ms, configurable via the env var; `0` disables). A hung git operation against a dead remote no longer blocks the server indefinitely — the child is killed (SIGTERM) on expiry or `AbortSignal` abort, and the result resolves `ok: false` with `timedOut` / `aborted` flags. Existing callers are unchanged beyond gaining default timeout protection.
+
 ## [2.6.0] — 2026-05-22
 
 Security-hardening and correctness release surfaced by a full-repo critical review.
