@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_branch_list",
+  "description": "Parameter schema for the 'git_branch_list' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Highest-priority override.",
+      "type": "string"
+    },
+    "rootIndex": {
+      "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "includeRemotes": {
+      "default": false,
+      "description": "When true, also return remote-tracking branches from refs/remotes (excluding symbolic origin/HEAD).",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "format",
+    "includeRemotes"
+  ],
+  "additionalProperties": false
+}

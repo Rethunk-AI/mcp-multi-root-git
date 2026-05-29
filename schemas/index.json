@@ -55,6 +55,21 @@
       "description": "Parameter schema for the 'git_stash_list' MCP tool."
     },
     {
+      "name": "git_blame",
+      "file": "git_blame.json",
+      "description": "Parameter schema for the 'git_blame' MCP tool."
+    },
+    {
+      "name": "git_branch_list",
+      "file": "git_branch_list.json",
+      "description": "Parameter schema for the 'git_branch_list' MCP tool."
+    },
+    {
+      "name": "git_reflog",
+      "file": "git_reflog.json",
+      "description": "Parameter schema for the 'git_reflog' MCP tool."
+    },
+    {
       "name": "git_fetch",
       "file": "git_fetch.json",
       "description": "Parameter schema for the 'git_fetch' MCP tool."

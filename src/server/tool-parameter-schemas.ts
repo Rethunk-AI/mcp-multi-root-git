@@ -2,6 +2,8 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
+import { registerGitBlameTool } from "./git-blame-tool.js";
+import { registerGitBranchListTool } from "./git-branch-list-tool.js";
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitDiffTool } from "./git-diff-tool.js";
@@ -11,6 +13,7 @@ import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
+import { registerGitReflogTool } from "./git-reflog-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
 import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
@@ -37,6 +40,9 @@ export const READ_ONLY_SINGLE_REPO_TOOLS = [
   "git_show",
   "git_worktree_list",
   "git_stash_list",
+  "git_blame",
+  "git_branch_list",
+  "git_reflog",
 ] as const;
 
 export const MUTATING_TOOLS = [
@@ -105,6 +111,9 @@ export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> 
     registerGitWorktreeListTool(server);
     registerGitStashListTool(server);
     registerGitFetchTool(server);
+    registerGitBlameTool(server);
+    registerGitBranchListTool(server);
+    registerGitReflogTool(server);
     registerBatchCommitTool(server);
     registerGitPushTool(server);
     registerGitMergeTool(server);

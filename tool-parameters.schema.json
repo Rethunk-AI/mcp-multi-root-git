@@ -593,6 +593,132 @@
       ],
       "additionalProperties": false
     },
+    "git_blame": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to the file to blame."
+        },
+        "ref": {
+          "description": "Optional commit-ish (SHA, branch, tag) to blame at.",
+          "type": "string"
+        },
+        "startLine": {
+          "description": "First line of the range to blame (1-based). Requires endLine.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "endLine": {
+          "description": "Last line of the range to blame (1-based, inclusive). Requires startLine.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "format",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "git_branch_list": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "includeRemotes": {
+          "default": false,
+          "description": "When true, also return remote-tracking branches from refs/remotes (excluding symbolic origin/HEAD).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "includeRemotes"
+      ],
+      "additionalProperties": false
+    },
+    "git_reflog": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Highest-priority override.",
+          "type": "string"
+        },
+        "rootIndex": {
+          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "default": "markdown",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "ref": {
+          "default": "HEAD",
+          "description": "Ref whose reflog to show (branch name, HEAD, etc.). Default: HEAD.",
+          "type": "string"
+        },
+        "maxEntries": {
+          "default": 30,
+          "description": "Maximum reflog entries to return (hard cap 200). Default 30.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "format",
+        "ref",
+        "maxEntries"
+      ],
+      "additionalProperties": false
+    },
     "batch_commit": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
