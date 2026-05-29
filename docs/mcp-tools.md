@@ -21,6 +21,9 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff (or `--stat` diffstat), or file content at `path` for that ref. Args: `ref`, `path?`, `paths?`, `stat?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
 | `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: single-repo workspace pick + `format`. **Read-only.** |
+| `git_blame` | `rethunk-git_git_blame` | Line-by-line authorship for a file: commit SHA, author, date, summary per line. Args: `path` (required), `ref?`, `startLine?`, `endLine?`, plus single-repo workspace pick + `format`. **Read-only.** |
+| `git_branch_list` | `rethunk-git_git_branch_list` | List local branches (sha, current marker, upstream); optional `includeRemotes` adds remote-tracking branches. Args: `includeRemotes?`, plus single-repo workspace pick + `format`. **Read-only.** |
+| `git_reflog` | `rethunk-git_git_reflog` | Show the reflog for a ref (default `HEAD`) — recent HEAD movements with selector, SHA, and message. Args: `ref?`, `maxEntries?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus single-repo workspace pick + `format`. **Mutating — refs only.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. Workspace pick + `format`. **Mutating.** |
 | `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus single-repo workspace pick + `format`. **Mutating.** |
@@ -537,6 +540,101 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 |------|---------|
 | `unsafe_remote_token` | `remote` contains characters outside the argv-safe subset. |
 | `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_blame` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `path` | string | — | **Required.** Repo-relative file to annotate. Confined to the repo (`path_escapes_repo` on escape). |
+| `ref` | string | working tree | Commit-ish to blame at. Validated as a safe ref token. |
+| `startLine` | int | — | Start of a line range (`-L`). Requires `endLine`. |
+| `endLine` | int | — | End of the line range, inclusive. Requires `startLine`. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_blame` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ref": "HEAD",
+  "path": "src/server.ts",
+  "lines": [
+    { "line": 1, "sha": "a1b2c3d4…", "author": "Damon Blais", "date": "2026-04-12T18:32:01-07:00", "summary": "feat: add tool", "content": "import { FastMCP } from \"fastmcp\";" }
+  ]
+}
+```
+
+`ref` is omitted when blaming the working tree.
+
+### `git_blame` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `path_escapes_repo` | `path` resolves outside the git toplevel. |
+| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
+| `invalid_line_range` | Only one of `startLine`/`endLine` was given, or `startLine > endLine`. |
+| `git_blame_failed` | `git blame` exited non-zero (unknown path/ref). `detail` carries stderr. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_branch_list` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `includeRemotes` | boolean | `false` | Also list remote-tracking branches (`refs/remotes`); symbolic `origin/HEAD` is skipped. |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_branch_list` — JSON shape (`format: "json"`)
+
+```json
+{
+  "branches": [
+    { "name": "main", "sha": "a1b2c3d4…", "current": true, "upstream": "origin/main" },
+    { "name": "feature/x", "sha": "b2c3d4e5…", "current": false }
+  ],
+  "remotes": [{ "name": "origin/main", "sha": "a1b2c3d4…" }]
+}
+```
+
+`upstream` is omitted when a branch has no upstream. `remotes` is present only when `includeRemotes: true`.
+
+### `git_branch_list` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `branch_list_failed` | `git for-each-ref` exited non-zero. `detail` carries stderr. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_reflog` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `ref` | string | `HEAD` | Ref whose reflog to show. Validated as a safe ref token. |
+| `maxEntries` | int | `30` | Max entries to return (1–200). |
+| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+
+### `git_reflog` — JSON shape (`format: "json"`)
+
+```json
+{
+  "ref": "HEAD",
+  "entries": [
+    { "sha": "a1b2c3d4…", "selector": "HEAD@{0}", "message": "commit: feat: add tool" }
+  ]
+}
+```
+
+### `git_reflog` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
+| `reflog_failed` | `git reflog show` exited non-zero. `detail` carries stderr. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---

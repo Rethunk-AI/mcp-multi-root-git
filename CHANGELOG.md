@@ -2,6 +2,16 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.8.0] — 2026-05-29
+
+Feature release: three new read-only inspection tools (tool count 20 → 23). Additive — no JSON format-version bump.
+
+### Added
+
+- **`git_blame`** — line-by-line authorship for a file: commit SHA, author, ISO date, summary, and content per line. Blames at an optional `ref` and an optional `startLine`/`endLine` range (`-L`); path-confined like the other path tools (`path_escapes_repo`).
+- **`git_branch_list`** — list local branches with sha, current marker, and upstream; optional `includeRemotes` adds remote-tracking branches (symbolic `origin/HEAD` skipped). Returns `{ branches, remotes? }`.
+- **`git_reflog`** — show the reflog for a ref (default `HEAD`): recent HEAD movements with selector (`HEAD@{N}`), full SHA, and message; `maxEntries` cap (default 30, max 200).
+
 ## [2.7.0] — 2026-05-29
 
 Feature release: deepens three read tools per recurring agent pain points (TODO.md) and hardens the git subprocess layer. All changes are additive — no JSON format-version bump.
