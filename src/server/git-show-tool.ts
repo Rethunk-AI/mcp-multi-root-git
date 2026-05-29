@@ -2,6 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
@@ -63,7 +64,7 @@ async function runGitShow(opts: {
   const r = await spawnGitAsync(top, showArgs);
   if (!r.ok) {
     return {
-      error: "git_show_failed",
+      error: ERROR_CODES.GIT_SHOW_FAILED,
     };
   }
 
@@ -226,13 +227,13 @@ export function registerGitShowTool(server: FastMCP): void {
       const top = pre.gitTop;
 
       if (!isSafeGitAncestorRef(args.ref as string)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.ref });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 
       if (args.path !== undefined) {
         const resolved = resolvePathForRepo(args.path as string, top);
         if (!assertRelativePathUnderTop(args.path as string, resolved, top)) {
-          return jsonRespond({ error: "path_escapes_repo", path: args.path });
+          return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
         }
       }
 
@@ -240,7 +241,7 @@ export function registerGitShowTool(server: FastMCP): void {
         for (const p of args.paths as string[]) {
           const resolved = resolvePathForRepo(p, top);
           if (!assertRelativePathUnderTop(p, resolved, top)) {
-            return jsonRespond({ error: "path_escapes_repo", path: p });
+            return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: p });
           }
         }
       }

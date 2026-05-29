@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -36,7 +37,7 @@ export function registerGitStashListTool(server: FastMCP): void {
         // If there are no stashes, git still returns ok=true with empty output
         // Only treat as error if git itself failed
         return jsonRespond({
-          error: "stash_list_failed",
+          error: ERROR_CODES.STASH_LIST_FAILED,
           detail: (r.stderr || r.stdout).trim(),
         });
       }

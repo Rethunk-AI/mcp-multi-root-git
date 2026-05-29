@@ -2,6 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -31,7 +32,7 @@ function buildDiffArgs(opts: {
     const headStr = opts.head?.trim() ?? "HEAD";
 
     if (!isSafeGitUpstreamToken(baseStr) || !isSafeGitUpstreamToken(headStr)) {
-      return { ok: false, error: "unsafe_range_token" };
+      return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
     }
 
     // Use two-dot range: base..head
@@ -167,7 +168,7 @@ export function registerGitDiffTool(server: FastMCP): void {
       for (const p of dedupedPaths) {
         const resolved = resolvePathForRepo(p, gitTop);
         if (!assertRelativePathUnderTop(p, resolved, gitTop)) {
-          return jsonRespond({ error: "path_escapes_repo", path: p });
+          return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: p });
         }
       }
 
@@ -187,7 +188,7 @@ export function registerGitDiffTool(server: FastMCP): void {
       const result = await spawnGitAsync(gitTop, diffArgsResult.args);
       if (!result.ok) {
         return jsonRespond({
-          error: "git_diff_failed",
+          error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (result.stderr || result.stdout).trim(),
         });
       }

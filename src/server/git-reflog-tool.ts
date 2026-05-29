@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
@@ -57,7 +58,7 @@ async function runGitReflog(opts: {
   const r = await spawnGitAsync(top, reflogArgs);
   if (!r.ok) {
     return {
-      error: "reflog_failed",
+      error: ERROR_CODES.REFLOG_FAILED,
       detail: (r.stderr || r.stdout || "git reflog failed").trim(),
     };
   }
@@ -146,7 +147,7 @@ export function registerGitReflogTool(server: FastMCP): void {
       const ref = (args.ref as string | undefined) ?? "HEAD";
 
       if (!isSafeGitRefToken(ref)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref });
       }
 
       const maxEntries = Math.min(

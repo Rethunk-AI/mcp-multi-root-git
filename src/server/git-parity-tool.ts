@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { gitRevParseHead, gitTopLevel } from "./git.js";
 import { validateRepoPath } from "./inventory.js";
 import { jsonRespond, spreadDefined } from "./json.js";
@@ -55,7 +56,7 @@ export function registerGitParityTool(server: FastMCP): void {
       for (const workspaceRoot of pre.roots) {
         const top = gitTopLevel(workspaceRoot);
         if (!top) {
-          const errPayload = { error: "not_a_git_repository", path: workspaceRoot };
+          const errPayload = { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: workspaceRoot };
           const err = jsonRespond(errPayload);
           if (args.format === "json") {
             results.push({
@@ -81,7 +82,7 @@ export function registerGitParityTool(server: FastMCP): void {
         }
 
         if (!pairs?.length) {
-          return jsonRespond({ error: "no_pairs" });
+          return jsonRespond({ error: ERROR_CODES.NO_PAIRS });
         }
 
         let allOk = true;

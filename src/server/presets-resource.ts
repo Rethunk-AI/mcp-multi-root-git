@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import type { FastMCP } from "fastmcp";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { gitTopLevel } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { loadPresetsFromGitTop, PRESET_FILE_PATH, presetLoadErrorPayload } from "./presets.js";
@@ -19,11 +20,11 @@ export function registerPresetsResource(server: FastMCP): void {
       }
       const ws = pre.roots[0];
       if (!ws) {
-        return { text: jsonRespond({ error: "no_workspace_root" }) };
+        return { text: jsonRespond({ error: ERROR_CODES.NO_WORKSPACE_ROOT }) };
       }
       const top = gitTopLevel(ws);
       if (!top) {
-        return { text: jsonRespond({ error: "not_a_git_repository", path: ws }) };
+        return { text: jsonRespond({ error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws }) };
       }
       const loaded = loadPresetsFromGitTop(top);
       if (!loaded.ok) {

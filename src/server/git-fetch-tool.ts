@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -185,10 +186,10 @@ export function registerGitFetchTool(server: FastMCP): void {
 
       // Validate remote and branch to prevent argument injection.
       if (!isSafeGitUpstreamToken(remote)) {
-        return jsonRespond({ error: "unsafe_remote_token", remote });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REMOTE_TOKEN, remote });
       }
       if (branch && !isSafeGitUpstreamToken(branch)) {
-        return jsonRespond({ error: "unsafe_ref_token", branch });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch });
       }
 
       // Build base fetch args (without --porcelain for now)

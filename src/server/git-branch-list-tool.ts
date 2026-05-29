@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -46,7 +47,7 @@ async function runBranchList(opts: {
 
   if (!localR.ok) {
     return {
-      error: "branch_list_failed",
+      error: ERROR_CODES.BRANCH_LIST_FAILED,
       detail: (localR.stderr || localR.stdout).trim(),
     };
   }
@@ -82,7 +83,7 @@ async function runBranchList(opts: {
 
   if (!remoteR.ok) {
     return {
-      error: "branch_list_failed",
+      error: ERROR_CODES.BRANCH_LIST_FAILED,
       detail: (remoteR.stderr || remoteR.stdout).trim(),
     };
   }

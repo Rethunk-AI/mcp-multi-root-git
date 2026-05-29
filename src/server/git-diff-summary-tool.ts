@@ -3,6 +3,7 @@ import { matchesGlob } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -282,7 +283,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       const statResult = await spawnGitAsync(gitTop, ["diff", "--numstat", ...diffArgs]);
       if (!statResult.ok) {
         return jsonRespond({
-          error: "git_diff_failed",
+          error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (statResult.stderr || statResult.stdout).trim(),
         });
       }
@@ -292,7 +293,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       const diffResult = await spawnGitAsync(gitTop, ["diff", ...diffArgs]);
       if (!diffResult.ok) {
         return jsonRespond({
-          error: "git_diff_failed",
+          error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (diffResult.stderr || diffResult.stdout).trim(),
         });
       }

@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
   GIT_SUBPROCESS_PARALLELISM,
@@ -42,7 +43,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
     execute: async (args) => {
       if (args.absoluteGitRoots != null && args.absoluteGitRoots.length > 0) {
         if (args.preset || (args.nestedRoots?.length ?? 0) > 0) {
-          return jsonRespond({ error: "absolute_git_roots_nested_or_preset_conflict" });
+          return jsonRespond({ error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_NESTED_OR_PRESET_CONFLICT });
         }
       }
       const pre = requireGitAndRoots(server, args, args.preset);
@@ -55,7 +56,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       const hasRemote = rawRemote !== undefined && rawRemote !== "";
       const hasBranch = rawBranch !== undefined && rawBranch !== "";
       if (hasRemote !== hasBranch) {
-        return jsonRespond({ error: "remote_branch_mismatch" });
+        return jsonRespond({ error: ERROR_CODES.REMOTE_BRANCH_MISMATCH });
       }
 
       type Upstream =
@@ -65,7 +66,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       let upstream: Upstream = { mode: "auto" };
       if (hasRemote && hasBranch && rawRemote && rawBranch) {
         if (!isSafeGitUpstreamToken(rawRemote) || !isSafeGitUpstreamToken(rawBranch)) {
-          return jsonRespond({ error: "invalid_remote_or_branch" });
+          return jsonRespond({ error: ERROR_CODES.INVALID_REMOTE_OR_BRANCH });
         }
         upstream = { mode: "fixed", remote: rawRemote, branch: rawBranch };
       }
@@ -84,7 +85,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       for (const workspaceRoot of pre.roots) {
         const top = gitTopLevel(workspaceRoot);
         if (!top) {
-          const err = { error: "not_a_git_repository", path: workspaceRoot };
+          const err = { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: workspaceRoot };
           if (args.format === "json") {
             allJson.push({
               workspaceRoot: workspaceRoot,

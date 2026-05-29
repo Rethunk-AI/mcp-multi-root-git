@@ -1,6 +1,8 @@
 import { join } from "node:path";
 
 import type { FastMCP } from "fastmcp";
+
+import { ERROR_CODES } from "./error-codes.js";
 import { gitTopLevel } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { loadPresetsFromGitTop, PRESET_FILE_PATH, presetLoadErrorPayload } from "./presets.js";
@@ -52,7 +54,7 @@ export function registerListPresetsTool(server: FastMCP): void {
             presetFile,
             fileExists: false,
             presets: [],
-            error: { error: "not_a_git_repository", path: ws },
+            error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws },
           });
           continue;
         }

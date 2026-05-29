@@ -3,6 +3,8 @@ import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 
+import { ERROR_CODES } from "./error-codes.js";
+
 /**
  * Parallel git subprocesses for inventory rows and git_status submodule rows.
  * Reads from GIT_SUBPROCESS_PARALLELISM env var (default 4), clamped to [1, 2×CPU_COUNT].
@@ -50,7 +52,7 @@ type GitPathState = "unknown" | "ok" | "missing";
 let gitPathState: GitPathState = "unknown";
 
 const GIT_NOT_FOUND_BODY: Record<string, unknown> = {
-  error: "git_not_found",
+  error: ERROR_CODES.GIT_NOT_FOUND,
 };
 
 export function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } {

@@ -2,6 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
@@ -221,13 +222,13 @@ export function registerGitBlameTool(server: FastMCP): void {
       // Path confinement
       const resolved = resolvePathForRepo(args.path as string, top);
       if (!assertRelativePathUnderTop(args.path as string, resolved, top)) {
-        return jsonRespond({ error: "path_escapes_repo", path: args.path });
+        return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
       }
 
       // Ref validation
       if (args.ref !== undefined) {
         if (!isSafeGitRefToken(args.ref as string)) {
-          return jsonRespond({ error: "unsafe_ref_token", ref: args.ref });
+          return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
         }
       }
 
@@ -236,10 +237,10 @@ export function registerGitBlameTool(server: FastMCP): void {
       const endLine = args.endLine as number | undefined;
       if (startLine !== undefined || endLine !== undefined) {
         if (startLine === undefined || endLine === undefined) {
-          return jsonRespond({ error: "invalid_line_range" });
+          return jsonRespond({ error: ERROR_CODES.INVALID_LINE_RANGE });
         }
         if (startLine > endLine) {
-          return jsonRespond({ error: "invalid_line_range" });
+          return jsonRespond({ error: ERROR_CODES.INVALID_LINE_RANGE });
         }
       }
 
@@ -256,7 +257,7 @@ export function registerGitBlameTool(server: FastMCP): void {
       const r = await spawnGitAsync(top, blameArgs);
       if (!r.ok) {
         return jsonRespond({
-          error: "git_blame_failed",
+          error: ERROR_CODES.GIT_BLAME_FAILED,
           detail: (r.stderr || r.stdout).trim(),
         });
       }

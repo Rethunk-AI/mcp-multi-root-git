@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
+
 /**
  * Schema for `.rethunk/git-mcp-presets.json` at the workspace root.
  * Each named entry defines roots for `git_inventory` and/or pairs for `git_parity`.
@@ -109,16 +111,21 @@ export function presetLoadErrorPayload(
   const presetFile = join(gitTop, PRESET_FILE_PATH);
   if (fail.reason === "invalid_json") {
     return {
-      error: "preset_file_invalid",
+      error: ERROR_CODES.PRESET_FILE_INVALID,
       kind: "invalid_json",
       presetFile,
       message: fail.message,
     };
   }
   if (fail.reason === "schema") {
-    return { error: "preset_file_invalid", kind: "schema", presetFile, issues: fail.issues };
+    return {
+      error: ERROR_CODES.PRESET_FILE_INVALID,
+      kind: "schema",
+      presetFile,
+      issues: fail.issues,
+    };
   }
-  return { error: "preset_file_invalid", presetFile };
+  return { error: ERROR_CODES.PRESET_FILE_INVALID, presetFile };
 }
 
 function getPresetEntry(
@@ -133,7 +140,7 @@ function getPresetEntry(
       return {
         ok: false,
         error: {
-          error: "preset_not_found",
+          error: ERROR_CODES.PRESET_NOT_FOUND,
           preset: presetName,
           presetFile: join(gitTop, PRESET_FILE_PATH),
         },
@@ -146,7 +153,7 @@ function getPresetEntry(
     return {
       ok: false,
       error: {
-        error: "preset_not_found",
+        error: ERROR_CODES.PRESET_NOT_FOUND,
         preset: presetName,
         presetFile: join(gitTop, PRESET_FILE_PATH),
       },

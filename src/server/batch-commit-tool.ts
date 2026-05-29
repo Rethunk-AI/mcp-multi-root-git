@@ -4,6 +4,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
@@ -253,12 +254,12 @@ export interface PushReport {
 export async function runPushAfter(gitTop: string): Promise<PushReport> {
   const branch = await getCurrentBranch(gitTop);
   if (!branch) {
-    return { ok: false, error: "push_detached_head" };
+    return { ok: false, error: ERROR_CODES.PUSH_DETACHED_HEAD };
   }
 
   const t = await inferRemoteFromUpstream(gitTop);
   if (!t.ok) {
-    return { ok: false, branch, error: "push_no_upstream", detail: t.detail };
+    return { ok: false, branch, error: ERROR_CODES.PUSH_NO_UPSTREAM, detail: t.detail };
   }
 
   const pushResult = await spawnGitAsync(gitTop, ["push", t.remote, branch]);
@@ -267,7 +268,7 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
       ok: false,
       branch,
       upstream: t.upstream,
-      error: "push_failed",
+      error: ERROR_CODES.PUSH_FAILED,
       detail: (pushResult.stderr || pushResult.stdout).trim(),
     };
   }
@@ -357,7 +358,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ok: false,
             message: entry.message,
             files: filePaths,
-            error: "path_escapes_repository",
+            error: ERROR_CODES.PATH_ESCAPES_REPOSITORY,
             detail: escapedPaths.join(", "),
           });
           break;
@@ -381,7 +382,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ok: false,
             message: entry.message,
             files: filePaths,
-            error: "stage_failed",
+            error: ERROR_CODES.STAGE_FAILED,
             detail: stagingError,
             ...spreadDefined("output", stagingError || undefined),
           });
@@ -424,7 +425,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ok: false,
             message: entry.message,
             files: filePaths,
-            error: "commit_failed",
+            error: ERROR_CODES.COMMIT_FAILED,
             detail: gitOutput,
             ...spreadDefined("output", gitOutput || undefined),
           });

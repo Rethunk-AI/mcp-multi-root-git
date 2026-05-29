@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -91,12 +92,12 @@ export function registerGitTagTool(server: FastMCP): void {
 
       const tag = args.tag.trim();
       if (!tag) {
-        return jsonRespond({ error: "empty_tag_name" });
+        return jsonRespond({ error: ERROR_CODES.EMPTY_TAG_NAME });
       }
 
       // Validate tag name: no shell metacharacters
       if (!isSafeGitUpstreamToken(tag)) {
-        return jsonRespond({ error: "unsafe_tag_token", tag });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_TAG_TOKEN, tag });
       }
 
       // Handle deletion
@@ -104,7 +105,7 @@ export function registerGitTagTool(server: FastMCP): void {
         const delResult = await spawnGitAsync(gitTop, ["tag", "-d", tag]);
         if (!delResult.ok) {
           return jsonRespond({
-            error: "tag_delete_failed",
+            error: ERROR_CODES.TAG_DELETE_FAILED,
             detail: (delResult.stderr || delResult.stdout).trim(),
           });
         }
@@ -123,14 +124,14 @@ export function registerGitTagTool(server: FastMCP): void {
       // Determine the ref to tag (default HEAD)
       const ref = (args.ref ?? "HEAD").trim();
       if (!isSafeGitUpstreamToken(ref)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref });
       }
 
       // Get the SHA of the ref to tag
       const sha = await getRefSha(gitTop, ref);
       if (!sha) {
         return jsonRespond({
-          error: "ref_not_found",
+          error: ERROR_CODES.REF_NOT_FOUND,
           ref,
         });
       }
@@ -150,7 +151,7 @@ export function registerGitTagTool(server: FastMCP): void {
       const createResult = await spawnGitAsync(gitTop, tagArgs);
       if (!createResult.ok) {
         return jsonRespond({
-          error: "tag_create_failed",
+          error: ERROR_CODES.TAG_CREATE_FAILED,
           detail: (createResult.stderr || createResult.stdout).trim(),
         });
       }
@@ -159,7 +160,7 @@ export function registerGitTagTool(server: FastMCP): void {
       const tagType = await getTagType(gitTop, tag);
       if (!tagType) {
         return jsonRespond({
-          error: "tag_verification_failed",
+          error: ERROR_CODES.TAG_VERIFICATION_FAILED,
           tag,
         });
       }

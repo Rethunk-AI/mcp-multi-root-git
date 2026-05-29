@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
@@ -143,7 +144,7 @@ async function runGitLog(opts: {
   const r = await spawnGitAsync(top, logArgs);
   if (!r.ok) {
     return {
-      error: "git_log_failed",
+      error: ERROR_CODES.GIT_LOG_FAILED,
       path: top,
     };
   }
@@ -310,7 +311,7 @@ export function registerGitLogTool(server: FastMCP): void {
       // Validate `since` — reject obvious injection attempts (newlines, semicolons, shell chars).
       const rawSince = (args.since?.trim() ?? DEFAULT_SINCE) || DEFAULT_SINCE;
       if (/[\n\r;|&`$<>]/.test(rawSince)) {
-        return jsonRespond({ error: "invalid_since", since: rawSince });
+        return jsonRespond({ error: ERROR_CODES.INVALID_SINCE, since: rawSince });
       }
 
       // Validate paths — reject anything with null bytes or shell meta.
@@ -318,13 +319,13 @@ export function registerGitLogTool(server: FastMCP): void {
       const rawPaths = args.paths ?? [];
       for (const p of rawPaths) {
         if (p.split("").some((c) => c.charCodeAt(0) === 0) || /[\n\r;|&`$<>]/.test(p)) {
-          return jsonRespond({ error: "invalid_paths", path: p });
+          return jsonRespond({ error: ERROR_CODES.INVALID_PATHS, path: p });
         }
       }
 
       // Validate branch — reject leading-dash and other injection attempts.
       if (args.branch && !isSafeGitAncestorRef(args.branch)) {
-        return jsonRespond({ error: "unsafe_ref_token", branch: args.branch });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch: args.branch });
       }
 
       const maxCommits = Math.min(args.maxCommits ?? DEFAULT_MAX_COMMITS, MAX_COMMITS_HARD_CAP);
@@ -334,7 +335,11 @@ export function registerGitLogTool(server: FastMCP): void {
       const results = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async ({ rootInput }) => {
         const top = gitTopLevel(rootInput);
         if (!top) {
-          return { _error: true as const, workspaceRoot: rootInput, error: "not_a_git_repository" };
+          return {
+            _error: true as const,
+            workspaceRoot: rootInput,
+            error: ERROR_CODES.NOT_A_GIT_REPOSITORY,
+          };
         }
         const r = await runGitLog({
           top,

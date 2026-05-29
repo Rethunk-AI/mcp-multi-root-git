@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import {
   conflictPaths,
@@ -87,10 +88,10 @@ async function mergeOneSource(
   const intoSha = await resolveRef(gitTop, into);
   const sourceSha = await resolveRef(gitTop, source);
   if (!sourceSha) {
-    return { source, ok: false, error: "source_not_found" };
+    return { source, ok: false, error: ERROR_CODES.SOURCE_NOT_FOUND };
   }
   if (!intoSha) {
-    return { source, ok: false, error: "destination_not_found" };
+    return { source, ok: false, error: ERROR_CODES.DESTINATION_NOT_FOUND };
   }
 
   const mb = await spawnGitAsync(gitTop, ["merge-base", into, source]);
@@ -98,7 +99,7 @@ async function mergeOneSource(
     return {
       source,
       ok: false,
-      error: "merge_base_failed",
+      error: ERROR_CODES.MERGE_BASE_FAILED,
       detail: (mb.stderr || mb.stdout).trim(),
     };
   }
@@ -118,7 +119,7 @@ async function mergeOneSource(
       return {
         source,
         ok: false,
-        error: "cannot_fast_forward",
+        error: ERROR_CODES.CANNOT_FAST_FORWARD,
         detail: "destination and source have diverged; retry with strategy: rebase, merge, or auto",
       };
     }
@@ -162,7 +163,7 @@ async function fastForward(gitTop: string, source: string): Promise<SourceResult
       outcome: "conflicts",
       conflictStage: "merge",
       conflictPaths: [],
-      error: "merge_failed",
+      error: ERROR_CODES.MERGE_FAILED,
       detail: (r.stderr || r.stdout).trim(),
     };
   }
@@ -192,7 +193,7 @@ async function mergeCommit(
       outcome: "conflicts",
       conflictStage: "merge",
       conflictPaths: paths,
-      error: "merge_conflicts",
+      error: ERROR_CODES.MERGE_CONFLICTS,
       detail: (r.stderr || r.stdout).trim(),
     };
   }
@@ -227,7 +228,7 @@ async function rebaseSourceOntoInto(
       outcome: "conflicts",
       conflictStage: "rebase",
       conflictPaths: paths,
-      error: "rebase_conflicts",
+      error: ERROR_CODES.REBASE_CONFLICTS,
       detail: (r.stderr || r.stdout).trim(),
     };
   }
@@ -237,7 +238,7 @@ async function rebaseSourceOntoInto(
     return {
       source,
       ok: false,
-      error: "checkout_failed",
+      error: ERROR_CODES.CHECKOUT_FAILED,
       detail: (co.stderr || co.stdout).trim(),
     };
   }
@@ -337,23 +338,23 @@ export function registerGitMergeTool(server: FastMCP): void {
       // --- Validate ref tokens early ---
       for (const s of args.sources) {
         if (!isSafeGitRefToken(s)) {
-          return jsonRespond({ error: "unsafe_ref_token", ref: s });
+          return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: s });
         }
       }
       if (args.into !== undefined && !isSafeGitRefToken(args.into)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.into });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.into });
       }
 
       // --- Resolve destination ---
       const startBranch = await getCurrentBranch(gitTop);
       const into = args.into?.trim() || startBranch;
       if (!into) {
-        return jsonRespond({ error: "into_detached_head" });
+        return jsonRespond({ error: ERROR_CODES.INTO_DETACHED_HEAD });
       }
 
       // --- Refuse dirty tree ---
       if (!(await isWorkingTreeClean(gitTop))) {
-        return jsonRespond({ error: "working_tree_dirty" });
+        return jsonRespond({ error: ERROR_CODES.WORKING_TREE_DIRTY });
       }
 
       // --- Ensure destination is checked out ---
@@ -361,7 +362,7 @@ export function registerGitMergeTool(server: FastMCP): void {
         const co = await spawnGitAsync(gitTop, ["checkout", into]);
         if (!co.ok) {
           return jsonRespond({
-            error: "checkout_failed",
+            error: ERROR_CODES.CHECKOUT_FAILED,
             detail: (co.stderr || co.stdout).trim(),
           });
         }
@@ -370,7 +371,7 @@ export function registerGitMergeTool(server: FastMCP): void {
       // Verify destination exists after checkout.
       const intoShaProbe = await resolveRef(gitTop, into);
       if (!intoShaProbe) {
-        return jsonRespond({ error: "destination_not_found", ref: into });
+        return jsonRespond({ error: ERROR_CODES.DESTINATION_NOT_FOUND, ref: into });
       }
 
       // --- Merge each source sequentially ---

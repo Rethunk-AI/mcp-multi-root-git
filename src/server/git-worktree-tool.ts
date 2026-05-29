@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import {
   isProtectedBranch,
@@ -95,13 +96,13 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
 
       // Validate branch
       if (!isSafeGitRefToken(args.branch)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.branch });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.branch });
       }
       if (isProtectedBranch(args.branch)) {
-        return jsonRespond({ error: "protected_branch", branch: args.branch });
+        return jsonRespond({ error: ERROR_CODES.PROTECTED_BRANCH, branch: args.branch });
       }
       if (args.baseRef !== undefined && !isSafeGitRefToken(args.baseRef)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.baseRef });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.baseRef });
       }
 
       // Resolve path
@@ -128,7 +129,7 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
       if (!r.ok) {
         return jsonRespond({
           ok: false,
-          error: "worktree_add_failed",
+          error: ERROR_CODES.WORKTREE_ADD_FAILED,
           detail: (r.stderr || r.stdout).trim(),
         });
       }
@@ -184,14 +185,14 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
       // Refuse to remove the main worktree
       const wtPath = resolve(gitTop, args.path);
       if (wtPath === gitTop) {
-        return jsonRespond({ error: "cannot_remove_main_worktree", path: wtPath });
+        return jsonRespond({ error: ERROR_CODES.CANNOT_REMOVE_MAIN_WORKTREE, path: wtPath });
       }
 
       // Verify it exists in the worktree list
       const trees: WorktreeEntry[] = await listWorktrees(gitTop);
       const isRegistered = trees.some((t) => t.path === wtPath || t.path === args.path);
       if (!isRegistered) {
-        return jsonRespond({ error: "worktree_not_found", path: args.path });
+        return jsonRespond({ error: ERROR_CODES.WORKTREE_NOT_FOUND, path: args.path });
       }
 
       const removeArgs: string[] = ["worktree", "remove", wtPath];
@@ -201,7 +202,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
       if (!r.ok) {
         return jsonRespond({
           ok: false,
-          error: "worktree_remove_failed",
+          error: ERROR_CODES.WORKTREE_REMOVE_FAILED,
           detail: (r.stderr || r.stdout).trim(),
           ...spreadWhen(
             (r.stderr || r.stdout).includes("contains modified") ||

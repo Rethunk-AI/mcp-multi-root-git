@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef, isWorkingTreeClean } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
@@ -36,13 +37,13 @@ export function registerGitResetSoftTool(server: FastMCP): void {
 
       // Validate ref — allow ancestor notation (~N, ^N).
       if (!isSafeGitAncestorRef(args.ref)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.ref });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 
       // Refuse when the working tree is dirty (unstaged or untracked changes).
       if (!(await isWorkingTreeClean(gitTop))) {
         return jsonRespond({
-          error: "working_tree_dirty",
+          error: ERROR_CODES.WORKING_TREE_DIRTY,
           detail:
             "git_reset_soft requires a clean working tree. " +
             "Commit or stash pending changes first.",
@@ -57,7 +58,7 @@ export function registerGitResetSoftTool(server: FastMCP): void {
       const r = await spawnGitAsync(gitTop, ["reset", "--soft", args.ref]);
       if (!r.ok) {
         return jsonRespond({
-          error: "reset_failed",
+          error: ERROR_CODES.RESET_FAILED,
           detail: (r.stderr || r.stdout).trim(),
         });
       }

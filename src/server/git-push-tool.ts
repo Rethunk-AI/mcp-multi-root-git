@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
@@ -52,17 +53,20 @@ export function registerGitPushTool(server: FastMCP): void {
       const currentBranch = await getCurrentBranch(gitTop);
       const branch = args.branch?.trim() || currentBranch;
       if (!branch) {
-        return jsonRespond({ error: "push_detached_head" });
+        return jsonRespond({ error: ERROR_CODES.PUSH_DETACHED_HEAD });
       }
       if (!isSafeGitRefToken(branch)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: branch });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: branch });
       }
 
       // --- Resolve remote ---
       let remote: string;
       if (args.remote?.trim()) {
         if (!isSafeGitUpstreamToken(args.remote.trim())) {
-          return jsonRespond({ error: "unsafe_remote_token", remote: args.remote.trim() });
+          return jsonRespond({
+            error: ERROR_CODES.UNSAFE_REMOTE_TOKEN,
+            remote: args.remote.trim(),
+          });
         }
         remote = args.remote.trim();
       } else if (args.setUpstream) {
@@ -73,7 +77,7 @@ export function registerGitPushTool(server: FastMCP): void {
         const t = await inferRemoteFromUpstream(gitTop);
         if (!t.ok) {
           return jsonRespond({
-            error: "push_no_upstream",
+            error: ERROR_CODES.PUSH_NO_UPSTREAM,
             branch,
             detail: t.detail,
           });
@@ -92,7 +96,7 @@ export function registerGitPushTool(server: FastMCP): void {
           ok: false,
           branch,
           remote,
-          error: "push_failed",
+          error: ERROR_CODES.PUSH_FAILED,
           detail: (pushResult.stderr || pushResult.stdout).trim(),
         });
       }

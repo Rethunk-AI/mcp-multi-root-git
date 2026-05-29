@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import {
   commitListBetween,
@@ -76,12 +77,12 @@ async function resolveSource(
 ): Promise<ResolvedSource | { error: string; detail?: string; raw: string }> {
   if (raw.includes("..")) {
     if (!isSafeGitRangeToken(raw)) {
-      return { error: "unsafe_ref_token", raw };
+      return { error: ERROR_CODES.UNSAFE_REF_TOKEN, raw };
     }
     const r = await spawnGitAsync(gitTop, ["rev-list", "--reverse", raw]);
     if (!r.ok) {
       return {
-        error: "range_resolution_failed",
+        error: ERROR_CODES.RANGE_RESOLUTION_FAILED,
         detail: (r.stderr || r.stdout).trim(),
         raw,
       };
@@ -94,20 +95,20 @@ async function resolveSource(
   }
 
   if (!isSafeGitRefToken(raw)) {
-    return { error: "unsafe_ref_token", raw };
+    return { error: ERROR_CODES.UNSAFE_REF_TOKEN, raw };
   }
 
   if (await branchExists(gitTop, raw)) {
     const commits = await commitListBetween(gitTop, onto, raw);
     if (commits === null) {
-      return { error: "range_resolution_failed", raw };
+      return { error: ERROR_CODES.RANGE_RESOLUTION_FAILED, raw };
     }
     return { raw, kind: "branch", commits };
   }
 
   const sha = await resolveRef(gitTop, raw);
   if (!sha) {
-    return { error: "source_not_found", raw };
+    return { error: ERROR_CODES.SOURCE_NOT_FOUND, raw };
   }
   return { raw, kind: "sha", commits: [sha] };
 }
@@ -211,14 +212,14 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       // --- Resolve destination ---
       const startBranch = await getCurrentBranch(gitTop);
       const onto = args.onto?.trim() || startBranch;
-      if (!onto) return jsonRespond({ error: "onto_detached_head" });
+      if (!onto) return jsonRespond({ error: ERROR_CODES.ONTO_DETACHED_HEAD });
       if (args.onto !== undefined && !isSafeGitRefToken(args.onto)) {
-        return jsonRespond({ error: "unsafe_ref_token", ref: args.onto });
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.onto });
       }
 
       // --- Refuse dirty tree ---
       if (!(await isWorkingTreeClean(gitTop))) {
-        return jsonRespond({ error: "working_tree_dirty" });
+        return jsonRespond({ error: ERROR_CODES.WORKING_TREE_DIRTY });
       }
 
       // --- Ensure destination is checked out ---
@@ -226,14 +227,14 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         const co = await spawnGitAsync(gitTop, ["checkout", onto]);
         if (!co.ok) {
           return jsonRespond({
-            error: "checkout_failed",
+            error: ERROR_CODES.CHECKOUT_FAILED,
             detail: (co.stderr || co.stdout).trim(),
           });
         }
       }
 
       if (!(await resolveRef(gitTop, onto))) {
-        return jsonRespond({ error: "destination_not_found", ref: onto });
+        return jsonRespond({ error: ERROR_CODES.DESTINATION_NOT_FOUND, ref: onto });
       }
 
       // --- Resolve each source ---
