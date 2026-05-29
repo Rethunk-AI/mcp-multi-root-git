@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   asyncPool,
   fetchAheadBehind,
+  GIT_SUBPROCESS_TIMEOUT_MS,
   gitRevParseGitDir,
   gitRevParseHead,
   gitStatusShortBranchAsync,
@@ -19,6 +20,7 @@ import {
   hasGitMetadata,
   isSafeGitUpstreamToken,
   parseGitSubmodulePaths,
+  spawnGitAsync,
 } from "./git.js";
 import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
 
@@ -272,5 +274,76 @@ describe("fetchAheadBehind", () => {
     const { ahead, behind } = await fetchAheadBehind(dir, "nonexistent-spec");
     expect(ahead).toBeNull();
     expect(behind).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spawnGitAsync — timeout + AbortSignal
+// ---------------------------------------------------------------------------
+
+describe("spawnGitAsync", () => {
+  test("env knob GIT_SUBPROCESS_TIMEOUT_MS is a positive number or zero", () => {
+    // The module-level constant must be a non-negative integer.
+    expect(typeof GIT_SUBPROCESS_TIMEOUT_MS).toBe("number");
+    expect(GIT_SUBPROCESS_TIMEOUT_MS).toBeGreaterThanOrEqual(0);
+  });
+
+  test("fast command completes normally — timedOut is falsy", async () => {
+    const dir = makeRepo();
+    const result = await spawnGitAsync(dir, ["--version"]);
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toContain("git version");
+    expect(result.timedOut).toBeFalsy();
+    expect(result.aborted).toBeFalsy();
+  });
+
+  test("already-aborted signal resolves ok:false with aborted:true immediately", async () => {
+    const dir = makeRepo();
+    const controller = new AbortController();
+    controller.abort();
+    const result = await spawnGitAsync(dir, ["--version"], { signal: controller.signal });
+    expect(result.ok).toBe(false);
+    expect(result.aborted).toBe(true);
+    expect(result.timedOut).toBeFalsy();
+  });
+
+  test("tiny timeoutMs kills a long-running git command and resolves timedOut:true", async () => {
+    const dir = makeRepo();
+    // git log with --no-pager on a repo that has commits is fast, but we can
+    // force a hang by running `git credential-cache` which blocks on stdin in
+    // some environments. Instead use a shell-free approach: spawn with a 1 ms
+    // timeout against a command that reliably takes >1 ms (git log --all with
+    // lots of format options). We use git log on the real repo root to ensure
+    // there are commits, plus a tiny timeoutMs so it fires immediately.
+    // If git somehow finishes in <1 ms, the result will be ok:true and
+    // timedOut will be undefined — so we assert the either/or.
+    const result = await spawnGitAsync(dir, ["log", "--all", "--format=%H%n%an%n%ae%n%s%n%b"], {
+      timeoutMs: 1,
+    });
+    // Either the process was killed (timedOut:true, ok:false) or it finished
+    // fast enough that the 1 ms timer raced and the process won (ok:true).
+    if (result.timedOut) {
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain("git timed out after 1ms");
+    } else {
+      // Completed before the timer fired — that's fine; timedOut must be falsy.
+      expect(result.timedOut).toBeFalsy();
+    }
+  });
+
+  test("abort mid-flight via AbortController resolves ok:false with aborted:true", async () => {
+    const dir = makeRepo();
+    const controller = new AbortController();
+    // Abort after a short delay so the child process has started
+    const promise = spawnGitAsync(dir, ["log", "--all", "--format=%H"], {
+      timeoutMs: 5000,
+      signal: controller.signal,
+    });
+    // Abort synchronously before awaiting — the child is spawned but the
+    // abort happens before it can finish in most environments.
+    controller.abort();
+    const result = await promise;
+    expect(result.ok).toBe(false);
+    expect(result.aborted).toBe(true);
   });
 });

@@ -22,6 +22,25 @@ function resolveGitSubprocessParallelism(): number {
 
 export const GIT_SUBPROCESS_PARALLELISM = resolveGitSubprocessParallelism();
 
+/**
+ * Default timeout for git subprocesses spawned by spawnGitAsync.
+ * Reads from GIT_SUBPROCESS_TIMEOUT_MS env var (default 120000 ms = 2 min).
+ * A value of 0 (or negative/NaN) disables the timeout — use for operations
+ * like large clones where unbounded wait is intentional.
+ */
+function resolveGitSubprocessTimeoutMs(): number {
+  const env = process.env.GIT_SUBPROCESS_TIMEOUT_MS;
+  if (env) {
+    const n = Number.parseInt(env, 10);
+    if (!Number.isNaN(n) && n > 0) return n;
+    // 0 or negative → disabled
+    if (!Number.isNaN(n)) return 0;
+  }
+  return 120_000;
+}
+
+export const GIT_SUBPROCESS_TIMEOUT_MS = resolveGitSubprocessTimeoutMs();
+
 // ---------------------------------------------------------------------------
 // Git on PATH (lazy probe)
 // ---------------------------------------------------------------------------
@@ -161,14 +180,30 @@ export async function asyncPool<T, R>(
   return results;
 }
 
+export interface SpawnGitResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  timedOut?: boolean;
+  aborted?: boolean;
+}
+
+export interface SpawnGitOpts {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 export function spawnGitAsync(
   cwd: string,
   args: string[],
-): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  opts?: SpawnGitOpts,
+): Promise<SpawnGitResult> {
   return new Promise((resolveP) => {
     const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (c: string) => {
@@ -177,8 +212,59 @@ export function spawnGitAsync(
     child.stderr?.on("data", (c: string) => {
       stderr += c;
     });
-    child.on("error", () => resolveP({ ok: false, stdout, stderr }));
-    child.on("close", (code) => resolveP({ ok: code === 0, stdout, stderr }));
+
+    const effectiveTimeout = opts?.timeoutMs ?? GIT_SUBPROCESS_TIMEOUT_MS;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+
+    function cleanup() {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      if (abortListener !== undefined && opts?.signal) {
+        opts.signal.removeEventListener("abort", abortListener);
+        abortListener = undefined;
+      }
+    }
+
+    function settle(result: SpawnGitResult) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolveP(result);
+    }
+
+    // AbortSignal: kill immediately if already aborted, else listen
+    if (opts?.signal) {
+      if (opts.signal.aborted) {
+        child.kill("SIGTERM");
+        settle({ ok: false, stdout, stderr, aborted: true });
+        return;
+      }
+      abortListener = () => {
+        child.kill("SIGTERM");
+        settle({ ok: false, stdout, stderr, aborted: true });
+      };
+      opts.signal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    // Timeout: set timer if effectiveTimeout > 0
+    if (effectiveTimeout > 0) {
+      timer = setTimeout(() => {
+        child.kill("SIGTERM");
+        settle({
+          ok: false,
+          stdout,
+          stderr: `${stderr}\n<git timed out after ${effectiveTimeout}ms>`,
+          timedOut: true,
+        });
+      }, effectiveTimeout);
+    }
+
+    child.on("error", () => settle({ ok: false, stdout, stderr }));
+    child.on("close", (code) => settle({ ok: code === 0, stdout, stderr }));
   });
 }
 
