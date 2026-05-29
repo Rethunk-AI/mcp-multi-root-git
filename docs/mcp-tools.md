@@ -17,11 +17,11 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
-| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, optionally scoped to one path. Args: `workspaceRoot`, `rootIndex`, `format`, `base?`, `head?`, `path?`, `staged?`. No `absoluteGitRoots` or `allWorkspaceRoots`. **Read-only.** |
-| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff, or file content at `path` for that ref. Args: `ref`, `path?`, plus single-repo workspace pick + `format`. **Read-only.** |
+| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Args: `workspaceRoot`, `rootIndex`, `format`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`. No `absoluteGitRoots` or `allWorkspaceRoots`. **Read-only.** |
+| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff (or `--stat` diffstat), or file content at `path` for that ref. Args: `ref`, `path?`, `paths?`, `stat?`, plus single-repo workspace pick + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
 | `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: single-repo workspace pick + `format`. **Read-only.** |
-| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus single-repo workspace pick + `format`. **Mutating — refs only.** |
+| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus single-repo workspace pick + `format`. **Mutating — refs only.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. Workspace pick + `format`. **Mutating.** |
 | `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus single-repo workspace pick + `format`. **Mutating.** |
 | `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus workspace pick + `format`. **Mutating.** |
@@ -415,7 +415,9 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 |-----------|------|---------|-------|
 | `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. |
 | `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. |
-| `path` | string | — | Optional single file path to scope the diff. |
+| `path` | string | — | Optional single file path to scope the diff. Confined to the repo (`path_escapes_repo` on escape). |
+| `paths` | string[] | — | Multiple file paths to scope the diff; unioned with `path` (deduped). Each confined to the repo. |
+| `unified` | integer | — | Context lines around each change (passed as `-U<n>`, 0–100). Omit for git's default (3). |
 | `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
 | `workspaceRoot` | string | — | Explicit root; highest priority. |
 | `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
@@ -437,6 +439,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | Code | Meaning |
 |------|---------|
 | `unsafe_range_token` | `base` or `head` contains characters outside the argv-safe subset. |
+| `path_escapes_repo` | A `path` / `paths` entry resolves outside the git toplevel. |
 | `git_diff_failed` | `git diff` exited non-zero. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
@@ -448,6 +451,8 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 |-----------|------|-------|
 | `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. |
 | `path` | string | Optional single path. When provided, the response shows that path's content at `ref` instead of the full commit diff. |
+| `stat` | boolean | When `true`, runs `git show --stat` — commit message plus per-file diffstat, no full patch (`statOutput` in JSON). |
+| `paths` | string[] | Filter the shown patch/stat to these repo-relative paths; unioned with `path`. Each confined to the repo. |
 | `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
 
 ### `git_show` — JSON shape (`format: "json"`)
@@ -461,7 +466,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 }
 ```
 
-`path` is omitted when not requested. `diff` is omitted when `git show` returns only a commit message.
+`path` is omitted when not requested; `paths` is present when multiple paths were given. `diff` is omitted when `git show` returns only a commit message. With `stat: true`, `stat` is `true` and `statOutput` carries the diffstat instead of a full `diff`.
 
 ### `git_show` — error codes
 
@@ -517,11 +522,14 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
   "remote": "origin",
   "updatedRefs": ["abc1234..def5678  main       -> origin/main"],
   "newRefs": ["[new tag]        v2.0.0     -> v2.0.0"],
+  "updated": [{ "ref": "refs/remotes/origin/main", "oldSha": "abc1234…", "newSha": "def5678…", "flag": " " }],
+  "created": [{ "ref": "refs/tags/v2.0.0", "newSha": "0a1b2c3…", "flag": "*" }],
+  "pruned": [{ "ref": "refs/remotes/origin/old" }],
   "output": "From origin\n..."
 }
 ```
 
-Fetch failures are reported as `ok: false` with the captured git output in `output`.
+`updated` / `created` / `pruned` are structured ref deltas parsed from `git fetch --porcelain` (git ≥ 2.41), each omitted when empty. On older git the `--porcelain` option is detected as unsupported and the tool falls back to a plain fetch, omitting the structured arrays; the `updatedRefs` / `newRefs` string fields are always present for back-compat. Fetch failures are reported as `ok: false` with the captured git output in `output`.
 
 ### `git_fetch` — error codes
 
@@ -916,6 +924,13 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
+
+## Environment
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`). |
+| `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in ms; on expiry the child is killed (SIGTERM) and the call resolves as failed. Set `0` (or negative) to disable (unbounded). |
 
 ## Resource
 
