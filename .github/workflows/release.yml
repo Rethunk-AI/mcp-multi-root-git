@@ -56,7 +56,8 @@ jobs:
         run: |
           set -euo pipefail
           npm pack
-          echo "tarball=$(ls -t rethunk-mcp-multi-root-git-*.tgz | head -1)" >> "$GITHUB_OUTPUT"
+          tarball=$(find . -maxdepth 1 -name 'rethunk-mcp-multi-root-git-*.tgz' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+          echo "tarball=${tarball#./}" >> "$GITHUB_OUTPUT"
 
       - name: Publish to GitHub Packages (npm registry)
         env:
