@@ -15,8 +15,8 @@ git clone https://github.com/Rethunk-AI/mcp-multi-root-git.git
 cd mcp-multi-root-git
 bun install
 bun run build       # rimraf dist && tsc → dist/server.js, dist/server/*.js, dist/repo-paths.js
-bun run check       # Biome lint + format check
-bun run check:fix   # auto-fix with Biome
+bun run lint       # Biome lint + format check
+bun run format   # auto-fix with Biome
 bun run schema:tools       # regenerate tool-parameters.schema.json
 bun run schema:individual  # regenerate schemas/index.json + per-tool JSON Schemas
 bun run schema:tools:check # verify the generated tool schema is current
@@ -33,7 +33,7 @@ bun run setup-hooks    # one-time per clone: wire .githooks/
 
 | Hook | Runs |
 |------|------|
-| pre-commit | `bun run check` |
+| pre-commit | `bun run lint` |
 | pre-push | frozen install + build + check + test (mirrors CI) |
 
 Set `SKIP_GIT_HOOKS=1` to bypass.
@@ -66,7 +66,7 @@ One logical unit per commit. Max ~7 files. Split by theme, not by file count.
 
 1. `bun install --frozen-lockfile`
 2. `bun run build`
-3. `bun run check` (Biome)
+3. `bun run lint` (Biome)
 4. `bun run schema:tools:check`
 5. `bun run test:coverage` + `bun run coverage:check /tmp/coverage.txt 80`
 6. Prerelease `npm pack` artifact uploaded (90-day retention)
@@ -76,7 +76,7 @@ Match the CI steps locally before opening a PR.
 ## Pull request checklist
 
 - [ ] `bun run build` passes.
-- [ ] `bun run check` passes (no Biome errors).
+- [ ] `bun run lint` passes (no Biome errors).
 - [ ] `bun run schema:tools:check` passes.
 - [ ] `bun run schema:individual` refreshed published per-tool schema files when the parameter surface changed.
 - [ ] `bun run test` passes.

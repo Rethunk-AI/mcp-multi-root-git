@@ -31,8 +31,6 @@
   },
   "scripts": {
     "build": "rimraf dist && tsc",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
     "coverage:check": "bun scripts/check-coverage.ts",
     "schema:tools": "bun scripts/generate-tool-parameters-schema.ts",
     "schema:tools:check": "bun scripts/generate-tool-parameters-schema.ts --check",
@@ -41,8 +39,12 @@
     "publish:preflight": "bun scripts/publish-preflight.ts",
     "test": "bun test src/",
     "test:coverage": "bun test src/ --coverage",
-    "prepublishOnly": "bun run schema:tools:check && bun run schema:individual && bun run build && bun run check && bun run test",
-    "setup-hooks": "git config core.hooksPath .githooks"
+    "prepublishOnly": "bun run ci",
+    "setup-hooks": "git config core.hooksPath .githooks",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "ci": "bun run schema:tools:check && bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "keywords": [
     "mcp",
