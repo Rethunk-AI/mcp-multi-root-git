@@ -13,7 +13,7 @@ import { registerRethunkGitTools, selectToolRegistrars } from "./tools.js";
 // ---------------------------------------------------------------------------
 
 /** All 23 canonical tool names, in registration order, verified from source. */
-const ALL_TOOL_NAMES = [
+const ALL_TOOL_NAMES: string[] = [
   // Read-only
   "git_status",
   "git_inventory",

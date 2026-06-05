@@ -1,6 +1,6 @@
 {
   "name": "@rethunk/mcp-multi-root-git",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "description": "MCP stdio server: multi-root git status, inventory, and HEAD parity checks. Generic tools usable by any workspace.",
   "type": "module",
   "private": false,
@@ -30,7 +30,7 @@
     }
   },
   "scripts": {
-    "build": "rimraf dist && tsc",
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
     "coverage:check": "bun scripts/check-coverage.ts",
     "schema:tools": "bun scripts/generate-tool-parameters-schema.ts",
     "schema:tools:check": "bun scripts/generate-tool-parameters-schema.ts --check",
@@ -72,6 +72,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@types/bun": "^1.3.14",
     "@types/node": "^25.9.1",
     "rimraf": "^6.1.3",
     "typescript": "^6.0.3"

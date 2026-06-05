@@ -15,6 +15,6 @@ describe("buildToolParameterSchemaDocument", () => {
     expect(toolNames).toEqual(
       [...READ_ONLY_ABSOLUTE_ROOT_TOOLS, ...READ_ONLY_SINGLE_REPO_TOOLS, ...MUTATING_TOOLS].sort(),
     );
-    expect(doc.tools.git_push.properties).toHaveProperty("setUpstream");
+    expect(doc.tools.git_push?.properties).toHaveProperty("setUpstream");
   });
 });

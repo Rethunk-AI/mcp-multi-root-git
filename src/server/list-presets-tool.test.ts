@@ -45,8 +45,8 @@ describe("list_presets", () => {
     const parsed = JSON.parse(text) as { roots: Array<{ presets: Array<{ name: string }> }> };
 
     expect(parsed.roots).toHaveLength(1);
-    expect(parsed.roots[0].presets).toHaveLength(1);
-    expect(parsed.roots[0].presets[0].name).toBe("default");
+    expect(parsed.roots[0]?.presets).toHaveLength(1);
+    expect(parsed.roots[0]?.presets[0]?.name).toBe("default");
   });
 
   test("lists presets from existing file (markdown)", async () => {
@@ -70,7 +70,7 @@ describe("list_presets", () => {
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as { roots: Array<{ fileExists: boolean }> };
 
-    expect(parsed.roots[0].fileExists).toBe(false);
+    expect(parsed.roots[0]?.fileExists).toBe(false);
   });
 
   test("handles non-git directory", async () => {
@@ -80,7 +80,7 @@ describe("list_presets", () => {
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as { roots: Array<{ error?: Record<string, unknown> }> };
 
-    expect(parsed.roots[0].error).toBeDefined();
-    expect(parsed.roots[0].error?.error).toBe("not_a_git_repository");
+    expect(parsed.roots[0]?.error).toBeDefined();
+    expect(parsed.roots[0]?.error?.error).toBe("not_a_git_repository");
   });
 });

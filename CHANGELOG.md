@@ -2,6 +2,15 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.9.1] — 2026-06-05
+
+Patch release: developer-tooling correctness. No runtime or JSON-format change; the published `dist` is unaffected.
+
+### Fixed
+
+- **Test files are now type-checked.** `tsconfig.json` includes `**/*.test.ts` with `@types/bun`, and a new `tsconfig.build.json` keeps tests out of the published `dist`. This surfaced and fixed latent type errors in the `tools`, `git-merge`, `list-presets`, and `tool-parameter-schemas` tests that the prior build never caught.
+- **`coverage:check` is robust to ANSI color.** `parseAllFilesLineCoverage` strips ANSI escape codes before matching the summary rows, so coverage parsing no longer fails when `bun test --coverage` emits color (e.g. under `FORCE_COLOR`).
+
 ## [2.9.0] — 2026-06-05
 
 Feature release: `RETHUNK_GIT_TOOLS` allowlist env var. Additive — no JSON format-version bump.
@@ -9,6 +18,14 @@ Feature release: `RETHUNK_GIT_TOOLS` allowlist env var. Additive — no JSON for
 ### Added
 
 - **`RETHUNK_GIT_TOOLS`** — comma-separated allowlist of exact tool names. When set to a non-empty value, only the listed tools are registered; unknown names are warned to stderr and ignored. When unset or empty (default), all 23 tools are registered — zero behavioral change for existing consumers. If every name in the list is unrecognized, zero tools are registered and a loud warning is emitted (the restriction is honored literally rather than falling back to all tools). The presets resource (`rethunk-git://presets`) is always registered regardless of this setting. Cuts MCP token cost for agents that only need a small subset of tools. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`.
+
+## [2.8.1] — 2026-06-05
+
+Patch release: token-cost reduction. No behavior or JSON-format change.
+
+### Changed
+
+- Tightened verbose tool parameter descriptions (shared `WorkspacePickSchema` plus several per-tool schemas) to cut the serialized MCP tool payload (~7% of the real `tools/list` size). Descriptions only — no parameter, type, enum, or default changes.
 
 ## [2.8.0] — 2026-05-29
 

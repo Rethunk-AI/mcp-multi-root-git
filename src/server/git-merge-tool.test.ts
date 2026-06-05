@@ -90,8 +90,8 @@ describe("git_merge fast-forward", () => {
     // First is FF, second is either FF (if merge-base still main tip) or rebase_then_ff.
     // After FFing feature/a, main has new commit; feature/b's base is still the original.
     // So feature/b has diverged and under auto will rebase_then_ff.
-    expect(["fast_forward", "rebase_then_ff"]).toContain(parsed.results[0]?.outcome);
-    expect(["fast_forward", "rebase_then_ff"]).toContain(parsed.results[1]?.outcome);
+    expect(["fast_forward", "rebase_then_ff"]).toContain(parsed.results[0]?.outcome as string);
+    expect(["fast_forward", "rebase_then_ff"]).toContain(parsed.results[1]?.outcome as string);
   });
 
   test("already up-to-date source is reported but not re-applied", async () => {
@@ -232,7 +232,9 @@ describe("git_merge strategy", () => {
     expect(parsed.results[0]?.conflictStage).toBe("rebase");
     expect(parsed.results[0]?.error).toBe("rebase_conflicts");
     // No rebase artifacts left behind.
-    const hasRebaseDir = readdirSync(join(dir, ".git")).some((n) => n.startsWith("rebase-"));
+    const hasRebaseDir = readdirSync(join(dir, ".git")).some((n: string) =>
+      n.startsWith("rebase-"),
+    );
     expect(hasRebaseDir).toBe(false);
   });
 });
