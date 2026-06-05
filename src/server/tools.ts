@@ -26,32 +26,93 @@ import {
 import { registerListPresetsTool } from "./list-presets-tool.js";
 import { registerPresetsResource } from "./presets-resource.js";
 
-export function registerRethunkGitTools(server: FastMCP): void {
+/**
+ * Ordered registry of all 23 MCP tools. Registration order is preserved for
+ * both full and filtered (RETHUNK_GIT_TOOLS) subsets.
+ */
+const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] = [
   // Read-only tools
-  registerGitStatusTool(server);
-  registerGitInventoryTool(server);
-  registerGitParityTool(server);
-  registerListPresetsTool(server);
-  registerGitLogTool(server);
-  registerGitDiffSummaryTool(server);
-  registerGitDiffTool(server);
-  registerGitShowTool(server);
-  registerGitWorktreeListTool(server);
-  registerGitStashListTool(server);
-  registerGitFetchTool(server);
-  registerGitBlameTool(server);
-  registerGitBranchListTool(server);
-  registerGitReflogTool(server);
+  { name: "git_status", register: registerGitStatusTool },
+  { name: "git_inventory", register: registerGitInventoryTool },
+  { name: "git_parity", register: registerGitParityTool },
+  { name: "list_presets", register: registerListPresetsTool },
+  { name: "git_log", register: registerGitLogTool },
+  { name: "git_diff_summary", register: registerGitDiffSummaryTool },
+  { name: "git_diff", register: registerGitDiffTool },
+  { name: "git_show", register: registerGitShowTool },
+  { name: "git_worktree_list", register: registerGitWorktreeListTool },
+  { name: "git_stash_list", register: registerGitStashListTool },
+  { name: "git_fetch", register: registerGitFetchTool },
+  { name: "git_blame", register: registerGitBlameTool },
+  { name: "git_branch_list", register: registerGitBranchListTool },
+  { name: "git_reflog", register: registerGitReflogTool },
   // Mutating tools
-  registerBatchCommitTool(server);
-  registerGitPushTool(server);
-  registerGitMergeTool(server);
-  registerGitCherryPickTool(server);
-  registerGitResetSoftTool(server);
-  registerGitTagTool(server);
-  registerGitWorktreeAddTool(server);
-  registerGitWorktreeRemoveTool(server);
-  registerGitStashApplyTool(server);
-  // Resources
+  { name: "batch_commit", register: registerBatchCommitTool },
+  { name: "git_push", register: registerGitPushTool },
+  { name: "git_merge", register: registerGitMergeTool },
+  { name: "git_cherry_pick", register: registerGitCherryPickTool },
+  { name: "git_reset_soft", register: registerGitResetSoftTool },
+  { name: "git_tag", register: registerGitTagTool },
+  { name: "git_worktree_add", register: registerGitWorktreeAddTool },
+  { name: "git_worktree_remove", register: registerGitWorktreeRemoveTool },
+  { name: "git_stash_apply", register: registerGitStashApplyTool },
+];
+
+/**
+ * Parse the RETHUNK_GIT_TOOLS env var and return the matching subset of
+ * registrars plus any unrecognized token names.
+ *
+ * @param envValue  Raw value of process.env.RETHUNK_GIT_TOOLS (may be undefined).
+ * @param registrars  Full ordered registrar list (injectable for tests).
+ */
+export function selectToolRegistrars(
+  envValue: string | undefined,
+  registrars: typeof TOOL_REGISTRARS,
+): {
+  selected: typeof TOOL_REGISTRARS;
+  unknown: string[];
+} {
+  const tokens = (envValue ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+
+  // Unset, empty, or whitespace-only → register all tools.
+  if (tokens.length === 0) {
+    return { selected: registrars, unknown: [] };
+  }
+
+  const knownNames = new Set(registrars.map((r) => r.name));
+  const requested = new Set(tokens);
+
+  const unknown = tokens.filter((t) => !knownNames.has(t));
+  // Preserve canonical order; deduplicate duplicate tokens automatically.
+  const selected = registrars.filter((r) => requested.has(r.name));
+
+  return { selected, unknown };
+}
+
+export function registerRethunkGitTools(server: FastMCP): void {
+  const env = process.env.RETHUNK_GIT_TOOLS;
+  const { selected, unknown } = selectToolRegistrars(env, TOOL_REGISTRARS);
+
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `[rethunk-git] RETHUNK_GIT_TOOLS: unknown tool name(s) ignored: ${unknown.map((n) => JSON.stringify(n)).join(", ")}\n`,
+    );
+  }
+
+  if (selected.length === 0 && (env ?? "").trim().length > 0) {
+    process.stderr.write(
+      `[rethunk-git] RETHUNK_GIT_TOOLS: every listed name was unrecognized — registering NO tools. ` +
+        `Set RETHUNK_GIT_TOOLS to a comma-separated list of valid tool names, or unset it to register all tools.\n`,
+    );
+  }
+
+  for (const { register } of selected) {
+    register(server);
+  }
+
+  // The presets RESOURCE is always registered, regardless of the tool allowlist.
   registerPresetsResource(server);
 }

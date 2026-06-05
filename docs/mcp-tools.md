@@ -1029,6 +1029,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 |----------|---------|-------|
 | `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`). |
 | `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in ms; on expiry the child is killed (SIGTERM) and the call resolves as failed. Set `0` (or negative) to disable (unbounded). |
+| `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 23 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
 
 ## Resource
 

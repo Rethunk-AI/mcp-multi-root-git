@@ -2,6 +2,14 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [2.9.0] — 2026-06-05
+
+Feature release: `RETHUNK_GIT_TOOLS` allowlist env var. Additive — no JSON format-version bump.
+
+### Added
+
+- **`RETHUNK_GIT_TOOLS`** — comma-separated allowlist of exact tool names. When set to a non-empty value, only the listed tools are registered; unknown names are warned to stderr and ignored. When unset or empty (default), all 23 tools are registered — zero behavioral change for existing consumers. If every name in the list is unrecognized, zero tools are registered and a loud warning is emitted (the restriction is honored literally rather than falling back to all tools). The presets resource (`rethunk-git://presets`) is always registered regardless of this setting. Cuts MCP token cost for agents that only need a small subset of tools. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`.
+
 ## [2.8.0] — 2026-05-29
 
 Feature release: three new read-only inspection tools (tool count 20 → 23). Additive — no JSON format-version bump.

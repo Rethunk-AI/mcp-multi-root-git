@@ -92,6 +92,7 @@ Omit any `cwd` / `workingDirectory` field unless your client requires it for unr
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `GIT_SUBPROCESS_PARALLELISM` | `4` | Number of parallel git subprocesses for inventory operations and `git_status` submodule rows. Valid range: 1 to 2×CPU count (auto-clamped to prevent runaway spawning). Increase on high-core machines to accelerate large fleet scans; decrease if system resources are constrained. |
+| `RETHUNK_GIT_TOOLS` | _(unset)_ | Comma-separated list of tool names to register. When unset or empty, all 23 tools are registered (default). When set, only the listed tools are exposed — unknown names are warned and ignored. If every name is unknown, **zero** tools are registered and a loud warning is emitted (the restriction is honored literally). The presets resource (`rethunk-git://presets`) is always registered regardless of this setting. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. Full tool-name list: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_diff_summary`, `git_diff`, `git_show`, `git_worktree_list`, `git_stash_list`, `git_fetch`, `git_blame`, `git_branch_list`, `git_reflog`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_reset_soft`, `git_tag`, `git_worktree_add`, `git_worktree_remove`, `git_stash_apply`. |
 
 Set these in the environment where the MCP client launches the server (e.g. in your shell, in the MCP client config as `env`, or in a startup script).
 
