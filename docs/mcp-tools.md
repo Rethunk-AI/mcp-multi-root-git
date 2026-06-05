@@ -666,7 +666,7 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged; or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel. |
-| `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. Enum reserved for future modes such as `"force-with-lease"`. |
+| `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. |
 | `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
 | `workspaceRoot` | string | Explicit root; highest priority. |
 | `rootIndex` | int | Pick one of several MCP roots (0-based). |

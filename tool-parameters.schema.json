@@ -9,22 +9,22 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -56,22 +56,22 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -128,22 +128,22 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -200,22 +200,22 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -242,22 +242,22 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -266,7 +266,7 @@
         },
         "format": {
           "default": "markdown",
-          "description": "`markdown` (default): headed sections per root. `json`: structured groups array. `oneline`: `<sha7> <subject>` per line, no headers (single-root) or `### repo (branch)` separator per group (multi-root). Lowest-token option for post-commit verification.",
+          "description": "`markdown` (default): headed sections per root. `json`: groups array. `oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
           "type": "string",
           "enum": [
             "markdown",
@@ -275,27 +275,27 @@
           ]
         },
         "since": {
-          "description": "Passed to `git log --since=`. Accepts ISO timestamps or git relative forms like `48.hours` or `2.weeks.ago`. Default: `7.days`.",
+          "description": "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
           "type": "string"
         },
         "paths": {
-          "description": "Limit to commits touching these paths (passed as `-- <paths>`).",
+          "description": "Limit to commits touching these paths (`-- <paths>`).",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "grep": {
-          "description": "Filter commits whose message matches this regex (git `--grep`, case-insensitive).",
+          "description": "Filter by commit message regex (git `--grep`, case-insensitive).",
           "type": "string"
         },
         "author": {
-          "description": "Filter by author name or email (passed as `--author=`).",
+          "description": "Filter by author name or email (`--author=`).",
           "type": "string"
         },
         "maxCommits": {
           "default": 50,
-          "description": "Maximum commits to return per root (hard cap 500). Default 50.",
+          "description": "Max commits per root (hard cap 500, default 50).",
           "type": "integer",
           "minimum": 1,
           "maximum": 500
@@ -317,17 +317,17 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots. Use for many sibling clones under a non-git parent directory.",
+          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -365,7 +365,7 @@
           "maximum": 500
         },
         "excludePatterns": {
-          "description": "Glob patterns to exclude. Defaults to common noise: lock files, dist, vendor, etc.",
+          "description": "Glob patterns to exclude. Default: lock files, dist, vendor, etc.",
           "type": "array",
           "items": {
             "type": "string"
@@ -384,11 +384,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -402,19 +402,19 @@
           ]
         },
         "base": {
-          "description": "Base ref (e.g. \"main\", \"HEAD~3\"). Required for range diffs. If omitted and `staged: false`, shows unstaged changes.",
+          "description": "Base ref (e.g. \"main\", \"HEAD~3\"). Omit for unstaged changes.",
           "type": "string"
         },
         "head": {
-          "description": "Head ref (e.g. \"feature-branch\"). If omitted, defaults to HEAD. Only used if `base` is provided.",
+          "description": "Head ref (e.g. \"feature-branch\"). Defaults to HEAD. Used only when `base` is set.",
           "type": "string"
         },
         "path": {
-          "description": "Scope diff to a single file path (e.g. \"src/main.ts\"). For multiple files, prefer `paths`. If both `path` and `paths` are given, they are unioned.",
+          "description": "Scope to a single file. Unioned with `paths` if both given.",
           "type": "string"
         },
         "paths": {
-          "description": "Scope diff to multiple file paths (e.g. [\"src/a.ts\", \"src/b.ts\"]). Each path is validated and must lie within the repository root. If both `path` and `paths` are given, they are unioned.",
+          "description": "Scope to multiple files (must be within repo root). Unioned with `path` if both given.",
           "type": "array",
           "items": {
             "type": "string"
@@ -422,11 +422,11 @@
         },
         "staged": {
           "default": false,
-          "description": "If true, show staged changes (git diff --staged). Ignored if `base` is provided.",
+          "description": "Show staged changes (`git diff --staged`). Ignored if `base` is set.",
           "type": "boolean"
         },
         "unified": {
-          "description": "Number of context lines to show around each change (passed as -U<n> to git diff). Defaults to git's built-in default (3). Use 0 for no context.",
+          "description": "Context lines around each change (`-U<n>`). Default: 3. Use 0 for no context.",
           "type": "integer",
           "minimum": 0,
           "maximum": 100
@@ -443,11 +443,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -492,11 +492,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -520,11 +520,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -548,11 +548,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -598,11 +598,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -648,11 +648,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -667,7 +667,7 @@
         },
         "includeRemotes": {
           "default": false,
-          "description": "When true, also return remote-tracking branches from refs/remotes (excluding symbolic origin/HEAD).",
+          "description": "Include remote-tracking branches from refs/remotes (symbolic origin/HEAD excluded).",
           "type": "boolean"
         }
       },
@@ -682,11 +682,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -724,18 +724,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -807,7 +807,7 @@
                     }
                   ]
                 },
-                "description": "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging. Deleted files (missing on disk but tracked in HEAD) are staged as removals via `git rm --cached`. Combining { path, lines } with a deleted file is an error."
+                "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file."
               }
             },
             "required": [
@@ -816,11 +816,11 @@
             ],
             "additionalProperties": false
           },
-          "description": "Commits to create, applied in order."
+          "description": "Ordered list of commits to create."
         },
         "push": {
           "default": "never",
-          "description": "`never` (default): no push. `after`: push the current branch to its upstream once all commits succeed; fails with `push_no_upstream` if the branch has no upstream (commits are NOT rolled back). Enum reserved for future modes such as `force-with-lease`.",
+          "description": "`never` (default): no push. `after`: push current branch to upstream after all commits succeed; fails with `push_no_upstream` if no upstream (commits are NOT rolled back).",
           "type": "string",
           "enum": [
             "never",
@@ -829,7 +829,7 @@
         },
         "dryRun": {
           "default": false,
-          "description": "When true, stage files, collect preview (files staged, commit messages), return preview response without writing commits. Unstages any files that were staged for the preview. Response indicates DRY RUN mode.",
+          "description": "Stage files and return a preview without writing commits; unstages afterwards. Response is marked DRY RUN.",
           "type": "boolean"
         }
       },
@@ -847,18 +847,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -895,18 +895,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -948,12 +948,12 @@
         },
         "deleteMergedBranches": {
           "default": false,
-          "description": "After all sources merge cleanly, delete each source branch locally (`git branch -d`). Protected names always skipped. Never affects remote branches.",
+          "description": "Delete each source branch locally after clean merge (`git branch -d`). Protected names and remote refs unaffected.",
           "type": "boolean"
         },
         "deleteMergedWorktrees": {
           "default": false,
-          "description": "After all sources merge cleanly, remove any local worktree currently checked out on a source branch (`git worktree remove`). Protected tails always skipped.",
+          "description": "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected tails skipped.",
           "type": "boolean"
         }
       },
@@ -972,18 +972,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -1002,7 +1002,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Sources to cherry-pick: SHA, `A..B` range, or branch name. Branch sources resolve to `onto..<branch>` (only commits missing from destination)."
+          "description": "Sources: SHA, `A..B` range, or branch name (resolves to `onto..<branch>`)."
         },
         "onto": {
           "description": "Destination branch. Defaults to the currently checked-out branch.",
@@ -1010,17 +1010,17 @@
         },
         "deleteMergedBranches": {
           "default": false,
-          "description": "After all commits apply, delete each branch-kind source locally (`git branch -d`) when it is fully merged into the destination. Protected names always skipped; never touches remote refs.",
+          "description": "Delete branch-kind sources locally after success. Protected names and remote refs unaffected.",
           "type": "boolean"
         },
         "deleteMergedWorktrees": {
           "default": false,
-          "description": "After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped.",
+          "description": "Remove local worktrees on branch-kind sources after success. Protected tails skipped.",
           "type": "boolean"
         },
         "strictMergedRefEquality": {
           "default": false,
-          "description": "When false (default), branch deletion uses patch-id equivalence: a source branch is deleted when every commit it contains has a content-equivalent commit on the destination (same diff, different SHA — the normal cherry-pick outcome). Set to true to require strict ref ancestry (`git branch -d` semantics), which will refuse deletion after a cherry-pick because the SHA differs.",
+          "description": "false (default): delete branch when every commit is content-equivalent on destination (patch-id, normal cherry-pick outcome). true: require strict ref ancestry (`git branch -d` semantics — will refuse after cherry-pick due to SHA mismatch).",
           "type": "boolean"
         }
       },
@@ -1039,18 +1039,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -1064,7 +1064,7 @@
         "ref": {
           "type": "string",
           "minLength": 1,
-          "description": "Commit to reset to. Accepts ancestor notation (`HEAD~1`, `HEAD~3`), branch names, or full SHAs."
+          "description": "Commit to reset to: ancestor notation (`HEAD~1`, `HEAD~3`), branch name, or SHA."
         }
       },
       "required": [
@@ -1079,11 +1079,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -1127,18 +1127,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -1152,15 +1152,15 @@
         "path": {
           "type": "string",
           "minLength": 1,
-          "description": "Filesystem path for the new worktree. Relative paths are resolved from the git toplevel."
+          "description": "Filesystem path for the new worktree (relative paths resolved from git toplevel)."
         },
         "branch": {
           "type": "string",
           "minLength": 1,
-          "description": "Branch to check out in the new worktree. Created from `baseRef` if absent."
+          "description": "Branch to check out; created from `baseRef` if it doesn't exist."
         },
         "baseRef": {
-          "description": "Commit-ish to base the new branch on when it does not yet exist. Default: HEAD.",
+          "description": "Commit-ish to base the new branch on. Default: HEAD.",
           "type": "string"
         }
       },
@@ -1177,18 +1177,18 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
-          "description": "Fan out across all MCP file roots.",
+          "description": "Fan out across all MCP roots.",
           "type": "boolean"
         },
         "format": {
@@ -1206,7 +1206,7 @@
         },
         "force": {
           "default": false,
-          "description": "Pass `--force` to allow removal of worktrees with uncommitted changes.",
+          "description": "Allow removal of worktrees with uncommitted changes (`--force`).",
           "type": "boolean"
         }
       },
@@ -1223,11 +1223,11 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority override.",
+          "description": "Highest-priority root override.",
           "type": "string"
         },
         "rootIndex": {
-          "description": "0-based index into the MCP file roots list; ignored when workspaceRoot is set.",
+          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -1249,7 +1249,7 @@
         },
         "pop": {
           "default": false,
-          "description": "If true, runs `git stash pop` instead of `git stash apply` (removes stash after applying).",
+          "description": "Run `git stash pop` instead of `git stash apply` (removes stash after applying).",
           "type": "boolean"
         }
       },

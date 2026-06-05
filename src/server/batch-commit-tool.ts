@@ -30,9 +30,8 @@ const CommitEntrySchema = z.object({
     .array(FileEntrySchema)
     .min(1)
     .describe(
-      "Paths to stage, relative to the git root. Each can be a string path or { path, lines } for hunk-level staging. " +
-        "Deleted files (missing on disk but tracked in HEAD) are staged as removals via `git rm --cached`. " +
-        "Combining { path, lines } with a deleted file is an error.",
+      "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. " +
+        "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file.",
     ),
 });
 
@@ -41,9 +40,8 @@ const PushModeSchema = z
   .optional()
   .default("never")
   .describe(
-    "`never` (default): no push. `after`: push the current branch to its upstream once all commits succeed; " +
-      "fails with `push_no_upstream` if the branch has no upstream (commits are NOT rolled back). " +
-      "Enum reserved for future modes such as `force-with-lease`.",
+    "`never` (default): no push. `after`: push current branch to upstream after all commits succeed; " +
+      "fails with `push_no_upstream` if no upstream (commits are NOT rolled back).",
   );
 
 const DryRunSchema = z
@@ -51,8 +49,7 @@ const DryRunSchema = z
   .optional()
   .default(false)
   .describe(
-    "When true, stage files, collect preview (files staged, commit messages), return preview response without writing commits. " +
-      "Unstages any files that were staged for the preview. Response indicates DRY RUN mode.",
+    "Stage files and return a preview without writing commits; unstages afterwards. Response is marked DRY RUN.",
   );
 
 /**
@@ -285,11 +282,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
   server.addTool({
     name: "batch_commit",
     description:
-      "Create multiple sequential git commits in a single call. " +
-      "Each entry stages the listed files then commits with the given message. " +
-      'Stops on first failure. Optional `push: "after"` pushes the current branch ' +
-      "to its upstream once all commits succeed. " +
-      "Optional `dryRun: true` previews what would be staged/committed without writing commits.",
+      "Create multiple sequential git commits in one call. " +
+      "Each entry stages its files then commits. Stops on first failure. " +
+      'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -300,7 +295,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
         .array(CommitEntrySchema)
         .min(1)
         .max(50)
-        .describe("Commits to create, applied in order."),
+        .describe("Ordered list of commits to create."),
       push: PushModeSchema,
       dryRun: DryRunSchema,
     }),

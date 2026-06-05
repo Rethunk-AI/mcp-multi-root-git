@@ -149,14 +149,11 @@ export function registerGitCherryPickTool(server: FastMCP): void {
   server.addTool({
     name: "git_cherry_pick",
     description:
-      "Play commits from one or more sources onto a destination. Sources may be SHAs, " +
-      "`A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). " +
-      "Commits already reachable from the destination are skipped. Refuses on dirty tree; " +
-      "stops on the first conflict and reports paths. Optional flags auto-delete source " +
-      "branches and worktrees after success; deletion uses patch-id equivalence by default " +
-      "(content-identical commits with different SHAs are treated as merged, which is the " +
-      "normal cherry-pick outcome). Pass `strictMergedRefEquality: true` for strict `git branch -d` " +
-      "ancestry semantics. Protected branch names always skipped.",
+      "Cherry-pick commits from one or more sources onto a destination. Sources: SHAs, `A..B` ranges, " +
+      "or branch names (expanded to `onto..<branch>`, oldest-first). Already-reachable commits skipped. " +
+      "Refuses on dirty tree; stops on first conflict. Optional flags delete source branches/worktrees " +
+      "after success using patch-id equivalence (set `strictMergedRefEquality: true` for strict ancestry). " +
+      "Protected names always skipped.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -167,10 +164,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         .array(z.string().min(1))
         .min(1)
         .max(50)
-        .describe(
-          "Sources to cherry-pick: SHA, `A..B` range, or branch name. Branch sources " +
-            "resolve to `onto..<branch>` (only commits missing from destination).",
-        ),
+        .describe("Sources: SHA, `A..B` range, or branch name (resolves to `onto..<branch>`)."),
       onto: z
         .string()
         .optional()
@@ -180,28 +174,22 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         .optional()
         .default(false)
         .describe(
-          "After all commits apply, delete each branch-kind source locally " +
-            "(`git branch -d`) when it is fully merged into the destination. " +
-            "Protected names always skipped; never touches remote refs.",
+          "Delete branch-kind sources locally after success. Protected names and remote refs unaffected.",
         ),
       deleteMergedWorktrees: z
         .boolean()
         .optional()
         .default(false)
         .describe(
-          "After success, remove any local worktree attached to a branch-kind source " +
-            "(`git worktree remove`). Protected tails always skipped.",
+          "Remove local worktrees on branch-kind sources after success. Protected tails skipped.",
         ),
       strictMergedRefEquality: z
         .boolean()
         .optional()
         .default(false)
         .describe(
-          "When false (default), branch deletion uses patch-id equivalence: a source branch " +
-            "is deleted when every commit it contains has a content-equivalent commit on the " +
-            "destination (same diff, different SHA — the normal cherry-pick outcome). " +
-            "Set to true to require strict ref ancestry (`git branch -d` semantics), which " +
-            "will refuse deletion after a cherry-pick because the SHA differs.",
+          "false (default): delete branch when every commit is content-equivalent on destination (patch-id, normal cherry-pick outcome). " +
+            "true: require strict ref ancestry (`git branch -d` semantics — will refuse after cherry-pick due to SHA mismatch).",
         ),
     }),
     execute: async (args) => {
@@ -287,7 +275,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       if (allOk) {
         for (let i = 0; i < perSourceReport.length; i++) {
           const src = perSourceReport[i];
-          if (!src || src.kind !== "branch") continue;
+          if (src?.kind !== "branch") continue;
           if (isProtectedBranch(src.raw)) continue;
 
           if (args.deleteMergedWorktrees) {

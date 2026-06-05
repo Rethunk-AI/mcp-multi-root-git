@@ -64,8 +64,7 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
   server.addTool({
     name: "git_worktree_add",
     description:
-      "Add a new git worktree. If `branch` does not exist it is created from `baseRef` " +
-      "(defaults to HEAD). Refuses to create on a protected branch name.",
+      "Add a new git worktree. Creates `branch` from `baseRef` (default: HEAD) if it doesn't exist. Refuses protected branch names.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -76,18 +75,16 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
         .string()
         .min(1)
         .describe(
-          "Filesystem path for the new worktree. Relative paths are resolved from the git toplevel.",
+          "Filesystem path for the new worktree (relative paths resolved from git toplevel).",
         ),
       branch: z
         .string()
         .min(1)
-        .describe("Branch to check out in the new worktree. Created from `baseRef` if absent."),
+        .describe("Branch to check out; created from `baseRef` if it doesn't exist."),
       baseRef: z
         .string()
         .optional()
-        .describe(
-          "Commit-ish to base the new branch on when it does not yet exist. Default: HEAD.",
-        ),
+        .describe("Commit-ish to base the new branch on. Default: HEAD."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -158,9 +155,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
   server.addTool({
     name: "git_worktree_remove",
     description:
-      "Remove a git worktree (`git worktree remove`). " +
-      "Pass `force: true` to remove a worktree with uncommitted changes. " +
-      "Refuses to remove the main worktree.",
+      "Remove a git worktree. Pass `force: true` to remove with uncommitted changes. Refuses to remove the main worktree.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -175,7 +170,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
         .boolean()
         .optional()
         .default(false)
-        .describe("Pass `--force` to allow removal of worktrees with uncommitted changes."),
+        .describe("Allow removal of worktrees with uncommitted changes (`--force`)."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);

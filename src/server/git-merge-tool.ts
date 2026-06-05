@@ -287,12 +287,10 @@ export function registerGitMergeTool(server: FastMCP): void {
   server.addTool({
     name: "git_merge",
     description:
-      "Merge one or more source branches into a destination. Default strategy `auto` " +
-      "cascades fast-forward → rebase → merge-commit per source, preferring linear history. " +
-      "Refuses if the working tree is dirty. Stops on the first conflict and reports " +
-      "the affected paths. Optional flags auto-delete merged branches and worktrees, " +
-      "skipping protected names (main, master, dev, develop, stable, trunk, prod, " +
-      "production, release/*, hotfix/*).",
+      "Merge one or more source branches into a destination. `auto` cascades " +
+      "fast-forward → rebase → merge-commit, preferring linear history. " +
+      "Refuses on dirty tree; stops on first conflict. Optional flags delete merged branches/worktrees " +
+      "(protected names skipped: main, master, dev, develop, stable, trunk, prod, production, release/*, hotfix/*).",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -318,16 +316,14 @@ export function registerGitMergeTool(server: FastMCP): void {
         .optional()
         .default(false)
         .describe(
-          "After all sources merge cleanly, delete each source branch locally (`git branch -d`). " +
-            "Protected names always skipped. Never affects remote branches.",
+          "Delete each source branch locally after clean merge (`git branch -d`). Protected names and remote refs unaffected.",
         ),
       deleteMergedWorktrees: z
         .boolean()
         .optional()
         .default(false)
         .describe(
-          "After all sources merge cleanly, remove any local worktree currently checked out " +
-            "on a source branch (`git worktree remove`). Protected tails always skipped.",
+          "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected tails skipped.",
         ),
     }),
     execute: async (args) => {

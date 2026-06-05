@@ -14,8 +14,7 @@ import { WorkspacePickSchema } from "./schemas.js";
 export function registerGitStashListTool(server: FastMCP): void {
   server.addTool({
     name: "git_stash_list",
-    description:
-      "List all git stashes. Returns array of `{ index: number, message: string, sha: string }`.",
+    description: "List all git stashes.",
     annotations: {
       readOnlyHint: true,
     },
@@ -91,9 +90,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
   server.addTool({
     name: "git_stash_apply",
     description:
-      "Apply or pop a git stash. `index` defaults to 0 (stash@{0}). " +
-      "Set `pop: true` to run `git stash pop` instead of `git stash apply` (removes stash after applying). " +
-      "Returns `{ applied: boolean, stashIndex: number, popped: boolean, output: string }`.",
+      "Apply or pop a git stash. `index` defaults to 0. `pop: true` removes stash after applying.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -118,7 +115,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
           .optional()
           .default(false)
           .describe(
-            "If true, runs `git stash pop` instead of `git stash apply` (removes stash after applying).",
+            "Run `git stash pop` instead of `git stash apply` (removes stash after applying).",
           ),
       }),
     execute: async (args) => {

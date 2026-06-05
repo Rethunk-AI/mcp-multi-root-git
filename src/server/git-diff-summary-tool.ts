@@ -226,9 +226,8 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
   server.addTool({
     name: "git_diff_summary",
     description:
-      "Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions, " +
-      "truncated to configurable line limits, with noise files (lock files, dist, etc.) excluded by default. " +
-      "Use `range` to target staged, HEAD, or any revision range.",
+      "Structured diff viewer: per-file diffs with counts, truncated to configurable limits. " +
+      "Noise files (lock files, dist, etc.) excluded by default. Use `range` to target staged, HEAD, or a revision range.",
     annotations: {
       readOnlyHint: true,
     },
@@ -263,9 +262,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       excludePatterns: z
         .array(z.string())
         .optional()
-        .describe(
-          "Glob patterns to exclude. Defaults to common noise: lock files, dist, vendor, etc.",
-        ),
+        .describe("Glob patterns to exclude. Default: lock files, dist, vendor, etc."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);

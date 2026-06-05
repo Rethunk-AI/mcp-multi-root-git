@@ -86,10 +86,8 @@ export function registerGitDiffTool(server: FastMCP): void {
   server.addTool({
     name: "git_diff",
     description:
-      "Get diff text for scoped file(s) or range. Returns the raw diff output. " +
-      "Use `staged: true` for staged changes, `base`/`head` for revision ranges, " +
-      "`path` to scope to a single file, `paths` to scope to multiple files, " +
-      "and `unified` to control the number of context lines.",
+      "Raw diff text for scoped file(s) or range. `staged: true` for staged changes, " +
+      "`base`/`head` for revision ranges, `path`/`paths` to scope, `unified` for context lines.",
     annotations: {
       readOnlyHint: true,
     },
@@ -100,49 +98,35 @@ export function registerGitDiffTool(server: FastMCP): void {
       base: z
         .string()
         .optional()
-        .describe(
-          'Base ref (e.g. "main", "HEAD~3"). Required for range diffs. ' +
-            "If omitted and `staged: false`, shows unstaged changes.",
-        ),
+        .describe('Base ref (e.g. "main", "HEAD~3"). Omit for unstaged changes.'),
       head: z
         .string()
         .optional()
         .describe(
-          'Head ref (e.g. "feature-branch"). If omitted, defaults to HEAD. ' +
-            "Only used if `base` is provided.",
+          'Head ref (e.g. "feature-branch"). Defaults to HEAD. Used only when `base` is set.',
         ),
       path: z
         .string()
         .optional()
-        .describe(
-          'Scope diff to a single file path (e.g. "src/main.ts"). ' +
-            "For multiple files, prefer `paths`. If both `path` and `paths` are given, they are unioned.",
-        ),
+        .describe("Scope to a single file. Unioned with `paths` if both given."),
       paths: z
         .array(z.string())
         .optional()
         .describe(
-          'Scope diff to multiple file paths (e.g. ["src/a.ts", "src/b.ts"]). ' +
-            "Each path is validated and must lie within the repository root. " +
-            "If both `path` and `paths` are given, they are unioned.",
+          "Scope to multiple files (must be within repo root). Unioned with `path` if both given.",
         ),
       staged: z
         .boolean()
         .optional()
         .default(false)
-        .describe(
-          "If true, show staged changes (git diff --staged). " + "Ignored if `base` is provided.",
-        ),
+        .describe("Show staged changes (`git diff --staged`). Ignored if `base` is set."),
       unified: z
         .number()
         .int()
         .min(0)
         .max(100)
         .optional()
-        .describe(
-          "Number of context lines to show around each change (passed as -U<n> to git diff). " +
-            "Defaults to git's built-in default (3). Use 0 for no context.",
-        ),
+        .describe("Context lines around each change (`-U<n>`). Default: 3. Use 0 for no context."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);

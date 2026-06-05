@@ -12,10 +12,8 @@ export function registerGitResetSoftTool(server: FastMCP): void {
   server.addTool({
     name: "git_reset_soft",
     description:
-      "Soft-reset the current branch to a reference (`git reset --soft <ref>`). " +
-      "Moves the branch pointer back while keeping all changes from the rewound commits " +
-      "in the staging index — use this to re-split an already-committed chunk. " +
-      "Refuses when the working tree has any uncommitted or unstaged changes (run on a clean tree).",
+      "`git reset --soft <ref>`: moves HEAD back while keeping rewound changes staged. " +
+      "Use to re-split committed work. Refuses on a dirty tree.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -26,8 +24,7 @@ export function registerGitResetSoftTool(server: FastMCP): void {
         .string()
         .min(1)
         .describe(
-          "Commit to reset to. Accepts ancestor notation (`HEAD~1`, `HEAD~3`), " +
-            "branch names, or full SHAs.",
+          "Commit to reset to: ancestor notation (`HEAD~1`, `HEAD~3`), branch name, or SHA.",
         ),
     }),
     execute: async (args) => {

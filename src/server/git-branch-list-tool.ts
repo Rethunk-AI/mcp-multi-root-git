@@ -143,9 +143,7 @@ export function registerGitBranchListTool(server: FastMCP): void {
   server.addTool({
     name: "git_branch_list",
     description:
-      "List local branches (and optionally remote-tracking branches) for a single git repository. " +
-      "Returns `{ branches: [{ name, sha, current, upstream? }], remotes?: [{ name, sha }] }`. " +
-      "The current branch is marked with `current: true`. Remote branches are included when `includeRemotes: true`.",
+      "List local (and optionally remote-tracking) branches. Current branch marked `current: true`. Set `includeRemotes: true` for remotes.",
     annotations: {
       readOnlyHint: true,
     },
@@ -161,7 +159,7 @@ export function registerGitBranchListTool(server: FastMCP): void {
           .optional()
           .default(false)
           .describe(
-            "When true, also return remote-tracking branches from refs/remotes (excluding symbolic origin/HEAD).",
+            "Include remote-tracking branches from refs/remotes (symbolic origin/HEAD excluded).",
           ),
       }),
     execute: async (args) => {

@@ -256,8 +256,7 @@ export function registerGitLogTool(server: FastMCP): void {
   server.addTool({
     name: "git_log",
     description:
-      "Path-filtered, time-windowed read-only `git log` across one or more workspace roots. " +
-      "Returns structured commit history with author, date, subject, and optional diff stats.",
+      "Read-only `git log` across one or more roots. Returns author, date, subject, optional diff stats.",
     annotations: {
       readOnlyHint: true,
     },
@@ -267,31 +266,24 @@ export function registerGitLogTool(server: FastMCP): void {
         .optional()
         .default("markdown")
         .describe(
-          "`markdown` (default): headed sections per root. " +
-            "`json`: structured groups array. " +
-            "`oneline`: `<sha7> <subject>` per line, no headers (single-root) or `### repo (branch)` separator per group (multi-root). Lowest-token option for post-commit verification.",
+          "`markdown` (default): headed sections per root. `json`: groups array. " +
+            "`oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
         ),
       since: z
         .string()
         .optional()
         .describe(
-          "Passed to `git log --since=`. Accepts ISO timestamps or git relative forms like " +
-            "`48.hours` or `2.weeks.ago`. Default: `7.days`.",
+          "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
         ),
       paths: z
         .array(z.string())
         .optional()
-        .describe("Limit to commits touching these paths (passed as `-- <paths>`)."),
+        .describe("Limit to commits touching these paths (`-- <paths>`)."),
       grep: z
         .string()
         .optional()
-        .describe(
-          "Filter commits whose message matches this regex (git `--grep`, case-insensitive).",
-        ),
-      author: z
-        .string()
-        .optional()
-        .describe("Filter by author name or email (passed as `--author=`)."),
+        .describe("Filter by commit message regex (git `--grep`, case-insensitive)."),
+      author: z.string().optional().describe("Filter by author name or email (`--author=`)."),
       maxCommits: z
         .number()
         .int()
@@ -300,7 +292,7 @@ export function registerGitLogTool(server: FastMCP): void {
         .optional()
         .default(DEFAULT_MAX_COMMITS)
         .describe(
-          `Maximum commits to return per root (hard cap ${MAX_COMMITS_HARD_CAP}). Default ${DEFAULT_MAX_COMMITS}.`,
+          `Max commits per root (hard cap ${MAX_COMMITS_HARD_CAP}, default ${DEFAULT_MAX_COMMITS}).`,
         ),
       branch: z.string().optional().describe("Ref/branch to log from. Default: HEAD."),
     }),
