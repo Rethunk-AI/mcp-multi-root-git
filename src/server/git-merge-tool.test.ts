@@ -7,7 +7,6 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { registerGitMergeTool } from "./git-merge-tool.js";
@@ -310,7 +309,8 @@ describe("git_merge cleanup", () => {
     const dir = makeRepo();
     // Create branch + worktree for it.
     gitCmd(dir, "branch", "feature/w", "HEAD");
-    const wtPath = trackTmpPath(join(tmpdir(), `mcp-wt-${Date.now()}`));
+    const wtContainer = mkTmpDir("mcp-wt-");
+    const wtPath = trackTmpPath(join(wtContainer, "wt"));
     gitCmd(dir, "worktree", "add", wtPath, "feature/w");
     // Add a commit in the worktree so it's ahead.
     writeFileSync(join(wtPath, "w.txt"), "W\n");

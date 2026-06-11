@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,7 +43,8 @@ function assertVersionHasChangelog(): string {
 
 function runCoverageGate(): void {
   const output = run("bun", ["run", "test:coverage"]);
-  writeFileSync(join(tmpdir(), "mcp-multi-root-git-publish-coverage.txt"), output);
+  const coverageDir = mkdtempSync(join(tmpdir(), "mcp-multi-root-git-coverage-"));
+  writeFileSync(join(coverageDir, "coverage.txt"), output);
   const coverage = parseAllFilesLineCoverage(output);
   if (coverage == null) {
     process.stderr.write("No All files line coverage summary found.\n");

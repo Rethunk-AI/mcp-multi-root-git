@@ -111,16 +111,12 @@ export function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text:
 
 export function parseGitSubmodulePaths(gitRoot: string): string[] {
   const f = join(gitRoot, ".gitmodules");
-  if (!existsSync(f)) return [];
   // Skip non-regular files (character devices, sockets, etc.) — common in
   // Claude Code sandbox environments where stub device files shadow paths.
-  try {
-    if (!lstatSync(f).isFile()) return [];
-  } catch {
-    return [];
-  }
+  // Use a single try/catch to avoid TOCTOU between existence check and open.
   let text: string;
   try {
+    if (!lstatSync(f).isFile()) return [];
     text = readFileSync(f, "utf8");
   } catch {
     return [];
