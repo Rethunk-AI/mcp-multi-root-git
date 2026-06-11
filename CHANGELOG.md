@@ -2,9 +2,19 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
-## [2.9.1] — 2026-06-05
+## [2.9.1] — 2026-06-11
 
-Patch release: developer-tooling correctness. No runtime or JSON-format change; the published `dist` is unaffected.
+Patch release: security hardening, schema refresh, and developer-tooling correctness. No JSON-format change.
+
+### Security
+
+- **Insecure temp-file creation eliminated.** `scripts/publish-preflight.ts` and `src/server/git-merge-tool.test.ts` now use `fs.mkdtemp` instead of predictable paths (2 high `js/insecure-temporary-file` alerts resolved).
+- **TOCTOU race in `.gitmodules` parsing fixed.** `parseGitSubmodulePaths` in `git.ts` previously called `existsSync` then `lstatSync` separately, creating a file-system race window. The redundant `existsSync` check is removed; `lstatSync` + `readFileSync` is now wrapped in a single `try/catch` (1 high `js/file-system-race` alert resolved).
+- **GitHub Actions workflow permissions hardened.** `ci.yml` and `release.yml` gain `permissions: contents: read` blocks at workflow and job level. All third-party action tags are pinned to full commit SHAs (5 medium workflow-permission alerts resolved).
+
+### Changed
+
+- **Schema artifacts regenerated.** `schemas/*.json` (23 files) were stale relative to tool-description changes in the 2.9.0 token-trim and allowlist commits; regenerated so `bun run schema:individual:check` passes in CI.
 
 ### Fixed
 
@@ -277,6 +287,13 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[2.9.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.9.1
+[2.9.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.9.0
+[2.8.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.8.1
+[2.8.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.8.0
+[2.7.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.7.0
+[2.6.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.6.0
+[2.5.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.5.0
 [2.4.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.4.0
 [2.3.4]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.4
 [2.3.3]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.3.3
