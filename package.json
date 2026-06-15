@@ -67,7 +67,7 @@
     "access": "public"
   },
   "dependencies": {
-    "fastmcp": "^4.1.0",
+    "fastmcp": "^4.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
