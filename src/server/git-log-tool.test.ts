@@ -1,44 +1,25 @@
 /**
- * Integration tests for git_log_tool helpers.
+ * Tests for git_log_tool.
  *
- * Tests create throwaway git repos via `git init` in OS temp dirs
- * and exercise the private parse helpers indirectly through the
- * exported runGitLog-equivalent logic baked into the tool.
+ * Tests create throwaway git repos via `git init` in OS temp dirs and exercise
+ * the tool through `captureTool(registerGitLogTool)` (handler-level), plus a
+ * local copy of the `parseShortstat` parse helper tested in isolation.
  *
  * We test:
  *  1. parseShortstat (unit)
- *  2. git log against a real throwaway repo (integration) — returns commits
- *  3. maxCommits truncation
- *  4. `since` filter excludes older commits
- *  5. `paths` filter limits to relevant commits
- *  6. `grep` filter matches subject
- *  7. not_a_git_repository error code for a non-git path
- *  8. author filter restricts results
- *  9. commit subject containing % is preserved intact
+ *  2. git_log execute handler: json/markdown/oneline output, maxCommits
+ *     truncation, paths/grep/author/since filters, unsafe branch token,
+ *     not_a_git_repository, multi-root oneline headers
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { gitTopLevel, spawnGitAsync } from "./git.js";
 import { registerGitLogTool } from "./git-log-tool.js";
 import { captureTool, cleanupTmpPaths, gitCmd, makeRepo, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
-
-// ---------------------------------------------------------------------------
-// Separators — must match git-log-tool.ts constants
-// ---------------------------------------------------------------------------
-
-/** SOH — emitted by %x01 in git --pretty format; safe to pass in spawn args. */
-const FS = "\x01";
-/** STX — emitted by %x02 in git --pretty format; safe to pass in spawn args. */
-const RS = "\x02";
-
-/** Format string to pass as --pretty=tformat: argument (no raw control chars in the arg itself).
- * \x02 is a record-START marker; \x01 separates fields. tformat adds \n after each record. */
-const PRETTY_FORMAT = "%x02%h%x01%H%x01%s%x01%aN%x01%aE%x01%aI%x01%ar%x01";
 
 // ---------------------------------------------------------------------------
 // Helpers (gitCmd, makeRepo shared via test-harness.ts)
@@ -50,22 +31,6 @@ function addCommit(dir: string, file: string, message: string): void {
   writeFileSync(join(dir, file), `rev${++_seq}\n`);
   gitCmd(dir, "add", file);
   gitCmd(dir, "commit", "-m", message);
-}
-
-/** Parse records from git log output using the shared separators.
- * RS (\x02) is a record-START marker; FS (\x01) separates fields within each record. */
-function parseRecords(stdout: string): string[][] {
-  // Split on RS (record-start); first chunk is empty (before first record).
-  return stdout
-    .split(RS)
-    .slice(1) // drop leading empty chunk
-    .filter((chunk) => chunk.trim().length > 0)
-    .map((chunk) => {
-      // Fields are on the first line (before the first \n); shortstat follows after blank line.
-      const nlIdx = chunk.indexOf("\n");
-      const fieldsPart = nlIdx >= 0 ? chunk.slice(0, nlIdx) : chunk;
-      return fieldsPart.split(FS);
-    });
 }
 
 // ---------------------------------------------------------------------------
@@ -102,186 +67,9 @@ describe("parseShortstat", () => {
     expect(r).toEqual({ filesChanged: 2, insertions: 0, deletions: 7 });
   });
 
-  test("returns undefined for blank line", () => {
+  test("returns undefined when the regex doesn't match (blank line, unrelated text)", () => {
     expect(parseShortstat("")).toBeUndefined();
-  });
-
-  test("returns undefined for unrelated text", () => {
     expect(parseShortstat("HEAD is now at abc123")).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Integration: git log against throwaway repos
-// ---------------------------------------------------------------------------
-
-describe("git_log integration", () => {
-  test("returns commits from a repo", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "a.txt", "feat: add a");
-    addCommit(dir, "b.txt", "feat: add b");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "10",
-      "--since=5.years",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(2);
-
-    const first = records[0] ?? [];
-    expect(first[2]).toBe("feat: add b"); // most recent first
-    expect(first[3]).toBe("Test User");
-  });
-
-  test("maxCommits truncation: fetching n+1 detects overflow", async () => {
-    const dir = makeRepo();
-    for (let i = 1; i <= 5; i++) {
-      addCommit(dir, `f${i}.txt`, `chore: commit ${i}`);
-    }
-
-    const limit = 3;
-    const fetchLimit = limit + 1; // 4
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      String(fetchLimit),
-      "--since=5.years",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    // Should return exactly fetchLimit (4) when ≥4 commits exist
-    expect(records.length).toBe(fetchLimit);
-
-    // Simulate truncation logic
-    const truncated = records.length > limit;
-    const commits = truncated ? records.slice(0, limit) : records;
-    const omittedCount = truncated ? records.length - limit : 0;
-    expect(truncated).toBe(true);
-    expect(commits.length).toBe(3);
-    expect(omittedCount).toBe(1);
-  });
-
-  test("paths filter limits commits to those touching a specific file", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "important.ts", "feat: touch important");
-    addCommit(dir, "other.ts", "chore: unrelated");
-    addCommit(dir, "important.ts", "fix: touch important again");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "50",
-      "--since=5.years",
-      "--",
-      "important.ts",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(2);
-    for (const rec of records) {
-      expect(rec[2]).toMatch(/important/);
-    }
-  });
-
-  test("grep filter matches subject", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "x.ts", "feat: add feature X");
-    addCommit(dir, "y.ts", "chore: update lockfile");
-    addCommit(dir, "z.ts", "feat: add feature Z");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "50",
-      "--since=5.years",
-      "--grep=add feature",
-      "-i",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(2);
-    for (const rec of records) {
-      expect(rec[2]).toMatch(/add feature/i);
-    }
-  });
-
-  test("since filter excludes commits older than the window", async () => {
-    const dir = makeRepo();
-    // All commits use GIT_AUTHOR_DATE=2025-01-01; ask since 2026-01-01 — none match.
-    addCommit(dir, "old.ts", "chore: old commit");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "50",
-      "--since=2026-01-01",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(0);
-  });
-
-  test("not_a_git_repository: gitTopLevel returns null for a plain directory", () => {
-    const dir = mkTmpDir("mcp-not-git-");
-    const top = gitTopLevel(dir);
-    expect(top).toBeNull();
-  });
-
-  test("author filter restricts results to matching author", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "a.ts", "feat: by test user");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "50",
-      "--since=5.years",
-      "--author=NoSuchAuthor",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(0);
-  });
-
-  test("commit subject containing % is preserved intact", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "pct.ts", "fix: handle 100% edge case");
-
-    const r = await spawnGitAsync(dir, [
-      "log",
-      `--pretty=tformat:${PRETTY_FORMAT}`,
-      "--shortstat",
-      "-n",
-      "10",
-      "--since=5.years",
-    ]);
-    expect(r.ok).toBe(true);
-
-    const records = parseRecords(r.stdout);
-    expect(records.length).toBe(1);
-    expect(records[0]?.[2]).toBe("fix: handle 100% edge case");
   });
 });
 
@@ -370,6 +158,81 @@ describe("git_log execute handler", () => {
     const commits = parsed.groups[0]?.commits ?? [];
     expect(commits.length).toBe(1);
     expect(commits[0]?.subject).toContain("important");
+  });
+
+  test("grep filter matches subject (if (grep?.trim()) branch)", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "x.ts", "feat: add feature X");
+    addCommit(dir, "y.ts", "chore: update lockfile");
+    addCommit(dir, "z.ts", "feat: add feature Z");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      grep: "add feature",
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const commits = parsed.groups[0]?.commits ?? [];
+    expect(commits.length).toBe(2);
+    for (const c of commits) {
+      expect(c.subject).toMatch(/add feature/i);
+    }
+  });
+
+  test("author filter restricts results to matching author (if (author?.trim()) branch)", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.ts", "feat: by test user");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      author: "NoSuchAuthor",
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    expect(parsed.groups[0]?.commits ?? []).toHaveLength(0);
+  });
+
+  test("since filter excludes commits older than the window", async () => {
+    const dir = makeRepo();
+    // Commits use GIT_AUTHOR_DATE=2025-01-01: a wide `since` finds it, a narrow
+    // future `since` excludes it — proves `--since=` is actually applied.
+    addCommit(dir, "old.ts", "chore: old commit");
+
+    const run = captureTool(registerGitLogTool);
+
+    const wideText = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const wideParsed = JSON.parse(wideText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    expect(wideParsed.groups[0]?.commits ?? []).toHaveLength(1);
+
+    const narrowText = await run({ workspaceRoot: dir, format: "json", since: "2026-01-01" });
+    const narrowParsed = JSON.parse(narrowText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    expect(narrowParsed.groups[0]?.commits ?? []).toHaveLength(0);
+  });
+
+  test("commit subject containing % is preserved intact", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "pct.ts", "fix: handle 100% edge case");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const commits = parsed.groups[0]?.commits ?? [];
+    expect(commits.length).toBe(1);
+    expect(commits[0]?.subject).toBe("fix: handle 100% edge case");
   });
 
   test("format: oneline returns sha7 + subject lines, no headers (single root)", async () => {

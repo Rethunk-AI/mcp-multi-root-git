@@ -60,7 +60,7 @@ interface DiffSummary {
  * Format per line: "<additions>\t<deletions>\t<path>"
  * Binary files emit "-\t-\t<path>" and are recorded as 0/0.
  */
-function parseNumstatOutput(
+export function parseNumstatOutput(
   numstat: string,
 ): Map<string, { additions: number; deletions: number }> {
   const result = new Map<string, { additions: number; deletions: number }>();

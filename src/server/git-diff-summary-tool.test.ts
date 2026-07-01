@@ -3,22 +3,22 @@
  *
  * Private helpers are copied locally so they can be tested in isolation
  * without exporting them from the module (same pattern as git-log-tool.test.ts).
+ * `parseNumstatOutput` is exported from the source module and imported directly.
  *
  * We test:
- *  1. parseStatOutput — parses git diff --stat per-file lines
+ *  1. parseNumstatOutput — parses git diff --numstat per-file lines (real source function)
  *  2. parseDiffOutput — splits unified diff into per-file chunks
  *  3. extractFileInfo — determines path and status from chunk header/body
  *  4. truncateDiffBody — caps diff output to N lines
  *  5. matchesAnyPattern — glob exclusion/filter matching
  *  6. buildDiffArgs — maps range param to git CLI args
- *  7. Integration: real diff against a throwaway repo
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
-import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
-import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
+import { isSafeGitUpstreamToken } from "./git.js";
+import { parseNumstatOutput, registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import {
   addCommit,
   captureTool,
@@ -33,20 +33,6 @@ afterEach(cleanupTmpPaths);
 // ---------------------------------------------------------------------------
 // Local copies of private helpers (mirrors git-diff-summary-tool.ts)
 // ---------------------------------------------------------------------------
-
-function parseStatOutput(stat: string): Map<string, { additions: number; deletions: number }> {
-  const result = new Map<string, { additions: number; deletions: number }>();
-  for (const line of stat.split("\n")) {
-    if (!line.includes("|")) continue;
-    const pipeIdx = line.indexOf("|");
-    const filePart = line.slice(0, pipeIdx).trim();
-    const statPart = line.slice(pipeIdx + 1).trim();
-    const additions = (statPart.match(/\+/g) ?? []).length;
-    const deletions = (statPart.match(/-/g) ?? []).length;
-    result.set(filePart, { additions, deletions });
-  }
-  return result;
-}
 
 function parseDiffOutput(diff: string): Array<{ header: string; body: string }> {
   const chunks: Array<{ header: string; body: string }> = [];
@@ -166,41 +152,34 @@ function makeRepo(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Unit: parseStatOutput
+// Unit: parseNumstatOutput
 // ---------------------------------------------------------------------------
 
-describe("parseStatOutput", () => {
-  test("parses single modified file", () => {
-    const stat = " src/foo.ts | 3 ++- ";
-    const m = parseStatOutput(stat);
-    expect(m.get("src/foo.ts")).toEqual({ additions: 2, deletions: 1 });
+describe("parseNumstatOutput", () => {
+  test("parses normal add/del counts", () => {
+    const numstat = ["12\t3\tsrc/foo.ts", "0\t7\told.ts"].join("\n");
+    const m = parseNumstatOutput(numstat);
+    expect(m.get("src/foo.ts")).toEqual({ additions: 12, deletions: 3 });
+    expect(m.get("old.ts")).toEqual({ additions: 0, deletions: 7 });
   });
 
-  test("parses multiple files", () => {
-    const stat = [
-      " src/a.ts | 5 +++++",
-      " src/b.ts | 2 +-",
-      " 2 files changed, 5 insertions(+), 1 deletion(-)",
-    ].join("\n");
-    const m = parseStatOutput(stat);
-    expect(m.get("src/a.ts")).toEqual({ additions: 5, deletions: 0 });
-    expect(m.get("src/b.ts")).toEqual({ additions: 1, deletions: 1 });
+  test("binary file emits '-\\t-\\tpath' and is recorded as 0/0", () => {
+    const m = parseNumstatOutput("-\t-\timage.png");
+    expect(m.get("image.png")).toEqual({ additions: 0, deletions: 0 });
   });
 
-  test("skips summary line (no pipe)", () => {
-    const stat = " 2 files changed, 5 insertions(+)";
-    const m = parseStatOutput(stat);
+  test("path containing a literal tab is rejoined via pathParts.join", () => {
+    const m = parseNumstatOutput("3\t1\tdir\tsub/file.ts");
+    expect(m.get("dir\tsub/file.ts")).toEqual({ additions: 3, deletions: 1 });
+  });
+
+  test("skips malformed lines with fewer than 3 tab-separated parts", () => {
+    const m = parseNumstatOutput("just one field");
     expect(m.size).toBe(0);
   });
 
   test("returns empty map for empty input", () => {
-    expect(parseStatOutput("").size).toBe(0);
-  });
-
-  test("handles file with only deletions", () => {
-    const stat = " old.ts | 3 ---";
-    const m = parseStatOutput(stat);
-    expect(m.get("old.ts")).toEqual({ additions: 0, deletions: 3 });
+    expect(parseNumstatOutput("").size).toBe(0);
   });
 });
 
@@ -322,17 +301,17 @@ describe("extractFileInfo", () => {
 // ---------------------------------------------------------------------------
 
 describe("truncateDiffBody", () => {
-  test("no truncation when at limit", () => {
-    const body = ["line1", "line2", "line3"].join("\n");
-    const { text, truncated } = truncateDiffBody(body, 3);
-    expect(truncated).toBe(false);
-    expect(text).toBe(body);
-  });
+  test("lines.length <= maxLines never truncates (at limit, under limit, single line)", () => {
+    const atLimit = ["line1", "line2", "line3"].join("\n");
+    const atLimitResult = truncateDiffBody(atLimit, 3);
+    expect(atLimitResult.truncated).toBe(false);
+    expect(atLimitResult.text).toBe(atLimit);
 
-  test("no truncation when under limit", () => {
-    const body = "line1\nline2";
-    const { truncated } = truncateDiffBody(body, 10);
-    expect(truncated).toBe(false);
+    const underLimitResult = truncateDiffBody("line1\nline2", 10);
+    expect(underLimitResult.truncated).toBe(false);
+
+    const singleLineResult = truncateDiffBody("only one line", 1);
+    expect(singleLineResult.truncated).toBe(false);
   });
 
   test("truncates when over limit", () => {
@@ -341,11 +320,6 @@ describe("truncateDiffBody", () => {
     expect(truncated).toBe(true);
     expect(text).toBe("a\nb\nc");
   });
-
-  test("single line body is not truncated", () => {
-    const { truncated } = truncateDiffBody("only one line", 1);
-    expect(truncated).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -353,28 +327,19 @@ describe("truncateDiffBody", () => {
 // ---------------------------------------------------------------------------
 
 describe("matchesAnyPattern", () => {
-  test("matches *.lock basename pattern", () => {
+  test("matches *.lock / yarn.lock / vendor/** / *.min.js on the direct matchesGlob(normalized) check", () => {
     expect(matchesAnyPattern("package-lock.json", ["*.lock", "package-lock.json"])).toBe(true);
-  });
-
-  test("matches yarn.lock by exact name pattern", () => {
     expect(matchesAnyPattern("yarn.lock", ["*.lock"])).toBe(true);
+    expect(matchesAnyPattern("vendor/some/lib.js", ["vendor/**"])).toBe(true);
+    expect(matchesAnyPattern("public/bundle.min.js", ["*.min.js"])).toBe(true);
   });
 
   test("matches nested lock file by basename", () => {
     expect(matchesAnyPattern("packages/app/bun.lock", ["bun.lock"])).toBe(true);
   });
 
-  test("matches vendor/** glob", () => {
-    expect(matchesAnyPattern("vendor/some/lib.js", ["vendor/**"])).toBe(true);
-  });
-
   test("does not match unrelated file", () => {
     expect(matchesAnyPattern("src/main.ts", ["*.lock", "vendor/**", "dist/**"])).toBe(false);
-  });
-
-  test("matches *.min.js pattern", () => {
-    expect(matchesAnyPattern("public/bundle.min.js", ["*.min.js"])).toBe(true);
   });
 
   test("empty patterns list never matches", () => {
@@ -387,14 +352,9 @@ describe("matchesAnyPattern", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildDiffArgs", () => {
-  test("undefined → empty args (unstaged)", () => {
-    const r = buildDiffArgs(undefined);
-    expect(r).toEqual({ ok: true, args: [] });
-  });
-
-  test("empty string → empty args", () => {
-    const r = buildDiffArgs("");
-    expect(r).toEqual({ ok: true, args: [] });
+  test('undefined and empty string both → empty args (range === undefined || range === "")', () => {
+    expect(buildDiffArgs(undefined)).toEqual({ ok: true, args: [] });
+    expect(buildDiffArgs("")).toEqual({ ok: true, args: [] });
   });
 
   test('"staged" → --cached', () => {
@@ -409,14 +369,9 @@ describe("buildDiffArgs", () => {
     expect(buildDiffArgs("HEAD")).toEqual({ ok: true, args: ["HEAD"] });
   });
 
-  test("two-dot range → single range arg", () => {
-    const r = buildDiffArgs("main..feature");
-    expect(r).toEqual({ ok: true, args: ["main..feature"] });
-  });
-
-  test("three-dot range → single range arg", () => {
-    const r = buildDiffArgs("main...feature");
-    expect(r).toEqual({ ok: true, args: ["main...feature"] });
+  test("two-dot and three-dot ranges both → single range arg (separatorMatch branch)", () => {
+    expect(buildDiffArgs("main..feature")).toEqual({ ok: true, args: ["main..feature"] });
+    expect(buildDiffArgs("main...feature")).toEqual({ ok: true, args: ["main...feature"] });
   });
 
   test("single safe ref → single arg", () => {
@@ -424,103 +379,14 @@ describe("buildDiffArgs", () => {
     expect(r).toEqual({ ok: true, args: ["abc1234"] });
   });
 
-  test("tilde in ref is rejected (not in safe charset)", () => {
-    const r = buildDiffArgs("HEAD~3");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("unsafe_range_token");
-  });
+  test("tilde in ref and other unsafe tokens are rejected (isSafeGitUpstreamToken failure)", () => {
+    const tildeResult = buildDiffArgs("HEAD~3");
+    expect(tildeResult.ok).toBe(false);
+    if (!tildeResult.ok) expect(tildeResult.error).toContain("unsafe_range_token");
 
-  test("unsafe token returns error", () => {
-    const r = buildDiffArgs("; rm -rf /");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("unsafe_range_token");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Integration: real diff against throwaway repo
-// ---------------------------------------------------------------------------
-
-describe("git diff integration", () => {
-  test("diff stat parses correctly for a real modified file", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "hello.ts", `export const x = 1;\n`, "chore: initial");
-
-    // Modify the file
-    writeFileSync(join(dir, "hello.ts"), `export const x = 2;\nexport const y = 3;\n`);
-
-    const statResult = await spawnGitAsync(dir, ["diff", "--stat"]);
-    expect(statResult.ok).toBe(true);
-
-    const m = parseStatOutput(statResult.stdout);
-    expect(m.has("hello.ts")).toBe(true);
-  });
-
-  test("diff output parses into correct chunk count", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "a.ts", "const a = 1;\n", "chore: add a");
-    addCommit(dir, "b.ts", "const b = 2;\n", "chore: add b");
-
-    // Unstaged modifications to both files
-    writeFileSync(join(dir, "a.ts"), "const a = 99;\n");
-    writeFileSync(join(dir, "b.ts"), "const b = 99;\n");
-
-    const diffResult = await spawnGitAsync(dir, ["diff"]);
-    expect(diffResult.ok).toBe(true);
-
-    const chunks = parseDiffOutput(diffResult.stdout);
-    expect(chunks.length).toBe(2);
-    const paths = chunks.map((c) => extractFileInfo(c.header, c.body).path);
-    expect(paths).toContain("a.ts");
-    expect(paths).toContain("b.ts");
-  });
-
-  test("staged diff (--cached) reflects only staged changes", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "staged.ts", "const s = 1;\n", "chore: initial");
-
-    // Stage a change
-    writeFileSync(join(dir, "staged.ts"), "const s = 2;\n");
-    gitCmd(dir, "add", "staged.ts");
-
-    // Also make an unstaged change to another file
-    writeFileSync(join(dir, "unstaged.ts"), "const u = 9;\n");
-
-    const stagedDiff = await spawnGitAsync(dir, ["diff", "--cached"]);
-    expect(stagedDiff.ok).toBe(true);
-
-    const chunks = parseDiffOutput(stagedDiff.stdout);
-    const paths = chunks.map((c) => extractFileInfo(c.header, c.body).path);
-    expect(paths).toContain("staged.ts");
-    expect(paths).not.toContain("unstaged.ts");
-  });
-
-  test("no diff output for clean working tree", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "clean.ts", "const c = 1;\n", "chore: initial");
-
-    const diffResult = await spawnGitAsync(dir, ["diff"]);
-    expect(diffResult.ok).toBe(true);
-    expect(parseDiffOutput(diffResult.stdout)).toHaveLength(0);
-  });
-
-  test("lock file excluded by default patterns", () => {
-    const DEFAULT_EXCLUDE_PATTERNS = [
-      "*.lock",
-      "*.lockb",
-      "bun.lock",
-      "package-lock.json",
-      "yarn.lock",
-      "pnpm-lock.yaml",
-      "*.min.js",
-      "*.min.css",
-      "vendor/**",
-      "node_modules/**",
-      "dist/**",
-    ];
-    expect(matchesAnyPattern("yarn.lock", DEFAULT_EXCLUDE_PATTERNS)).toBe(true);
-    expect(matchesAnyPattern("bun.lock", DEFAULT_EXCLUDE_PATTERNS)).toBe(true);
-    expect(matchesAnyPattern("src/index.ts", DEFAULT_EXCLUDE_PATTERNS)).toBe(false);
+    const injectionResult = buildDiffArgs("; rm -rf /");
+    expect(injectionResult.ok).toBe(false);
+    if (!injectionResult.ok) expect(injectionResult.error).toContain("unsafe_range_token");
   });
 });
 

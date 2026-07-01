@@ -263,29 +263,6 @@ describe("git_cherry_pick conflicts", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_cherry_pick cleanup", () => {
-  test("deleteMergedBranches deletes branch via patch-id after cherry-pick", async () => {
-    const dir = makeRepo();
-    createBranchWithCommits(dir, "feature/a", [{ path: "a.txt", body: "a\n", message: "feat: a" }]);
-
-    const run = captureTool(registerGitCherryPickTool);
-    const text = await run({
-      workspaceRoot: dir,
-      format: "json",
-      sources: ["feature/a"],
-      deleteMergedBranches: true,
-    });
-    const parsed = JSON.parse(text) as {
-      ok: boolean;
-      results: Array<{ branchDeleted?: boolean }>;
-    };
-    expect(parsed.ok).toBe(true);
-    // After cherry-pick the SHA differs (different committer date), so git branch -d
-    // would refuse. Patch-id comparison detects content equivalence → branch deleted.
-    expect(parsed.results[0]?.branchDeleted).toBe(true);
-    const branches = gitCmd(dir, "branch").trim();
-    expect(branches).not.toContain("feature/a");
-  });
-
   test("deleteMergedBranches skips protected 'dev' name even if merged", async () => {
     const dir = makeRepo();
     // Create and merge a dev branch forward into main via fast-forward.
@@ -345,7 +322,10 @@ describe("git_cherry_pick patch-id branch deletion", () => {
     createBranchWithCommits(dir, "feature/cp", [
       { path: "cp.txt", body: "content\n", message: "feat: cherry-pick me" },
     ]);
-    // Add an unrelated commit to main so cherry-pick will have a different parent → different SHA
+    // Add an unrelated commit to main so cherry-pick will have a different parent → different SHA.
+    // After cherry-pick the SHA differs (different committer date/parent), so a plain
+    // `git branch -d` would refuse — patch-id comparison detects content equivalence
+    // and the branch is deleted anyway.
     writeFileSync(join(dir, "unrelated.txt"), "extra\n");
     gitCmd(dir, "add", "unrelated.txt");
     gitCmd(dir, "commit", "-m", "chore: unrelated on main");

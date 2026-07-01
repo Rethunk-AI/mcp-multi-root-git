@@ -243,31 +243,11 @@ describe("git_merge strategy", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_merge cleanup", () => {
-  test("deleteMergedBranches deletes non-protected source after FF", async () => {
+  test("deleteMergedBranches deletes non-protected source, skips protected source (maybeDeleteBranch)", async () => {
     const dir = makeRepo();
+    // Non-protected branch, ahead of main.
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
-
-    const run = captureTool(registerGitMergeTool);
-    const text = await run({
-      workspaceRoot: dir,
-      format: "json",
-      sources: ["feature/a"],
-      deleteMergedBranches: true,
-    });
-    const parsed = JSON.parse(text) as {
-      ok: boolean;
-      results: Array<{ branchDeleted?: boolean }>;
-    };
-    expect(parsed.ok).toBe(true);
-    expect(parsed.results[0]?.branchDeleted).toBe(true);
-    // Branch no longer exists.
-    const branches = gitCmd(dir, "branch").trim();
-    expect(branches).not.toContain("feature/a");
-  });
-
-  test("deleteMergedBranches skips protected names", async () => {
-    const dir = makeRepo();
-    // Create a branch called `dev` (protected) that is ahead of main.
+    // Protected branch name (`dev`), also ahead of main.
     gitCmd(dir, "checkout", "-b", "dev");
     writeFileSync(join(dir, "d.txt"), "d\n");
     gitCmd(dir, "add", "d.txt");
@@ -278,7 +258,7 @@ describe("git_merge cleanup", () => {
     const text = await run({
       workspaceRoot: dir,
       format: "json",
-      sources: ["dev"],
+      sources: ["feature/a", "dev"],
       deleteMergedBranches: true,
     });
     const parsed = JSON.parse(text) as {
@@ -286,9 +266,13 @@ describe("git_merge cleanup", () => {
       results: Array<{ branchDeleted?: boolean }>;
     };
     expect(parsed.ok).toBe(true);
-    expect(parsed.results[0]?.branchDeleted).toBeUndefined();
-    // dev still exists.
+    // feature/a: delete-succeeds branch of maybeDeleteBranch.
+    expect(parsed.results[0]?.branchDeleted).toBe(true);
+    // dev: isProtectedBranch short-circuit branch of maybeDeleteBranch.
+    expect(parsed.results[1]?.branchDeleted).toBeUndefined();
+
     const branches = gitCmd(dir, "branch").trim();
+    expect(branches).not.toContain("feature/a");
     expect(branches).toContain("dev");
   });
 
