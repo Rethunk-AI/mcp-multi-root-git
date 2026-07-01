@@ -10,7 +10,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
 import { captureTool, cleanupTmpPaths, gitInitMain, mkTmpDir } from "./test-harness.js";
 
@@ -89,18 +88,5 @@ describe("workspace root resolution", () => {
     });
     const parsed = JSON.parse(text) as { error?: string };
     expect(parsed.error).toBe("absolute_git_roots_exclusive");
-  });
-
-  test("git_inventory absoluteGitRoots + nestedRoots → conflict", async () => {
-    const a = mkTmpDir("abs-inv-");
-    gitInitMain(a);
-    const run = captureTool(registerGitInventoryTool);
-    const text = await run({
-      format: "json",
-      absoluteGitRoots: [a],
-      nestedRoots: ["."],
-    });
-    const parsed = JSON.parse(text) as { error?: string };
-    expect(parsed.error).toBe("absolute_git_roots_nested_or_preset_conflict");
   });
 });

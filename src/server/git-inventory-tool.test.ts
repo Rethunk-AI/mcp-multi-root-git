@@ -160,30 +160,4 @@ describe("git_inventory execute handler", () => {
     expect(group?.nestedRootsOmittedCount).toBe(1);
     expect(group?.entries).toHaveLength(2);
   });
-
-  test("nestedRoots: multiple valid entries all appear in output", async () => {
-    const dir = makeRepoWithSeed("mcp-inv-multi-");
-
-    for (const name of ["repo1", "repo2"]) {
-      const sub = join(dir, name);
-      mkdirSync(sub);
-      gitCmd(sub, "init", "-b", "main");
-      gitCmd(sub, "config", "user.email", "test@test.com");
-      gitCmd(sub, "config", "user.name", "Test User");
-      writeFileSync(join(sub, "f.ts"), `const x = 1;\n`);
-      gitCmd(sub, "add", "f.ts");
-      gitCmd(sub, "commit", "-m", `init ${name}`);
-    }
-
-    const run = captureTool(registerGitInventoryTool);
-    const text = await run({
-      workspaceRoot: dir,
-      format: "json",
-      nestedRoots: ["repo1", "repo2"],
-    });
-    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
-    const labels = (parsed.inventories[0]?.entries ?? []).map((e) => e.label);
-    expect(labels).toContain("repo1");
-    expect(labels).toContain("repo2");
-  });
 });

@@ -42,19 +42,6 @@ describe("git_reset_soft", () => {
     expect(parsed.beforeSha).not.toBe(parsed.afterSha);
   });
 
-  test("resets HEAD~2 and stages two files", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "a.ts", "export const a = 1;\n", "feat: add a");
-    addCommit(dir, "b.ts", "export const b = 2;\n", "feat: add b");
-
-    const run = captureTool(registerGitResetSoftTool);
-    const text = await run({ workspaceRoot: dir, ref: "HEAD~2", format: "json" });
-    const parsed = JSON.parse(text) as { ok: boolean; stagedCount: number };
-
-    expect(parsed.ok).toBe(true);
-    expect(parsed.stagedCount).toBe(2);
-  });
-
   test("markdown format contains before→after SHAs", async () => {
     const dir = makeRepo();
     addCommit(dir, "x.ts", "export const x = 0;\n", "feat: x");

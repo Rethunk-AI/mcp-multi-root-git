@@ -7,13 +7,9 @@ import { describe, expect, test } from "bun:test";
 import { jsonRespond, readMcpServerVersion, spreadDefined, spreadWhen } from "./json.js";
 
 describe("readMcpServerVersion", () => {
-  test("returns a valid major.minor.patch string", () => {
+  test("returns a valid major.minor.patch string satisfying the FastMCP version type", () => {
     const v = readMcpServerVersion();
     expect(v).toMatch(/^\d+\.\d+\.\d+$/);
-  });
-
-  test("result satisfies the FastMCP version type constraint", () => {
-    const v = readMcpServerVersion();
     const parts = v.split(".").map(Number);
     expect(parts).toHaveLength(3);
     for (const p of parts) {
@@ -24,11 +20,8 @@ describe("readMcpServerVersion", () => {
 });
 
 describe("jsonRespond", () => {
-  test("serialises a simple object", () => {
+  test("serialises objects, including nested ones", () => {
     expect(jsonRespond({ ok: true })).toBe('{"ok":true}');
-  });
-
-  test("serialises nested objects", () => {
     const result = jsonRespond({ error: "not_found", path: "/a/b" });
     expect(JSON.parse(result)).toEqual({ error: "not_found", path: "/a/b" });
   });
@@ -43,11 +36,6 @@ describe("spreadWhen", () => {
   test("returns an empty object when cond is false", () => {
     const result = spreadWhen(false, { foo: "bar" });
     expect(result).toEqual({});
-  });
-
-  test("spread into an object literal works as expected", () => {
-    const out = { ...spreadWhen(true, { a: 1 }), ...spreadWhen(false, { b: 2 }) };
-    expect(out).toEqual({ a: 1 });
   });
 });
 

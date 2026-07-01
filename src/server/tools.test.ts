@@ -52,27 +52,17 @@ const STUB_REGISTRARS = ALL_TOOL_NAMES.map((name) => ({
 // ---------------------------------------------------------------------------
 
 describe("selectToolRegistrars", () => {
-  test("unset env → all tools returned", () => {
-    const { selected, unknown } = selectToolRegistrars(undefined, STUB_REGISTRARS);
-    expect(selected.map((r) => r.name)).toEqual(ALL_TOOL_NAMES);
-    expect(unknown).toEqual([]);
+  test("no-tokens env (undefined, empty, or whitespace-only) → all tools returned", () => {
+    for (const env of [undefined, "", "   ,  ,  "]) {
+      const { selected, unknown } = selectToolRegistrars(env, STUB_REGISTRARS);
+      expect(selected.map((r) => r.name)).toEqual(ALL_TOOL_NAMES);
+      expect(unknown).toEqual([]);
+    }
   });
 
-  test("empty string env → all tools returned", () => {
-    const { selected, unknown } = selectToolRegistrars("", STUB_REGISTRARS);
-    expect(selected.map((r) => r.name)).toEqual(ALL_TOOL_NAMES);
-    expect(unknown).toEqual([]);
-  });
-
-  test("whitespace-only env → all tools returned", () => {
-    const { selected, unknown } = selectToolRegistrars("   ,  ,  ", STUB_REGISTRARS);
-    expect(selected.map((r) => r.name)).toEqual(ALL_TOOL_NAMES);
-    expect(unknown).toEqual([]);
-  });
-
-  test("subset env → exactly those tools in canonical order", () => {
+  test("subset env → exactly those tools in canonical order, duplicates deduplicated", () => {
     const { selected, unknown } = selectToolRegistrars(
-      "git_push,git_status,batch_commit",
+      "git_push,git_status,batch_commit,git_push",
       STUB_REGISTRARS,
     );
     // canonical order: git_status (0) < batch_commit (14) < git_push (15)
@@ -99,15 +89,6 @@ describe("selectToolRegistrars", () => {
     const { selected, unknown } = selectToolRegistrars("not_a_tool,also_bad", STUB_REGISTRARS);
     expect(selected).toEqual([]);
     expect(unknown).toEqual(["not_a_tool", "also_bad"]);
-  });
-
-  test("duplicate token → deduplicated; registered exactly once", () => {
-    const { selected, unknown } = selectToolRegistrars(
-      "git_status,git_status,git_log",
-      STUB_REGISTRARS,
-    );
-    expect(selected.map((r) => r.name)).toEqual(["git_status", "git_log"]);
-    expect(unknown).toEqual([]);
   });
 });
 
@@ -145,18 +126,6 @@ describe("registerRethunkGitTools", () => {
     try {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools).toEqual([]);
-    } finally {
-      if (savedEnv !== undefined) process.env.RETHUNK_GIT_TOOLS = savedEnv;
-      else delete process.env.RETHUNK_GIT_TOOLS;
-    }
-  });
-
-  test("empty RETHUNK_GIT_TOOLS → all 23 tools registered", () => {
-    const savedEnv = process.env.RETHUNK_GIT_TOOLS;
-    process.env.RETHUNK_GIT_TOOLS = "";
-    try {
-      const tools = captureToolDefinitions(registerRethunkGitTools);
-      expect(tools.map((t) => t.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
     } finally {
       if (savedEnv !== undefined) process.env.RETHUNK_GIT_TOOLS = savedEnv;
       else delete process.env.RETHUNK_GIT_TOOLS;

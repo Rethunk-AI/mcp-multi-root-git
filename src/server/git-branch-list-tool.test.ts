@@ -38,6 +38,7 @@ describe("git_branch_list_tool", () => {
 
     const parsed = JSON.parse(result) as {
       branches: Array<{ name: string; sha: string; current: boolean; upstream?: string }>;
+      remotes?: unknown;
     };
 
     expect(Array.isArray(parsed.branches)).toBe(true);
@@ -57,16 +58,8 @@ describe("git_branch_list_tool", () => {
       expect(typeof b.sha).toBe("string");
       expect(b.sha.length).toBeGreaterThan(0);
     }
-  });
 
-  test("includeRemotes false: remotes key omitted from response", async () => {
-    const repo = makeRepo();
-    addCommit(repo, "file.txt", "content\n", "feat: add file");
-
-    const tool = captureTool(registerGitBranchListTool);
-    const result = await tool({ workspaceRoot: repo, includeRemotes: false, format: "json" });
-
-    const parsed = JSON.parse(result) as { branches: unknown[]; remotes?: unknown };
+    // includeRemotes defaults to false → remotes key omitted from response
     expect(parsed.remotes).toBeUndefined();
   });
 
