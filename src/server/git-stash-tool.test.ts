@@ -6,7 +6,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
 
 import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
 import {
@@ -18,76 +17,6 @@ import {
 } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
-
-// ---------------------------------------------------------------------------
-// Unit: schema validation
-// ---------------------------------------------------------------------------
-
-describe("git_stash_tool schemas", () => {
-  const GitStashListParamsSchema = z.object({
-    workspaceRoot: z.string().optional(),
-    rootIndex: z.number().int().min(0).optional(),
-    format: z.enum(["markdown", "json"]).optional().default("markdown"),
-  });
-
-  test("git_stash_list: accepts valid workspaceRoot", () => {
-    const params = { workspaceRoot: "/repo", format: "json" };
-    expect(() => GitStashListParamsSchema.parse(params)).not.toThrow();
-  });
-
-  test("git_stash_list: accepts valid rootIndex", () => {
-    const params = { rootIndex: 0 };
-    expect(() => GitStashListParamsSchema.parse(params)).not.toThrow();
-  });
-
-  test("git_stash_list: defaults format to markdown", () => {
-    const params = {};
-    const parsed = GitStashListParamsSchema.parse(params);
-    expect(parsed.format).toBe("markdown");
-  });
-
-  test("git_stash_list: rejects negative rootIndex", () => {
-    const params = { rootIndex: -1 };
-    expect(() => GitStashListParamsSchema.parse(params)).toThrow();
-  });
-
-  const GitStashApplyParamsSchema = z.object({
-    workspaceRoot: z.string().optional(),
-    rootIndex: z.number().int().min(0).optional(),
-    format: z.enum(["markdown", "json"]).optional().default("markdown"),
-    index: z.number().int().min(0).optional().default(0),
-    pop: z.boolean().optional().default(false),
-  });
-
-  test("git_stash_apply: defaults index to 0", () => {
-    const params = {};
-    const parsed = GitStashApplyParamsSchema.parse(params);
-    expect(parsed.index).toBe(0);
-  });
-
-  test("git_stash_apply: defaults pop to false", () => {
-    const params = {};
-    const parsed = GitStashApplyParamsSchema.parse(params);
-    expect(parsed.pop).toBe(false);
-  });
-
-  test("git_stash_apply: accepts custom index", () => {
-    const params = { index: 5 };
-    const parsed = GitStashApplyParamsSchema.parse(params);
-    expect(parsed.index).toBe(5);
-  });
-
-  test("git_stash_apply: accepts pop true", () => {
-    const params = { pop: true };
-    const parsed = GitStashApplyParamsSchema.parse(params);
-    expect(parsed.pop).toBe(true);
-  });
-
-  test("git_stash_apply: rejects negative index", () => {
-    const params = { index: -1 };
-    expect(() => GitStashApplyParamsSchema.parse(params)).toThrow();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Integration: execute paths
@@ -105,23 +34,6 @@ describe("git_stash_list execute handler", () => {
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as { stashes: unknown[] };
     expect(parsed.stashes).toHaveLength(0);
-  });
-
-  test("returns stash entry after git stash", async () => {
-    const dir = makeRepo();
-    writeFileSync(join(dir, "dirty.ts"), "const x = 1;\n");
-    gitCmd(dir, "add", "dirty.ts");
-    gitCmd(dir, "stash", "push", "-m", "wip: my stash");
-
-    const run = captureTool(registerGitStashListTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
-    const parsed = JSON.parse(text) as {
-      stashes: Array<{ index: number; message: string; sha: string }>;
-    };
-    expect(parsed.stashes).toHaveLength(1);
-    expect(parsed.stashes[0]?.index).toBe(0);
-    expect(parsed.stashes[0]?.message).toContain("wip: my stash");
-    expect(parsed.stashes[0]?.sha).toBeDefined();
   });
 
   test("markdown output lists stashes", async () => {
@@ -178,6 +90,7 @@ describe("git_stash_list execute handler", () => {
     // stash@{0} is the most recently created stash
     expect(parsed.stashes[0]?.index).toBe(0);
     expect(parsed.stashes[0]?.message).toContain("wip: first");
+    expect(parsed.stashes[0]?.sha).toBeDefined();
     // stash@{1} must use index 1 from the canonical ref, not the loop counter
     expect(parsed.stashes[1]?.index).toBe(1);
     expect(parsed.stashes[1]?.message).toContain("wip: second");

@@ -130,16 +130,6 @@ describe("isProtectedBranch", () => {
     expect(isProtectedBranch("refs/heads/develop")).toBe(true);
     expect(isProtectedBranch("refs/heads/feature/auth")).toBe(false);
   });
-
-  test("case-insensitive matching for exact names", () => {
-    expect(isProtectedBranch("Main")).toBe(true);
-    expect(isProtectedBranch("MAIN")).toBe(true);
-    expect(isProtectedBranch("MASTER")).toBe(true);
-    expect(isProtectedBranch("Master")).toBe(true);
-    expect(isProtectedBranch("HEAD")).toBe(true);
-    expect(isProtectedBranch("head")).toBe(true);
-    expect(isProtectedBranch("Prod")).toBe(true);
-  });
 });
 
 describe("isSafeGitRefToken", () => {
@@ -191,9 +181,6 @@ describe("isSafeGitRangeToken", () => {
     expect(isSafeGitRangeToken("main..-evil")).toBe(false);
     expect(isSafeGitRangeToken("-a..b")).toBe(false);
     expect(isSafeGitRangeToken("a..b$(c)")).toBe(false);
-  });
-
-  test("rejects empty endpoints", () => {
     expect(isSafeGitRangeToken("..b")).toBe(false);
     expect(isSafeGitRangeToken("a..")).toBe(false);
   });

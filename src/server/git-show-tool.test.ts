@@ -65,6 +65,7 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "HEAD",
+      path: "file.txt",
       format: "json",
     });
 
@@ -72,6 +73,7 @@ describe("git_show_tool", () => {
     expect(parsed.ref).toBe("HEAD");
     expect(parsed.message).toContain("feat: add file");
     expect(typeof parsed.diff).toBe("string");
+    expect(parsed.path).toBe("file.txt");
   });
 
   test("git show not_a_git_repository error for invalid path", async () => {
@@ -95,23 +97,6 @@ describe("git_show_tool", () => {
     });
 
     expect(result).toContain("git_show_failed");
-  });
-
-  test("git show with path includes path in JSON", async () => {
-    const repo = makeRepo();
-    addCommit(repo, "file.txt", "content\n", "feat: add file");
-
-    const tool = captureTool(registerGitShowTool);
-    const result = await tool({
-      workspaceRoot: repo,
-      ref: "HEAD",
-      path: "file.txt",
-      format: "json",
-    });
-
-    const parsed = JSON.parse(result);
-    expect(parsed.path).toBe("file.txt");
-    expect(parsed.ref).toBe("HEAD");
   });
 
   test("git show rejects leading-dash ref injection", async () => {

@@ -32,11 +32,9 @@ describe("makeSkipEntry", () => {
     expect(e.path).toBe("/abs/path");
     expect(e.upstreamMode).toBe("auto");
     expect(e.skipReason).toBe("not_a_git_repo");
-  });
 
-  test("fixed upstreamMode is preserved", () => {
-    const e = makeSkipEntry("label", "/p", "fixed", "reason");
-    expect(e.upstreamMode).toBe("fixed");
+    const fixed = makeSkipEntry("label", "/p", "fixed", "reason");
+    expect(fixed.upstreamMode).toBe("fixed");
   });
 });
 
