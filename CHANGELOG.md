@@ -2,6 +2,13 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- **`batch_commit` hunk-level staging (`{ path, lines }`) could corrupt the git index.** `extractOverlappingHunks` joined the selected hunk(s) without a trailing newline; whenever the selection wasn't the *last* hunk in the file's real diff, the written patch file's final line had no newline terminator and `git apply --cached` rejected it with `error: corrupt patch at ...`. Fixed by always terminating the extracted patch with `\n`. Confirmed against a real multi-hunk diff before and after the fix; regression test added (`stages a non-final hunk without corrupting the patch`).
+- **`batch_commit` `dryRun: true` could leave a partially-staged index after a failure.** When a commit entry listed multiple files and an earlier file staged successfully but a later file in the *same* entry failed to stage, the earlier file's staged state was never added to the dry-run cleanup set (tracking only happened after the whole per-file loop completed without failure) — so a failed "dry run" left real, uncommitted staged changes in the index. Fixed by tracking each file for cleanup immediately after it stages, not gated behind the later failure check. Regression test added (`dryRun: true unstages an earlier file when a later file in the same commit fails to stage`).
+
 ## [2.9.1] — 2026-06-11
 
 Patch release: security hardening, schema refresh, and developer-tooling correctness. No JSON-format change.

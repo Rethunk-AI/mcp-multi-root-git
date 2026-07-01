@@ -792,6 +792,88 @@ describe("batch_commit line-range staging", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.results[0]?.error).toBe("stage_failed");
   });
+
+  test("stages a non-final hunk without corrupting the patch", async () => {
+    const dir = makeRepo();
+
+    // Two well-separated functions so the diff produces two distinct hunks.
+    const filler = Array.from({ length: 20 }, (_, i) => `# filler ${i}`).join("\n");
+    const base = `def a():\n    return 1\n\n${filler}\n\ndef b():\n    return 2\n`;
+    writeFileSync(join(dir, "code.py"), base);
+    gitCmd(dir, "add", "code.py");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Modify both functions so the raw diff has hunk(a) followed by hunk(b).
+    const modified = base.replace("return 1", "return 100").replace("return 2", "return 200");
+    writeFileSync(join(dir, "code.py"), modified);
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          // Range covers only hunk(a) — hunk(b) exists later in the real diff.
+          // Regression test: extractOverlappingHunks previously joined the
+          // selected hunk(s) without a trailing newline, which `git apply`
+          // rejects as a corrupt patch whenever the selection isn't the last
+          // hunk in the file's diff.
+          message: "feat: stage first hunk only",
+          files: [{ path: "code.py", lines: { from: 1, to: 5 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      results: Array<{ error?: string; detail?: string }>;
+    };
+    expect(parsed.results[0]?.detail).toBeUndefined();
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // hunk(b) must remain unstaged and uncommitted.
+    const diffResult = await spawnGitAsync(dir, ["diff", "code.py"]);
+    expect(diffResult.stdout).toContain("return 200");
+    const logResult = await spawnGitAsync(dir, ["log", "-1", "-p"]);
+    expect(logResult.stdout).toContain("return 100");
+    expect(logResult.stdout).not.toContain("return 200");
+  });
+
+  test("dryRun: true unstages an earlier file when a later file in the same commit fails to stage", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "good.ts"), "const g = 0;\n");
+    writeFileSync(join(dir, "bad.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "good.ts", "bad.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // good.ts has a real change to stage; bad.ts's requested range matches nothing.
+    writeFileSync(join(dir, "good.ts"), "const g = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [
+        {
+          // Regression test: stagedFilesForCleanup was previously only populated
+          // after every file in the entry staged successfully, so good.ts (staged
+          // first) was never tracked for rollback once bad.ts failed, leaving a
+          // "dry run" with real, uncleaned index state.
+          message: "feat: mixed success then failure",
+          files: ["good.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+
+    // good.ts must be fully unstaged — a failed dry run must leave no index trace.
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout).not.toContain("good.ts");
+  });
 });
 
 // ---------------------------------------------------------------------------

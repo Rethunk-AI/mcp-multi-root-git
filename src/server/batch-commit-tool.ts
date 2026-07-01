@@ -144,7 +144,10 @@ function extractOverlappingHunks(
     }
   }
 
-  return result.length > fileHeaderLines.length ? result.join("\n") : null;
+  // Trailing newline is required: when the selected hunk(s) aren't the last hunk in the
+  // real diff, the last copied line is a content line that had a newline after it in the
+  // original diff output. Dropping it produces a patch `git apply` rejects as corrupt.
+  return result.length > fileHeaderLines.length ? `${result.join("\n")}\n` : null;
 }
 
 /**
@@ -369,6 +372,14 @@ export function registerBatchCommitTool(server: FastMCP): void {
             stagingError = stageResult.error || "Unknown error";
             break;
           }
+          // Track for dry-run cleanup as soon as a file stages successfully — a later
+          // file in this same commit entry may still fail, and anything already staged
+          // must still be unstaged so a failed dry run never leaves index state behind.
+          // Excludes paths that were already staged before this call (so pre-existing
+          // staged state survives).
+          if (args.dryRun && !preStagedPaths.has(fileEntry.path)) {
+            stagedFilesForCleanup.add(fileEntry.path);
+          }
         }
 
         if (stagingFailed) {
@@ -382,16 +393,6 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ...spreadDefined("output", stagingError || undefined),
           });
           break;
-        }
-
-        // Track staged files for cleanup in dry-run, excluding paths that were
-        // already staged before this call (so pre-existing staged state survives).
-        if (args.dryRun) {
-          for (const path of filePaths) {
-            if (!preStagedPaths.has(path)) {
-              stagedFilesForCleanup.add(path);
-            }
-          }
         }
 
         // --- Dry-run mode: collect preview and unstage ---
