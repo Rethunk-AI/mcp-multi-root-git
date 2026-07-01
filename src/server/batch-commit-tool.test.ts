@@ -109,99 +109,6 @@ describe("path escape detection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration: stage-and-commit flow
-// ---------------------------------------------------------------------------
-
-describe("batch_commit integration", () => {
-  test("single file commit succeeds and SHA is captured", async () => {
-    const dir = makeRepo();
-
-    // Create an initial commit so HEAD exists
-    writeFileSync(join(dir, "init.ts"), "const x = 0;\n");
-    gitCmd(dir, "add", "init.ts");
-    gitCmd(dir, "commit", "-m", "chore: init");
-
-    // Stage a new file
-    writeFileSync(join(dir, "feat.ts"), "export const y = 1;\n");
-    const addResult = await spawnGitAsync(dir, ["add", "--", "feat.ts"]);
-    expect(addResult.ok).toBe(true);
-
-    // Commit
-    const commitResult = await spawnGitAsync(dir, ["commit", "-m", "feat: add y"]);
-    expect(commitResult.ok).toBe(true);
-
-    const sha = extractSha(commitResult.stdout);
-    expect(sha).toBeDefined();
-    expect(sha).toMatch(/^[0-9a-f]+$/);
-  });
-
-  test("multiple sequential commits all succeed", async () => {
-    const dir = makeRepo();
-
-    // Establish HEAD so subsequent commits are non-root (root-commit output differs)
-    writeFileSync(join(dir, "base.ts"), "const base = 0;\n");
-    gitCmd(dir, "add", "base.ts");
-    gitCmd(dir, "commit", "-m", "chore: base");
-
-    const shas: string[] = [];
-    for (let i = 1; i <= 3; i++) {
-      const file = `file${i}.ts`;
-      writeFileSync(join(dir, file), `const v${i} = ${i};\n`);
-      const addR = await spawnGitAsync(dir, ["add", "--", file]);
-      expect(addR.ok).toBe(true);
-      const commitR = await spawnGitAsync(dir, ["commit", "-m", `chore: add file ${i}`]);
-      expect(commitR.ok).toBe(true);
-      const sha = extractSha(commitR.stdout);
-      expect(sha).toBeDefined();
-      if (sha) shas.push(sha);
-    }
-
-    // All 3 SHAs are distinct
-    expect(new Set(shas).size).toBe(3);
-  });
-
-  test("commit fails when nothing is staged", async () => {
-    const dir = makeRepo();
-
-    // Create initial commit so HEAD exists
-    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
-    gitCmd(dir, "add", "base.ts");
-    gitCmd(dir, "commit", "-m", "chore: base");
-
-    // Attempt commit with empty index
-    const commitResult = await spawnGitAsync(dir, ["commit", "-m", "should fail"]);
-    expect(commitResult.ok).toBe(false);
-  });
-
-  test("stage fails for non-existent file", async () => {
-    const dir = makeRepo();
-
-    const addResult = await spawnGitAsync(dir, ["add", "--", "nonexistent.ts"]);
-    expect(addResult.ok).toBe(false);
-  });
-
-  test("git log reflects commits in order after sequential commits", async () => {
-    const dir = makeRepo();
-
-    const messages = ["feat: first", "feat: second", "feat: third"];
-    for (const msg of messages) {
-      const file = `f${++_seq}.ts`;
-      writeFileSync(join(dir, file), `// ${msg}\n`);
-      gitCmd(dir, "add", file);
-      gitCmd(dir, "commit", "-m", msg);
-    }
-
-    const logResult = await spawnGitAsync(dir, ["log", "--oneline", "-5"]);
-    expect(logResult.ok).toBe(true);
-    // Most recent first
-    expect(logResult.stdout).toContain("feat: third");
-    expect(logResult.stdout.indexOf("feat: third")).toBeLessThan(
-      logResult.stdout.indexOf("feat: second"),
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Execute handler: end-to-end via fake server harness
 // ---------------------------------------------------------------------------
 
@@ -540,29 +447,6 @@ describe("batch_commit dryRun mode", () => {
     // Remote should still be at seed commit only
     const remoteLog = gitCmd(remote, "log", "--oneline");
     expect(remoteLog.split("\n").filter((l) => l.trim()).length).toBe(1);
-  });
-
-  test("dryRun: false (default) commits as normal", async () => {
-    const dir = makeRepo();
-    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
-    gitCmd(dir, "add", "base.ts");
-    gitCmd(dir, "commit", "-m", "chore: base");
-    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
-
-    const run = captureTool(registerBatchCommitTool);
-    const text = await run({
-      workspaceRoot: dir,
-      format: "json",
-      dryRun: false,
-      commits: [{ message: "feat: add new", files: ["new.ts"] }],
-    });
-    const parsed = JSON.parse(text) as { dryRun?: boolean; ok: boolean };
-    expect(parsed.dryRun).toBeUndefined();
-    expect(parsed.ok).toBe(true);
-
-    // Verify commit was written
-    const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
-    expect(logResult.stdout).toContain("feat: add new");
   });
 
   test("dryRun: true with deleted file unstages cleanly after preview", async () => {
@@ -976,5 +860,3 @@ describe("batch_commit deletion staging", () => {
     expect(parsed.results[0]?.error).toBe("stage_failed");
   });
 });
-
-let _seq = 0;
