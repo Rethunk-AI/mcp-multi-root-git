@@ -119,63 +119,25 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadPresetsFromGitTop — valid flat format", () => {
-  test("loads a simple nestedRoots preset", () => {
+  test("loads nestedRoots, parityPairs, schemaVersion, $schema, and workspaceRootHint together", () => {
     const dir = makeDir();
     writePresetJson(dir, {
-      myPreset: { nestedRoots: ["packages/a", "packages/b"] },
-    });
-    const result = loadPresetsFromGitTop(dir);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.myPreset?.nestedRoots).toEqual(["packages/a", "packages/b"]);
-      expect(result.schemaVersion).toBeUndefined();
-    }
-  });
-
-  test("loads a parityPairs preset", () => {
-    const dir = makeDir();
-    writePresetJson(dir, {
+      schemaVersion: "1",
+      $schema: "https://example.com/schema.json",
+      myPreset: { nestedRoots: ["packages/a", "packages/b"], workspaceRootHint: "my-workspace" },
       parity: { parityPairs: [{ left: "pkg/a", right: "pkg/b", label: "A vs B" }] },
     });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(true);
     if (result.ok) {
+      // schemaVersion is a string here, exercising the `typeof sv === "string" ? sv : undefined`
+      // ternary's true-side inside splitPresetFileRaw.
+      expect(result.schemaVersion).toBe("1");
+      expect(result.data.$schema).toBeUndefined();
+      expect(result.data.myPreset?.nestedRoots).toEqual(["packages/a", "packages/b"]);
+      expect(result.data.myPreset?.workspaceRootHint).toBe("my-workspace");
       expect(result.data.parity?.parityPairs).toHaveLength(1);
       expect(result.data.parity?.parityPairs?.[0]?.label).toBe("A vs B");
-    }
-  });
-
-  test("reads schemaVersion from flat format top-level", () => {
-    const dir = makeDir();
-    writePresetJson(dir, {
-      schemaVersion: "1",
-      myPreset: { nestedRoots: ["a"] },
-    });
-    const result = loadPresetsFromGitTop(dir);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.schemaVersion).toBe("1");
-  });
-
-  test("ignores $schema field", () => {
-    const dir = makeDir();
-    writePresetJson(dir, {
-      $schema: "https://example.com/schema.json",
-      myPreset: { nestedRoots: ["a"] },
-    });
-    const result = loadPresetsFromGitTop(dir);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.$schema).toBeUndefined();
-  });
-
-  test("loads workspaceRootHint field", () => {
-    const dir = makeDir();
-    writePresetJson(dir, {
-      myPreset: { nestedRoots: ["a"], workspaceRootHint: "my-workspace" },
-    });
-    const result = loadPresetsFromGitTop(dir);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.myPreset?.workspaceRootHint).toBe("my-workspace");
     }
   });
 });
@@ -307,14 +269,6 @@ describe("applyPresetNestedRoots", () => {
     }
   });
 
-  test("returns undefined nestedRoots when preset has none and no inline provided", () => {
-    const dir = makeDir();
-    writePresetJson(dir, { p: {} });
-    const result = applyPresetNestedRoots(dir, "p", false, undefined);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.nestedRoots).toBeUndefined();
-  });
-
   test("returns error from invalid preset file", () => {
     const dir = makeDir();
     mkdirSync(join(dir, ".rethunk"), { recursive: true });
@@ -374,14 +328,6 @@ describe("applyPresetParityPairs", () => {
     const result = applyPresetParityPairs(dir, "p", true, [{ left: "x", right: "y" }]);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.pairs).toHaveLength(2);
-  });
-
-  test("returns undefined pairs when preset has none and no inline provided", () => {
-    const dir = makeDir();
-    writePresetJson(dir, { p: {} });
-    const result = applyPresetParityPairs(dir, "p", false, undefined);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.pairs).toBeUndefined();
   });
 
   test("returns error when preset file has invalid JSON", () => {

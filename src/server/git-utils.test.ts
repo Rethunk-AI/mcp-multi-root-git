@@ -35,13 +35,10 @@ function makeRepo(): string {
 // ---------------------------------------------------------------------------
 
 describe("isSafeGitUpstreamToken", () => {
-  test("accepts simple remote names", () => {
+  test("accepts simple remote names and remote/branch combos", () => {
     expect(isSafeGitUpstreamToken("origin")).toBe(true);
     expect(isSafeGitUpstreamToken("upstream")).toBe(true);
     expect(isSafeGitUpstreamToken("my-remote")).toBe(true);
-  });
-
-  test("accepts remote/branch combos", () => {
     expect(isSafeGitUpstreamToken("origin/main")).toBe(true);
     expect(isSafeGitUpstreamToken("origin/feature/auth")).toBe(true);
   });

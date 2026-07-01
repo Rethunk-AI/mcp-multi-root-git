@@ -6,7 +6,7 @@ import { join } from "node:path";
  * Tests for git_fetch tool: output parsing (unit) + execute path (integration).
  */
 
-import { registerGitFetchTool } from "./git-fetch-tool.js";
+import { parseGitFetchOutput, registerGitFetchTool } from "./git-fetch-tool.js";
 import {
   captureTool,
   cleanupTmpPaths,
@@ -18,27 +18,9 @@ import {
 afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
-// Unit: parseGitFetchOutput (local copy to test parsing logic in isolation)
+// Unit: parseGitFetchOutput — exercises the real git <2.41 fallback parser
+// (unexported prior to this change; now covered directly).
 // ---------------------------------------------------------------------------
-
-function parseGitFetchOutput(output: string): { updatedRefs: string[]; newRefs: string[] } {
-  const lines = output.split("\n");
-  const updatedRefs: string[] = [];
-  const newRefs: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    if (trimmed.includes("[new")) {
-      newRefs.push(trimmed);
-    } else if (trimmed.includes(" -> ")) {
-      updatedRefs.push(trimmed);
-    }
-  }
-
-  return { updatedRefs, newRefs };
-}
 
 describe("git_fetch parseGitFetchOutput", () => {
   it("parses empty output", () => {

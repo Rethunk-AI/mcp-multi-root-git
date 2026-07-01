@@ -49,7 +49,7 @@ interface GitFetchResult {
  * Lines containing "[new" indicate new refs (new branch, new tag, new ref).
  * Lines with " -> " but not containing "[new" indicate updated refs.
  */
-function parseGitFetchOutput(output: string): { updatedRefs: string[]; newRefs: string[] } {
+export function parseGitFetchOutput(output: string): { updatedRefs: string[]; newRefs: string[] } {
   const lines = output.split("\n");
   const updatedRefs: string[] = [];
   const newRefs: string[] = [];
