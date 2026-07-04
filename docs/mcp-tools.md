@@ -1,6 +1,6 @@
 # MCP tools and resources (canonical reference)
 
-Single source of truth for **registered tool ids**, **client naming**, **JSON output shape**, **resource URI**, and **workspace root resolution**.  
+Single source of truth for **registered tool ids**, **client naming**, **JSON output shape**, **resource URI**, and **root resolution**.  
 **Install and MCP clients (only canonical location):** [install.md](install.md). **Preset file, dev, CI, publishing:** [HUMANS.md](../HUMANS.md). **Implementation layout (`src/server/` + entry [`server.ts`](../src/server.ts)), contract bumps:** [AGENTS.md](../AGENTS.md).
 
 ## Naming
@@ -11,29 +11,29 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 
 | Short id | Client id (server `rethunk-git`) | Purpose |
 |----------|-----------------------------------|---------|
-| `git_status` | `rethunk-git_git_status` | `git status --short -b` per MCP root and optional submodules (`includeSubmodules`); parallel submodule status. Args include `absoluteGitRoots`, `allWorkspaceRoots`, `rootIndex`, `workspaceRoot`, `format`. **Read-only.** |
-| `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus workspace pick args (`absoluteGitRoots` cannot combine with `preset`/`nestedRoots`). **Read-only.** |
-| `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus workspace pick args (`absoluteGitRoots` for sibling clone batches). **Read-only.** |
-| `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. Workspace pick + `format` only (includes `absoluteGitRoots`). **Read-only.** |
-| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more workspace roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus workspace pick args (`absoluteGitRoots` for sibling clones) + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
-| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus workspace pick args (optional single-entry `absoluteGitRoots`) + `format`. **Read-only.** |
-| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Args: `workspaceRoot`, `rootIndex`, `format`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`. No `absoluteGitRoots` or `allWorkspaceRoots`. **Read-only.** |
-| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff (or `--stat` diffstat), or file content at `path` for that ref. Args: `ref`, `path?`, `paths?`, `stat?`, plus single-repo workspace pick + `format`. **Read-only.** |
-| `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). Workspace pick + `format`. **Read-only.** |
-| `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: single-repo workspace pick + `format`. **Read-only.** |
-| `git_blame` | `rethunk-git_git_blame` | Line-by-line authorship for a file: commit SHA, author, date, summary per line. Args: `path` (required), `ref?`, `startLine?`, `endLine?`, plus single-repo workspace pick + `format`. **Read-only.** |
-| `git_branch_list` | `rethunk-git_git_branch_list` | List local branches (sha, current marker, upstream); optional `includeRemotes` adds remote-tracking branches. Args: `includeRemotes?`, plus single-repo workspace pick + `format`. **Read-only.** |
-| `git_reflog` | `rethunk-git_git_reflog` | Show the reflog for a ref (default `HEAD`) — recent HEAD movements with selector, SHA, and message. Args: `ref?`, `maxEntries?`, plus single-repo workspace pick + `format`. **Read-only.** |
-| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus single-repo workspace pick + `format`. **Mutating — refs only.** |
-| `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. Workspace pick + `format`. **Mutating.** |
-| `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus single-repo workspace pick + `format`. **Mutating.** |
-| `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus workspace pick + `format`. **Mutating.** |
-| `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees. Args: `path`, `force?`, plus workspace pick + `format`. **Mutating.** |
-| `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus workspace pick + `format`. **Mutating — not idempotent.** |
-| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus workspace pick args + `format`. **Mutating — not idempotent.** |
-| `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + workspace pick + `format`. **Mutating.** |
-| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?` + workspace pick + `format`. **Mutating.** |
-| `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo. Args: `index?`, `pop?`, plus single-repo workspace pick + `format`. **Mutating.** |
+| `git_status` | `rethunk-git_git_status` | `git status --short -b` per MCP root and optional submodules (`includeSubmodules`); parallel submodule status. Args: `includeSubmodules`, `root`, `format`. **Read-only.** |
+| `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking. `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, `format`, plus `root` (array form cannot combine with `preset`/`nestedRoots`). **Read-only.** |
+| `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus `root`. **Read-only.** |
+| `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. `root` + `format` only. **Read-only.** |
+| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more roots. Returns commit history with author, date, subject, and shortstat. Args: `since`, `paths`, `grep`, `author`, `maxCommits`, `branch`, plus `root` + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
+| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Args: `workspaceRoot`, `format`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`. **Read-only.** |
+| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff (or `--stat` diffstat), or file content at `path` for that ref. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). `workspaceRoot` + `format`. **Read-only.** |
+| `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: `workspaceRoot` + `format`. **Read-only.** |
+| `git_blame` | `rethunk-git_git_blame` | File authorship grouped into contiguous same-commit line runs (SHA, author, date, summary once per run). Args: `path` (required), `ref?`, `startLine?`, `endLine?`, `maxLines?`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_branch_list` | `rethunk-git_git_branch_list` | List local branches (sha, current marker, upstream); optional `includeRemotes` adds remote-tracking branches. Args: `includeRemotes?`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_reflog` | `rethunk-git_git_reflog` | Show the reflog for a ref (default `HEAD`) — recent HEAD movements with selector, SHA, and message. Args: `ref?`, `maxEntries?`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus `workspaceRoot` + `format`. **Mutating — refs only.** |
+| `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
+| `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees. Args: `path`, `force?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
+| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
+| `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
+| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?` + `workspaceRoot` + `format`. **Mutating.** |
+| `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo. Args: `index?`, `pop?`, plus `workspaceRoot` + `format`. **Mutating.** |
 
 Pass **`format: "json"`** on any tool for structured JSON instead of markdown (default).
 
@@ -44,10 +44,7 @@ Pass **`format: "json"`** on any tool for structured JSON instead of markdown (d
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
 | `includeSubmodules` | boolean | `true` | When `true`, reads `.gitmodules` at each git toplevel and runs `git status --short -b` for each checked-out submodule in parallel. Set `false` to skip submodule discovery entirely. |
-| `workspaceRoot` | string | — | Explicit root; highest priority. |
-| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
-| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
-| `absoluteGitRoots` | string[] | — | Explicit list of absolute paths; replaces normal workspace pick. Max 256. Read-only tools only. |
+| `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
 ### `git_status` — JSON shape (`format: "json"`)
@@ -76,11 +73,9 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 | `not_a_git_repository` | repo row `statusText` | Root is not inside a git repository. |
 | `(submodule path escapes repository — rejected)` | repo row `statusText` | `.gitmodules` path resolves outside the git toplevel (security guard). |
 | `(no .git — submodule not checked out?)` | repo row `statusText` | Submodule directory exists but has no `.git` — not initialized. |
-| `root_index_out_of_range` | top-level | `rootIndex` exceeds the number of MCP file roots. |
-| `absolute_git_roots_exclusive` | top-level | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
-| `invalid_absolute_git_root` | top-level | An `absoluteGitRoots` entry is not a git-recognized directory. |
-| `absolute_git_roots_too_many` | top-level | More than 256 entries in `absoluteGitRoots`. |
-| `absolute_git_roots_empty` | top-level | `absoluteGitRoots` resolved to zero toplevels. |
+| `invalid_root_path` | top-level | A `root` array entry is empty or not a git-recognized directory. |
+| `root_list_too_many` | top-level | More than 256 entries in the `root` array. |
+| `root_list_empty` | top-level | The `root` array resolved to zero git toplevels. |
 
 ---
 
@@ -88,16 +83,13 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with `absoluteGitRoots` or `preset`. |
-| `preset` | string | — | Preset name from `.rethunk/git-mcp-presets.json`. Loads `nestedRoots` from the preset's entry. Cannot combine with `absoluteGitRoots`. |
+| `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with an array `root` or `preset`. |
+| `preset` | string | — | Preset name from `.rethunk/git-mcp-presets.json`. Loads `nestedRoots` from the preset's entry. Cannot combine with an array `root`. |
 | `presetMerge` | boolean | `false` | When `true`, merge inline `nestedRoots` with preset roots instead of replacing. |
 | `remote` | string | — | Fixed remote for ahead/behind tracking. Must be paired with `branch`. |
 | `branch` | string | — | Fixed branch for ahead/behind tracking. Must be paired with `remote`. When both are absent the tool uses each repo's `@{u}` upstream. |
 | `maxRoots` | int | `64` | Max nested roots to process (1–256). Roots beyond the limit are omitted; `nestedRootsTruncated: true` and `nestedRootsOmittedCount` are set on the group. |
-| `workspaceRoot` | string | — | Explicit root; highest priority. |
-| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
-| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
-| `absoluteGitRoots` | string[] | — | Explicit list; replaces normal workspace pick. Cannot combine with `nestedRoots` or `preset`. |
+| `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. | Array form cannot combine with `nestedRoots` or `preset`.
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
 ### `git_inventory` — JSON shape (`format: "json"`)
@@ -123,7 +115,7 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 }
 ```
 
-`nestedRootsTruncated` / `nestedRootsOmittedCount` present only when `maxRoots` cut the list. `upstream` object present only when `remote`+`branch` were supplied (fixed mode). `presetSchemaVersion` present only when a preset was loaded. See *v2/v3 field omission* for `entries[*]` optional fields.
+`nestedRootsTruncated` / `nestedRootsOmittedCount` present only when `maxRoots` cut the list. `upstream` object present only when `remote`+`branch` were supplied (fixed mode). `presetSchemaVersion` present only when a preset was loaded. See *Field omission* for `entries[*]` optional fields.
 
 ### `git_inventory` — error codes
 
@@ -132,13 +124,11 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 | `git_not_found` | `git` binary not on `PATH`. |
 | `remote_branch_mismatch` | Only one of `remote` / `branch` was provided; supply both or neither. |
 | `invalid_remote_or_branch` | `remote` or `branch` contains characters outside the safe token set. |
-| `absolute_git_roots_nested_or_preset_conflict` | `absoluteGitRoots` combined with `nestedRoots` or `preset`. |
-| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
-| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` combined with a `preset` argument. |
-| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
-| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
-| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
-| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `root_list_nested_or_preset_conflict` | `root` array combined with `nestedRoots` or `preset`. |
+| `root_list_preset_conflict` | `root` array combined with a `preset` argument. |
+| `invalid_root_path` | A `root` array entry is empty or not a git-recognized directory. |
+| `root_list_too_many` | More than 256 entries in the `root` array. |
+| `root_list_empty` | The `root` array resolved to zero git toplevels. |
 | `preset_not_found` | Named preset does not exist in the preset file. |
 | `invalid_json` | Preset file contains invalid JSON. |
 | `invalid_schema` | Preset file fails schema validation. |
@@ -154,10 +144,7 @@ Skip entries (individual repos that could not be inventoried) appear inline in `
 | `pairs` | `{left: string, right: string, label?: string}[]` | Path pairs to compare. `left` and `right` are relative to the workspace git toplevel. `label` is optional display name; defaults to `"left / right"`. At least one pair required (via inline `pairs` or `preset`). |
 | `preset` | string | Preset name from `.rethunk/git-mcp-presets.json`. Loads `parityPairs` from the preset's entry. |
 | `presetMerge` | boolean | Default `false`. When `true`, merge inline `pairs` with preset pairs instead of replacing. |
-| `workspaceRoot` | string | Explicit root; highest priority. |
-| `rootIndex` | int | Pick one of several MCP roots (0-based). |
-| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
-| `absoluteGitRoots` | string[] | Explicit list of absolute paths; replaces normal workspace pick. Useful for checking parity across sibling clones. |
+| `root` | string \| string[] \| `"*"` | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
 
 ### `git_parity` — JSON shape (`format: "json"`)
@@ -196,12 +183,10 @@ Skip entries (individual repos that could not be inventoried) appear inline in `
 |------|---------|
 | `git_not_found` | `git` binary not on `PATH`. |
 | `no_pairs` | Neither inline `pairs` nor a preset with `parityPairs` was supplied. |
-| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
-| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` combined with a `preset` argument. |
-| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
-| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
-| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
-| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `root_list_preset_conflict` | `root` array combined with a `preset` argument. |
+| `invalid_root_path` | A `root` array entry is empty or not a git-recognized directory. |
+| `root_list_too_many` | More than 256 entries in the `root` array. |
+| `root_list_empty` | The `root` array resolved to zero git toplevels. |
 | `preset_not_found` | Named preset does not exist in the preset file. |
 | `invalid_json` | Preset file contains invalid JSON. |
 | `invalid_schema` | Preset file fails schema validation. |
@@ -214,10 +199,7 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `workspaceRoot` | string | Explicit root; highest priority. |
-| `rootIndex` | int | Pick one of several MCP roots (0-based). |
-| `allWorkspaceRoots` | boolean | Default `false`. Fan out across all MCP roots. |
-| `absoluteGitRoots` | string[] | Explicit list; replaces normal workspace pick. |
+| `root` | string \| string[] \| `"*"` | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
 
 ### `list_presets` — JSON shape (`format: "json"`)
@@ -252,21 +234,21 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 | `not_a_git_repository` | Root is not inside a git repository (reported inline in the `roots[*].error` field, not top-level). |
 | `invalid_json` | Preset file is not valid JSON (inline in `roots[*].error`). |
 | `invalid_schema` | Preset file fails schema validation (inline in `roots[*].error`). |
-| `absolute_git_roots_exclusive` | `absoluteGitRoots` combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
-| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is not a git-recognized directory. |
-| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
-| `absolute_git_roots_empty` | `absoluteGitRoots` resolved to zero toplevels. |
-| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
+| `invalid_root_path` | A `root` array entry is empty or not a git-recognized directory. |
+| `root_list_too_many` | More than 256 entries in the `root` array. |
+| `root_list_empty` | The `root` array resolved to zero git toplevels. |
 
 ---
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"3"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"4"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+
+v4 changes from v3: `git_blame` output is run-length grouped (`lines[]` with per-line commit metadata → `groups[]` with metadata once per contiguous same-commit run); `git_diff_summary` per-file `truncated` is omitted when `false`.
 
 The package also ships **`tool-parameters.schema.json`**, generated from the registered Zod parameter schemas via `bun run schema:tools`, plus the published **`schemas/`** directory (`schemas/index.json` + one JSON Schema per tool) via `bun run schema:individual`. Connected MCP clients should still prefer live schema discovery from `initialize` / tool listing; the shipped artifacts are for offline inspection, drift checks, and code generation.
 
-### v2/v3 field omission (consumer contract)
+### Field omission (consumer contract, v2+)
 
 To keep responses compact, **optional fields are omitted when they would be empty, `null`, or `false`** — they are not emitted as `null`. Consumers must test for *presence*, not compare to `null`.
 
@@ -297,9 +279,7 @@ To keep responses compact, **optional fields are omitted when they would be empt
 | `author` | string | — | Filter by author name or email (`--author=`). |
 | `maxCommits` | int | `50` | Max commits per root. Hard cap: `500`. |
 | `branch` | string | `HEAD` | Ref/branch to log from. |
-| `workspaceRoot` | string | — | Explicit root; highest priority. |
-| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
-| `allWorkspaceRoots` | boolean | `false` | Fan out across all MCP roots. |
+| `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` \| `"oneline"` | `"markdown"` | Output format. `oneline` returns `<sha7> <subject>` per line with no headers (single root) or `### repo (branch)` separators per group (multi-root). Lowest-token option for post-commit verification. |
 
 ### `git_log` — JSON shape (`format: "json"`)
@@ -340,22 +320,19 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
 | `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
-| `root_index_out_of_range` | `rootIndex` exceeds the number of MCP file roots. |
-| `absolute_git_roots_exclusive` | `absoluteGitRoots` was combined with `workspaceRoot`, `rootIndex`, or `allWorkspaceRoots: true`. |
-| `absolute_git_roots_preset_conflict` | `absoluteGitRoots` was combined with a `preset` argument (root resolution). |
-| `invalid_absolute_git_root` | An `absoluteGitRoots` entry is empty, not inside a git worktree, or not a directory git recognizes. |
-| `absolute_git_roots_too_many` | More than 256 entries in `absoluteGitRoots`. |
-| `absolute_git_roots_empty` | `absoluteGitRoots` produced zero git toplevels after resolution. |
-| `absolute_git_roots_single_repo_only` | A single-repo tool received `absoluteGitRoots` resolving to more than one distinct git toplevel. |
+| `root_list_preset_conflict` | `root` array was combined with a `preset` argument (root resolution). |
+| `invalid_root_path` | A `root` array entry is empty, not inside a git worktree, or not a directory git recognizes. |
+| `root_list_too_many` | More than 256 entries in the `root` array. |
+| `root_list_empty` | The `root` array produced zero git toplevels after resolution. |
 
-### `git_parity` — `absoluteGitRoots` example
+### `git_parity` — `root` array example
 
-Use **`absoluteGitRoots`** when the same parity pair should be checked across sibling clones that are not all MCP workspace roots:
+Pass a `root` array when the same parity pair should be checked across sibling clones that are not all MCP workspace roots:
 
 ```json
 {
   "format": "json",
-  "absoluteGitRoots": [
+  "root": [
     "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
     "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
   ],
@@ -363,7 +340,7 @@ Use **`absoluteGitRoots`** when the same parity pair should be checked across si
 }
 ```
 
-The response contains one **`parity[]`** entry per resolved git toplevel. `absoluteGitRoots` cannot be combined with `preset`; pass inline `pairs` for sibling-clone batches.
+The response contains one **`parity[]`** entry per resolved git toplevel. An array `root` cannot be combined with `preset`; pass inline `pairs` for sibling-clone batches.
 
 ### `git_diff_summary` — parameters
 
@@ -374,8 +351,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `maxLinesPerFile` | int | `50` | Max diff lines to include per file (1–2000). |
 | `maxFiles` | int | `30` | Max files to include in output (1–500). |
 | `excludePatterns` | string[] | lock files, dist, vendor | Glob patterns to exclude. Defaults to `*.lock`, `*.lockb`, `bun.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `*.min.js`, `*.min.css`, `vendor/**`, `node_modules/**`, `dist/**`. Pass an empty array to disable. |
-| `workspaceRoot` | string | — | Explicit root; highest priority. |
-| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `workspaceRoot` | string | — | Repo path. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
 ### `git_diff_summary` — JSON shape (`format: "json"`)
@@ -391,7 +367,6 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
     "status": "modified",
     "additions": 8,
     "deletions": 3,
-    "truncated": false,
     "diff": "@@ -1,3 +1,8 @@\n-const x = 1;\n+const x = 2;"
   }],
   "truncatedFiles": 1,
@@ -399,7 +374,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 }
 ```
 
-`status` is one of `"modified"`, `"added"`, `"deleted"`, `"renamed"`. `oldPath` is present only for renamed files. `truncatedFiles` and `excludedFiles` are omitted when zero/empty (v2 field-omission contract).
+`status` is one of `"modified"`, `"added"`, `"deleted"`, `"renamed"`. `oldPath` is present only for renamed files. Per-file `truncated` is present (`true`) only when the diff body was cut at `maxLinesPerFile` (v4). `truncatedFiles` and `excludedFiles` are omitted when zero/empty (field-omission contract).
 
 ### `git_diff_summary` — error codes
 
@@ -422,11 +397,10 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `paths` | string[] | — | Multiple file paths to scope the diff; unioned with `path` (deduped). Each confined to the repo. |
 | `unified` | integer | — | Context lines around each change (passed as `-U<n>`, 0–100). Omit for git's default (3). |
 | `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
-| `workspaceRoot` | string | — | Explicit root; highest priority. |
-| `rootIndex` | int | — | Pick one of several MCP roots (0-based). |
+| `workspaceRoot` | string | — | Repo path. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
-`git_diff` is a single-repo tool. It does not accept `absoluteGitRoots` or `allWorkspaceRoots`; use `workspaceRoot` or `rootIndex` to select the target repo.
+`git_diff` is a single-repo tool; use `workspaceRoot` to select the target repo.
 
 ### `git_diff` — JSON shape (`format: "json"`)
 
@@ -456,7 +430,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `path` | string | Optional single path. When provided, the response shows that path's content at `ref` instead of the full commit diff. |
 | `stat` | boolean | When `true`, runs `git show --stat` — commit message plus per-file diffstat, no full patch (`statOutput` in JSON). |
 | `paths` | string[] | Filter the shown patch/stat to these repo-relative paths; unioned with `path`. Each confined to the repo. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_show` — JSON shape (`format: "json"`)
 
@@ -486,7 +460,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_stash_list` — JSON shape (`format: "json"`)
 
@@ -515,7 +489,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `branch` | string | — | Optional branch/ref to fetch from that remote. |
 | `prune` | boolean | `false` | Pass `--prune` to remove deleted remote-tracking refs. |
 | `tags` | boolean | `false` | Pass `--tags` to also fetch all tags. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_fetch` — JSON shape (`format: "json"`)
 
@@ -552,7 +526,8 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | `ref` | string | working tree | Commit-ish to blame at. Validated as a safe ref token. |
 | `startLine` | int | — | Start of a line range (`-L`). Requires `endLine`. |
 | `endLine` | int | — | End of the line range, inclusive. Requires `startLine`. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `maxLines` | int | `2000` | Max blamed lines to return (1–10000). Excess lines are dropped and signalled via `truncated`/`omittedLines`. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_blame` — JSON shape (`format: "json"`)
 
@@ -560,13 +535,26 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 {
   "ref": "HEAD",
   "path": "src/server.ts",
-  "lines": [
-    { "line": 1, "sha": "a1b2c3d4…", "author": "Damon Blais", "date": "2026-04-12T18:32:01-07:00", "summary": "feat: add tool", "content": "import { FastMCP } from \"fastmcp\";" }
-  ]
+  "groups": [
+    {
+      "sha": "a1b2c3d4…",
+      "author": "Damon Blais",
+      "date": "2026-04-12T18:32:01-07:00",
+      "summary": "feat: add tool",
+      "startLine": 1,
+      "endLine": 2,
+      "lines": [
+        { "line": 1, "content": "import { FastMCP } from \"fastmcp\";" },
+        { "line": 2, "content": "" }
+      ]
+    }
+  ],
+  "truncated": true,
+  "omittedLines": 120
 }
 ```
 
-`ref` is omitted when blaming the working tree.
+One `groups` entry per **contiguous run of lines last touched by the same commit** (v4 run-length grouping — commit metadata is emitted once per run, not once per line). `ref` is omitted when blaming the working tree. `truncated`/`omittedLines` are omitted unless `maxLines` cut the output.
 
 ### `git_blame` — error codes
 
@@ -585,7 +573,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
 | `includeRemotes` | boolean | `false` | Also list remote-tracking branches (`refs/remotes`); symbolic `origin/HEAD` is skipped. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_branch_list` — JSON shape (`format: "json"`)
 
@@ -616,7 +604,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. `absol
 |-----------|------|---------|-------|
 | `ref` | string | `HEAD` | Ref whose reflog to show. Validated as a safe ref token. |
 | `maxEntries` | int | `30` | Max entries to return (1–200). |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_reflog` — JSON shape (`format: "json"`)
 
@@ -668,8 +656,7 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 | `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged; or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel. |
 | `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. |
 | `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
-| `workspaceRoot` | string | Explicit root; highest priority. |
-| `rootIndex` | int | Pick one of several MCP roots (0-based). |
+| `workspaceRoot` | string | Repo path. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"markdown"`. |
 
 ### `batch_commit` — JSON shape (`format: "json"`)
@@ -735,7 +722,7 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 | `message` | string | Merge commit message, used only when a merge commit is created. Defaults to `Merge branch '<source>' into <into>`. |
 | `deleteMergedBranches` | boolean | Default `false`. After **all** sources land cleanly, delete each source branch locally (`git branch -d`). **Protected names always skipped** (main, master, dev, develop, stable, trunk, prod, production, `release/*`, `release-*`, `hotfix/*`, `hotfix-*`). Never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree currently checked out on a source branch (`git worktree remove`). Protected tails always skipped. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_merge` — JSON shape (`format: "json"`)
 
@@ -798,7 +785,7 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 | `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally. Deletion uses **patch-id equivalence** by default — correct for cherry-pick workflows where SHA differs but diff is identical. Protected names always skipped; never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped. |
 | `strictMergedRefEquality` | boolean | Default `false`. When `true`, branch deletion uses strict SHA-reachability (`git branch -d` ancestry semantics) instead of patch-id equivalence. Use when you need git's exact ancestry guarantee rather than content equivalence. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_cherry_pick` — JSON shape (`format: "json"`)
 
@@ -864,7 +851,7 @@ For already-committed work, call **`git_push`** directly instead of creating an 
 | `remote` | string | Remote to push to. Defaults to the remote inferred from the upstream tracking ref, or `origin` when `setUpstream` is true. |
 | `branch` | string | Branch to push. Defaults to the currently checked-out branch. Rejected on detached HEAD. |
 | `setUpstream` | boolean | Default `false`. Pass `-u` to set the upstream tracking ref; remote defaults to `origin`. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_push` — JSON shape (`format: "json"`)
 
@@ -893,7 +880,7 @@ For already-committed work, call **`git_push`** directly instead of creating an 
 | `message` | string | — | When provided, creates an annotated tag; otherwise creates a lightweight tag. |
 | `ref` | string | `HEAD` | Commit/ref to tag. Ignored when `delete: true`. |
 | `delete` | boolean | `false` | Delete the named tag instead of creating it. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_tag` — JSON shape (`format: "json"`)
 
@@ -923,7 +910,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `ref` | string | Target commit: `HEAD~N`, branch name, or full/short SHA. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_reset_soft` — JSON shape (`format: "json"`)
 
@@ -949,7 +936,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 |-----------|------|---------|-------|
 | `index` | int | `0` | Stash index to apply/pop (`stash@{index}`). |
 | `pop` | boolean | `false` | When `true`, runs `git stash pop` instead of `git stash apply`. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard single-repo workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_stash_apply` — JSON shape (`format: "json"`)
 
@@ -987,7 +974,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 | `path` | string | Filesystem path for the new worktree. Relative paths are resolved from the git toplevel. |
 | `branch` | string | Branch to check out. Created from `baseRef` if it does not already exist. |
 | `baseRef` | string | Commit-ish for branch creation. Default: `HEAD`. Ignored when `branch` already exists. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_worktree_add` — JSON shape (`format: "json"`)
 
@@ -1010,7 +997,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 |-----------|------|-------|
 | `path` | string | Path of the worktree to remove. |
 | `force` | boolean | Default `false`. Pass `--force` to allow removal with uncommitted changes. |
-| `workspaceRoot`, `rootIndex`, `format` | — | Standard workspace pick + output format. |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_worktree_remove` — error codes
 
@@ -1037,41 +1024,37 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 |-----|---------|
 | `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors). |
 
-## Workspace root resolution
+## Root resolution
 
-### `absoluteGitRoots` (sibling clones)
+Every tool carries exactly **one** routing parameter:
 
-When **`absoluteGitRoots`** is a **non-empty** string array, it **replaces** the normal workspace pick for that tool call:
+| Tools | Parameter | Accepts |
+|-------|-----------|---------|
+| Fan-out: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log` | `root` | string (one repo path) \| string[] (explicit repo list) \| `"*"` (every MCP root) |
+| All other 18 tools | `workspaceRoot` | string (one repo path) |
 
-- Each entry is passed through `path.resolve`, then resolved to a **git toplevel** via the same logic as `workspaceRoot`. Duplicate toplevels are dropped (stable order, first wins).
-- **Maximum** **256** paths (same cap as `git_inventory` `maxRoots` upper bound).
-- **Mutually exclusive** with **`workspaceRoot`**, **`rootIndex`**, and **`allWorkspaceRoots: true`**. Combining them returns `{ "error": "absolute_git_roots_exclusive" }`.
-- **Mutually exclusive** with a **`preset`** argument on root resolution (`absolute_git_roots_preset_conflict`).
-- **`git_inventory` only:** also mutually exclusive with **`nestedRoots`** or **`preset`** on the same call (`absolute_git_roots_nested_or_preset_conflict`).
-- **Mutating** tools (`batch_commit`, `git_push`, `git_merge`, …) **omit** this parameter from their schema; callers must use `workspaceRoot` / MCP roots for writes.
-- **Read tools** that use **`requireSingleRepo`** (`git_diff_summary`, …) accept at most **one** distinct toplevel from `absoluteGitRoots`; more than one returns `absolute_git_roots_single_repo_only`.
+### `root` forms (fan-out tools)
+
+- **string** — resolve that one path (same semantics as `workspaceRoot`).
+- **string[]** — explicit repo list (sibling clones). Each entry is passed through `path.resolve`, then resolved to a **git toplevel**; duplicate toplevels are dropped (stable order, first wins). Max **256** paths (`root_list_too_many`); an entry that is not inside a git repo returns `invalid_root_path`; zero resolved toplevels returns `root_list_empty`. Cannot be combined with a `preset` argument (`root_list_preset_conflict`; `git_inventory` also rejects arrays combined with `nestedRoots` — `root_list_nested_or_preset_conflict`).
+- **`"*"`** — every `file://` root reported by the MCP client; markdown output emits one `# {tool}` header with per-root subsections (`git_inventory` uses `### {gitTop}`; `git_status` uses `### MCP root: ...`), or combined JSON.
 
 Example — two sibling repos in one `git_status` call:
 
 ```json
 {
   "format": "json",
-  "absoluteGitRoots": [
+  "root": [
     "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
     "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
   ]
 }
 ```
 
-### Default order (when `absoluteGitRoots` is absent or empty)
+### Default order (when `root` / `workspaceRoot` is omitted)
 
-Order applied when resolving which directory(ies) tools run against:
-
-1. Explicit **`workspaceRoot`** on the tool call (highest priority).
-2. **`rootIndex`** (0-based) — one `file://` MCP root when several exist.
-3. **`allWorkspaceRoots`: true** — every `file://` root; markdown output emits one `# {tool}` header with per-root subsections (`git_inventory` uses `### {gitTop}`; `git_status` uses `### MCP root: ...`), or combined JSON.
-4. **`preset`** set and multiple roots — first root whose git toplevel defines that preset (respecting **`workspaceRootHint`** on the preset entry when present).
-5. Otherwise the first `file://` root reported by the MCP client through **`roots/list`**.
-6. **`process.cwd()`** if no file roots (e.g. CI with explicit `workspaceRoot`).
+1. **`preset`** set and multiple MCP roots (fan-out tools) — first root whose git toplevel defines that preset (respecting **`workspaceRootHint`** on the preset entry when present).
+2. Otherwise the first `file://` root reported by the MCP client through **`roots/list`**.
+3. **`process.cwd()`** if no file roots (e.g. CI with explicit `workspaceRoot`).
 
 Roots come from active MCP sessions (**`FastMCP` with `roots: { enabled: true }`** in code); there is no fixed `cwd` in server config. This is what allows one globally installed server to follow the workspace opened in VS Code, Claude Code, Cursor, or any other roots-capable MCP client.
