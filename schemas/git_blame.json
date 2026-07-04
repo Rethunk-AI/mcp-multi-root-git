@@ -36,11 +36,19 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 9007199254740991
+    },
+    "maxLines": {
+      "default": 2000,
+      "description": "Max blamed lines to return. Default: 2000.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
     }
   },
   "required": [
     "format",
-    "path"
+    "path",
+    "maxLines"
   ],
   "additionalProperties": false
 }

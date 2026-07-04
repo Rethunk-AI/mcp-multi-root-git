@@ -5,7 +5,7 @@ import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitRefToken } from "./git-refs.js";
-import { jsonRespond, spreadDefined } from "./json.js";
+import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -22,10 +22,23 @@ interface BlameLine {
   content: string;
 }
 
+/** One contiguous run of lines last touched by the same commit. */
+interface BlameGroup {
+  sha: string;
+  author: string;
+  date: string;
+  summary: string;
+  startLine: number;
+  endLine: number;
+  lines: { line: number; content: string }[];
+}
+
 interface BlameJson {
   ref?: string;
   path: string;
-  lines: BlameLine[];
+  groups: BlameGroup[];
+  truncated?: boolean;
+  omittedLines?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +178,38 @@ function parsePorcelain(output: string): BlameLine[] {
 }
 
 // ---------------------------------------------------------------------------
+// Run-length grouping
+// ---------------------------------------------------------------------------
+
+/**
+ * Collapse per-line blame records into one group per contiguous same-commit
+ * run, so commit metadata (sha/author/date/summary) is emitted once per run
+ * instead of once per line.
+ */
+function groupBlameLines(lines: BlameLine[]): BlameGroup[] {
+  const groups: BlameGroup[] = [];
+  let current: BlameGroup | undefined;
+  for (const l of lines) {
+    if (current && current.sha === l.sha && current.endLine === l.line - 1) {
+      current.endLine = l.line;
+      current.lines.push({ line: l.line, content: l.content });
+      continue;
+    }
+    current = {
+      sha: l.sha,
+      author: l.author,
+      date: l.date,
+      summary: l.summary,
+      startLine: l.line,
+      endLine: l.line,
+      lines: [{ line: l.line, content: l.content }],
+    };
+    groups.push(current);
+  }
+  return groups;
+}
+
+// ---------------------------------------------------------------------------
 // Markdown rendering
 // ---------------------------------------------------------------------------
 
@@ -173,11 +218,20 @@ function renderBlameMarkdown(result: BlameJson): string {
     result.ref !== undefined
       ? `# git blame ${result.ref} -- ${result.path}`
       : `# git blame ${result.path}`;
-  const rows = result.lines.map((l) => {
-    const sha7 = l.sha.slice(0, 7);
-    return `${sha7} (${l.author} ${l.date}) ${l.content}`;
-  });
-  return [`${header}`, "", "```", ...rows, "```"].join("\n");
+  const out: string[] = [header];
+  for (const g of result.groups) {
+    out.push(
+      "",
+      `## ${g.sha.slice(0, 7)} ${g.author} ${g.date} — ${g.summary} (lines ${g.startLine}–${g.endLine})`,
+      "```",
+      ...g.lines.map((l) => `${l.line}: ${l.content}`),
+      "```",
+    );
+  }
+  if (result.truncated) {
+    out.push("", `_(truncated — ${result.omittedLines} more line(s) not shown; raise maxLines)_`);
+  }
+  return out.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +242,7 @@ export function registerGitBlameTool(server: FastMCP): void {
   server.addTool({
     name: "git_blame",
     description:
-      "Annotate each line of a file with the commit SHA, author, date, and summary that last modified it. Optionally restrict to a commit-ish ref and/or a line range.",
+      "File authorship, grouped into contiguous same-commit line runs (sha, author, date, summary once per run). Optionally restrict to a commit-ish ref and/or a line range.",
     annotations: {
       readOnlyHint: true,
     },
@@ -207,6 +261,14 @@ export function registerGitBlameTool(server: FastMCP): void {
         .min(1)
         .optional()
         .describe("Last line of the range to blame (1-based, inclusive). Requires startLine."),
+      maxLines: z
+        .number()
+        .int()
+        .min(1)
+        .max(10000)
+        .optional()
+        .default(2000)
+        .describe("Max blamed lines to return. Default: 2000."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -256,12 +318,19 @@ export function registerGitBlameTool(server: FastMCP): void {
         });
       }
 
-      const blameLines = parsePorcelain(r.stdout);
+      const allLines = parsePorcelain(r.stdout);
+      const maxLines = (args.maxLines as number | undefined) ?? 2000;
+      const truncated = allLines.length > maxLines;
+      const blameLines = truncated ? allLines.slice(0, maxLines) : allLines;
 
       const blameJson: BlameJson = {
         ...spreadDefined("ref", args.ref as string | undefined),
         path: args.path as string,
-        lines: blameLines,
+        groups: groupBlameLines(blameLines),
+        ...spreadWhen(truncated, {
+          truncated: true,
+          omittedLines: allLines.length - maxLines,
+        }),
       };
 
       if (args.format === "json") {
