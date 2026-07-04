@@ -2,9 +2,25 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [3.0.0] — 2026-07-03
+
+Major release: token-cost reduction across the tool surface. Every tool now carries exactly one routing parameter, `git_blame` output is run-length grouped, and integer bounds are explicit. JSON format version bumped **3 → 4**.
+
+### Changed — breaking
+
+- **Routing-param consolidation.** The four overlapping routing params (`workspaceRoot`, `rootIndex`, `allWorkspaceRoots`, `absoluteGitRoots`) are replaced by exactly one param per tool. The five fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`) take polymorphic **`root`**: a string (one repo path), a string array (explicit repo list — the old `absoluteGitRoots`), or `"*"` (every MCP root — the old `allWorkspaceRoots`). All other 18 tools take only **`workspaceRoot`** (`git_diff_summary` loses `absoluteGitRoots`). Defaults are unchanged: first MCP root, else `process.cwd()`.
+- **`rootIndex` removed fleet-wide.** It was vestigial (no real consumer); the `root_index_out_of_range` error code is gone with it.
+- **Root-validation error codes renamed.** `invalid_absolute_git_root` → `invalid_root_path`; `absolute_git_roots_empty` / `_too_many` / `_preset_conflict` / `_nested_or_preset_conflict` → `root_list_empty` / `root_list_too_many` / `root_list_preset_conflict` / `root_list_nested_or_preset_conflict`. `absolute_git_roots_exclusive` and `absolute_git_roots_single_repo_only` are removed — with a single routing param those states are unrepresentable.
+- **`git_blame` output v4: run-length grouped.** JSON shape changed from `lines[]` (sha/author/date/summary repeated on every line) to `groups[]` — one entry per contiguous same-commit run carrying `sha`/`author`/`date`/`summary`/`startLine`/`endLine` once, plus `lines: [{ line, content }]`. Markdown output grouped the same way. `MCP_JSON_FORMAT_VERSION` bumped to `"4"`.
+- **`git_diff_summary` per-file `truncated` omitted when false** (was always emitted), matching the format-contract rule that optional fields are absent when empty/null/false.
+
+### Added
+
+- **`git_blame` `maxLines`** (default 2000, max 10000) — caps blamed lines; overflow is signalled with top-level `truncated: true` + `omittedLines`.
 
 ### Fixed
+
+- **Unbounded `.int()` params serialized `"maximum":9007199254740991` into tool schemas.** Explicit caps added: `batch_commit` `lines.from`/`lines.to` and `git_blame` `startLine`/`endLine` at 1000000, `git_stash_apply` `index` at 10000.
 
 - **`batch_commit` hunk-level staging (`{ path, lines }`) could corrupt the git index.** `extractOverlappingHunks` joined the selected hunk(s) without a trailing newline; whenever the selection wasn't the *last* hunk in the file's real diff, the written patch file's final line had no newline terminator and `git apply --cached` rejected it with `error: corrupt patch at ...`. Fixed by always terminating the extracted patch with `\n`. Confirmed against a real multi-hunk diff before and after the fix; regression test added (`stages a non-final hunk without corrupting the patch`).
 - **`batch_commit` `dryRun: true` could leave a partially-staged index after a failure.** When a commit entry listed multiple files and an earlier file staged successfully but a later file in the *same* entry failed to stage, the earlier file's staged state was never added to the dry-run cleanup set (tracking only happened after the whole per-file loop completed without failure) — so a failed "dry run" left real, uncommitted staged changes in the index. Fixed by tracking each file for cleanup immediately after it stages, not gated behind the later failure check. Regression test added (`dryRun: true unstages an earlier file when a later file in the same commit fails to stage`).
