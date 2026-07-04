@@ -8,12 +8,6 @@
       "description": "Highest-priority root override.",
       "type": "string"
     },
-    "rootIndex": {
-      "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 9007199254740991
-    },
     "allWorkspaceRoots": {
       "default": false,
       "description": "Fan out across all MCP roots.",

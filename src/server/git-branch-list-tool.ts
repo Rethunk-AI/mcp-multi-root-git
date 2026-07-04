@@ -147,21 +147,18 @@ export function registerGitBranchListTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        includeRemotes: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe(
-            "Include remote-tracking branches from refs/remotes (symbolic origin/HEAD excluded).",
-          ),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      includeRemotes: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Include remote-tracking branches from refs/remotes (symbolic origin/HEAD excluded).",
+        ),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);

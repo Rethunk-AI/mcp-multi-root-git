@@ -12,12 +12,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "allWorkspaceRoots": {
           "default": false,
           "description": "Fan out across all MCP roots.",
@@ -58,12 +52,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
@@ -131,12 +119,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "allWorkspaceRoots": {
           "default": false,
           "description": "Fan out across all MCP roots.",
@@ -203,12 +185,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "allWorkspaceRoots": {
           "default": false,
           "description": "Fan out across all MCP roots.",
@@ -244,12 +220,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "allWorkspaceRoots": {
           "default": false,
@@ -320,12 +290,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "absoluteGitRoots": {
           "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
           "maxItems": 256,
@@ -387,12 +351,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -446,12 +404,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -495,12 +447,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -523,12 +469,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -550,12 +490,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "format": {
           "default": "markdown",
@@ -601,12 +535,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -651,12 +579,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -684,12 +606,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "format": {
           "default": "markdown",
@@ -726,17 +642,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
         },
         "format": {
           "default": "markdown",
@@ -834,7 +739,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "commits",
         "push",
@@ -849,17 +753,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
         },
         "format": {
           "default": "markdown",
@@ -884,7 +777,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "setUpstream"
       ],
@@ -897,17 +789,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
         },
         "format": {
           "default": "markdown",
@@ -958,7 +839,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "sources",
         "strategy",
@@ -974,17 +854,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
         },
         "format": {
           "default": "markdown",
@@ -1025,7 +894,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "sources",
         "deleteMergedBranches",
@@ -1042,17 +910,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -1068,7 +925,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "ref"
       ],
@@ -1081,12 +937,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "format": {
           "default": "markdown",
@@ -1130,17 +980,6 @@
           "description": "Highest-priority root override.",
           "type": "string"
         },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
         "format": {
           "default": "markdown",
           "type": "string",
@@ -1165,7 +1004,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "path",
         "branch"
@@ -1179,17 +1017,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
         },
         "format": {
           "default": "markdown",
@@ -1211,7 +1038,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "path",
         "force"
@@ -1225,12 +1051,6 @@
         "workspaceRoot": {
           "description": "Highest-priority root override.",
           "type": "string"
-        },
-        "rootIndex": {
-          "description": "0-based index into MCP roots; ignored if workspaceRoot set.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
         },
         "format": {
           "default": "markdown",

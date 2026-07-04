@@ -9,18 +9,12 @@ export const MAX_ABSOLUTE_GIT_ROOTS = 256;
 
 export const WorkspacePickSchema = z.object({
   workspaceRoot: z.string().optional().describe("Highest-priority root override."),
-  rootIndex: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe("0-based index into MCP roots; ignored if workspaceRoot set."),
   allWorkspaceRoots: z
     .boolean()
     .optional()
     .default(false)
     .describe("Fan out across all MCP roots."),
-  /** Independent git worktrees (sibling clones). Mutually exclusive with workspaceRoot, rootIndex, allWorkspaceRoots, and (git_inventory) preset/nestedRoots. */
+  /** Independent git worktrees (sibling clones). Mutually exclusive with workspaceRoot, allWorkspaceRoots, and (git_inventory) preset/nestedRoots. */
   absoluteGitRoots: z
     .array(z.string())
     .max(MAX_ABSOLUTE_GIT_ROOTS)

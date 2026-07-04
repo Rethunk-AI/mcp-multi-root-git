@@ -15,7 +15,6 @@ export const ERROR_CODES = {
   // Repository resolution
   NOT_A_GIT_REPOSITORY: "not_a_git_repository",
   NO_WORKSPACE_ROOT: "no_workspace_root",
-  ROOT_INDEX_OUT_OF_RANGE: "root_index_out_of_range",
 
   // absoluteGitRoots validation
   ABSOLUTE_GIT_ROOTS_EMPTY: "absolute_git_roots_empty",

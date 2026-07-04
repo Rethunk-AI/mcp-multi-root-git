@@ -19,7 +19,10 @@ export function registerGitResetSoftTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
+    parameters: WorkspacePickSchema.omit({
+      absoluteGitRoots: true,
+      allWorkspaceRoots: true,
+    }).extend({
       ref: z
         .string()
         .min(1)

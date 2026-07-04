@@ -32,14 +32,6 @@ describe("workspace root resolution", () => {
     expect(parsed.groups !== undefined || parsed.error !== undefined).toBe(true);
   });
 
-  test("rootIndex out of range returns root_index_out_of_range (empty sessions)", async () => {
-    const run = captureTool(registerGitStatusTool);
-    // With sessions=[], any numeric rootIndex will be out of range.
-    const text = await run({ rootIndex: 99, format: "json" });
-    const parsed = JSON.parse(text) as { error: string };
-    expect(parsed.error).toBe("root_index_out_of_range");
-  });
-
   test("absoluteGitRoots: two sibling repos → two status groups", async () => {
     const a = mkTmpDir("abs-root-a-");
     const b = mkTmpDir("abs-root-b-");

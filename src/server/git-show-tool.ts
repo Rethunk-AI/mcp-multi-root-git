@@ -191,36 +191,30 @@ export function registerGitShowTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        ref: z
-          .string()
-          .min(1)
-          .describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
-        path: z
-          .string()
-          .optional()
-          .describe(
-            "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
-          ),
-        paths: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
-          ),
-        stat: z
-          .boolean()
-          .optional()
-          .describe(
-            "When true, show --stat diffstat (files changed summary) instead of the full patch.",
-          ),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      ref: z.string().min(1).describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
+        ),
+      paths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
+        ),
+      stat: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, show --stat diffstat (files changed summary) instead of the full patch.",
+        ),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);

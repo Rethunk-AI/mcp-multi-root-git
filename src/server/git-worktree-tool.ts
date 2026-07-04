@@ -28,7 +28,6 @@ export function registerGitWorktreeListTool(server: FastMCP): void {
     },
     parameters: WorkspacePickSchema.pick({
       workspaceRoot: true,
-      rootIndex: true,
       format: true,
     }),
     execute: async (args) => {
@@ -70,7 +69,10 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
+    parameters: WorkspacePickSchema.omit({
+      absoluteGitRoots: true,
+      allWorkspaceRoots: true,
+    }).extend({
       path: z
         .string()
         .min(1)
@@ -161,7 +163,10 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
       destructiveHint: true,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
+    parameters: WorkspacePickSchema.omit({
+      absoluteGitRoots: true,
+      allWorkspaceRoots: true,
+    }).extend({
       path: z
         .string()
         .min(1)

@@ -145,33 +145,27 @@ export function registerGitFetchTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: false, // Fetch modifies refs but not working tree; not strictly read-only but safe
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        remote: z
-          .string()
-          .optional()
-          .default("origin")
-          .describe("Remote to fetch from (default: origin)."),
-        branch: z
-          .string()
-          .optional()
-          .describe("If specified: fetch only this branch (e.g. 'main')."),
-        prune: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe("Pass --prune to remove deleted remote branches (default: false)."),
-        tags: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe("Pass --tags to also fetch all tags (default: false)."),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      remote: z
+        .string()
+        .optional()
+        .default("origin")
+        .describe("Remote to fetch from (default: origin)."),
+      branch: z.string().optional().describe("If specified: fetch only this branch (e.g. 'main')."),
+      prune: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Pass --prune to remove deleted remote branches (default: false)."),
+      tags: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Pass --tags to also fetch all tags (default: false)."),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) {

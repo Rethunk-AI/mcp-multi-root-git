@@ -296,7 +296,10 @@ export function registerGitMergeTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
+    parameters: WorkspacePickSchema.omit({
+      absoluteGitRoots: true,
+      allWorkspaceRoots: true,
+    }).extend({
       sources: z
         .array(z.string().min(1))
         .min(1)

@@ -18,9 +18,8 @@ export function registerGitStashListTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true }).pick({
+    parameters: WorkspacePickSchema.pick({
       workspaceRoot: true,
-      rootIndex: true,
       format: true,
     }),
     execute: async (args) => {
@@ -96,28 +95,25 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        index: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .default(0)
-          .describe("Stash index (defaults to 0 for stash@{0})."),
-        pop: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe(
-            "Run `git stash pop` instead of `git stash apply` (removes stash after applying).",
-          ),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      index: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .default(0)
+        .describe("Stash index (defaults to 0 for stash@{0})."),
+      pop: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Run `git stash pop` instead of `git stash apply` (removes stash after applying).",
+        ),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);

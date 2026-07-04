@@ -20,7 +20,10 @@ export function registerGitPushTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true }).extend({
+    parameters: WorkspacePickSchema.omit({
+      absoluteGitRoots: true,
+      allWorkspaceRoots: true,
+    }).extend({
       remote: z
         .string()
         .optional()

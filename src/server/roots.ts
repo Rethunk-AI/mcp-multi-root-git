@@ -47,7 +47,6 @@ function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
 
 type RootPick = {
   workspaceRoot?: string;
-  rootIndex?: number;
   allWorkspaceRoots?: boolean;
   absoluteGitRoots?: string[];
 };
@@ -61,7 +60,6 @@ type ResolveRootsResult =
 
 function hasExclusiveWorkspacePick(args: RootPick): boolean {
   if (args.workspaceRoot?.trim()) return true;
-  if (args.rootIndex != null) return true;
   if (args.allWorkspaceRoots === true) return true;
   return false;
 }
@@ -111,20 +109,6 @@ function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveRootsRes
   if (args.allWorkspaceRoots) {
     return fileRoots.length === 0 ? fallback : { ok: true, roots: fileRoots };
   }
-  if (args.rootIndex != null) {
-    const r = fileRoots[args.rootIndex];
-    if (!r) {
-      return {
-        ok: false,
-        error: {
-          error: ERROR_CODES.ROOT_INDEX_OUT_OF_RANGE,
-          rootIndex: args.rootIndex,
-          rootCount: fileRoots.length,
-        },
-      };
-    }
-    return { ok: true, roots: [r] };
-  }
   const primary = fileRoots[0];
   return primary !== undefined ? { ok: true, roots: [primary] } : fallback;
 }
@@ -138,7 +122,7 @@ function resolveRootsForPreset(
   args: RootPick,
   presetName: string,
 ): ResolveRootsResult {
-  if (args.workspaceRoot?.trim() || args.allWorkspaceRoots || args.rootIndex != null) {
+  if (args.workspaceRoot?.trim() || args.allWorkspaceRoots) {
     return resolveWorkspaceRoots(server, args);
   }
   const fileRoots = listFileRoots(server);

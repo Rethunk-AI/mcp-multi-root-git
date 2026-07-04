@@ -116,29 +116,26 @@ export function registerGitReflogTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        ref: z
-          .string()
-          .optional()
-          .default("HEAD")
-          .describe("Ref whose reflog to show (branch name, HEAD, etc.). Default: HEAD."),
-        maxEntries: z
-          .number()
-          .int()
-          .min(1)
-          .max(MAX_ENTRIES_HARD_CAP)
-          .optional()
-          .default(DEFAULT_MAX_ENTRIES)
-          .describe(
-            `Maximum reflog entries to return (hard cap ${MAX_ENTRIES_HARD_CAP}). Default ${DEFAULT_MAX_ENTRIES}.`,
-          ),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      ref: z
+        .string()
+        .optional()
+        .default("HEAD")
+        .describe("Ref whose reflog to show (branch name, HEAD, etc.). Default: HEAD."),
+      maxEntries: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_ENTRIES_HARD_CAP)
+        .optional()
+        .default(DEFAULT_MAX_ENTRIES)
+        .describe(
+          `Maximum reflog entries to return (hard cap ${MAX_ENTRIES_HARD_CAP}). Default ${DEFAULT_MAX_ENTRIES}.`,
+        ),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);

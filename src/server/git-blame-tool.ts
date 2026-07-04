@@ -192,28 +192,25 @@ export function registerGitBlameTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ absoluteGitRoots: true, allWorkspaceRoots: true })
-      .pick({
-        workspaceRoot: true,
-        rootIndex: true,
-        format: true,
-      })
-      .extend({
-        path: z.string().min(1).describe("Repo-relative path to the file to blame."),
-        ref: z.string().optional().describe("Optional commit-ish (SHA, branch, tag) to blame at."),
-        startLine: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe("First line of the range to blame (1-based). Requires endLine."),
-        endLine: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe("Last line of the range to blame (1-based, inclusive). Requires startLine."),
-      }),
+    parameters: WorkspacePickSchema.pick({
+      workspaceRoot: true,
+      format: true,
+    }).extend({
+      path: z.string().min(1).describe("Repo-relative path to the file to blame."),
+      ref: z.string().optional().describe("Optional commit-ish (SHA, branch, tag) to blame at."),
+      startLine: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("First line of the range to blame (1-based). Requires endLine."),
+      endLine: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Last line of the range to blame (1-based, inclusive). Requires startLine."),
+    }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);

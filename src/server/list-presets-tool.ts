@@ -18,7 +18,6 @@ export function registerListPresetsTool(server: FastMCP): void {
     },
     parameters: WorkspacePickSchema.pick({
       workspaceRoot: true,
-      rootIndex: true,
       allWorkspaceRoots: true,
       absoluteGitRoots: true,
       format: true,
