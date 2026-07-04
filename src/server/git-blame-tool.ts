@@ -253,12 +253,14 @@ export function registerGitBlameTool(server: FastMCP): void {
         .number()
         .int()
         .min(1)
+        .max(1000000)
         .optional()
         .describe("First line of the range to blame (1-based). Requires endLine."),
       endLine: z
         .number()
         .int()
         .min(1)
+        .max(1000000)
         .optional()
         .describe("Last line of the range to blame (1-based, inclusive). Requires startLine."),
       maxLines: z

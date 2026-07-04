@@ -17,8 +17,13 @@ const FileEntrySchema = z.union([
     path: z.string().min(1).describe("File path relative to git root."),
     lines: z
       .object({
-        from: z.number().int().min(1).describe("Start line number (1-indexed)."),
-        to: z.number().int().min(1).describe("End line number (1-indexed, inclusive)."),
+        from: z.number().int().min(1).max(1000000).describe("Start line number (1-indexed)."),
+        to: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000000)
+          .describe("End line number (1-indexed, inclusive)."),
       })
       .describe("Line range to stage. Only hunks overlapping [from, to] are staged."),
   }),

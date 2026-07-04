@@ -29,13 +29,13 @@
       "description": "First line of the range to blame (1-based). Requires endLine.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 9007199254740991
+      "maximum": 1000000
     },
     "endLine": {
       "description": "Last line of the range to blame (1-based, inclusive). Requires startLine.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 9007199254740991
+      "maximum": 1000000
     },
     "maxLines": {
       "default": 2000,

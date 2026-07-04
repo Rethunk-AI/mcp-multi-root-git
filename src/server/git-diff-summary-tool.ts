@@ -37,7 +37,8 @@ interface FileDiff {
   additions: number;
   deletions: number;
   oldPath?: string;
-  truncated: boolean;
+  /** Present (true) only when the diff body was cut at maxLinesPerFile. */
+  truncated?: boolean;
   diff: string;
 }
 
@@ -342,7 +343,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
           additions: stat.additions,
           deletions: stat.deletions,
           ...spreadDefined("oldPath", oldPath),
-          truncated,
+          ...spreadWhen(truncated, { truncated: true }),
           diff: diffText,
         });
       }

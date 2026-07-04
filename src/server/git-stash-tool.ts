@@ -97,6 +97,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
         .number()
         .int()
         .min(0)
+        .max(10000)
         .optional()
         .default(0)
         .describe("Stash index (defaults to 0 for stash@{0})."),

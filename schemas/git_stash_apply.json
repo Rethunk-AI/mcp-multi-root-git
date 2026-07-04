@@ -21,7 +21,7 @@
       "description": "Stash index (defaults to 0 for stash@{0}).",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 10000
     },
     "pop": {
       "default": false,
