@@ -2,6 +2,14 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [3.1.0] — 2026-07-04
+
+Token-cost reduction in `batch_commit` output. JSON format version bumped **4 → 5**.
+
+### Changed — breaking
+
+- **`batch_commit` success entries drop echoed `message`/`files`.** Every entry in the JSON `results[]` array repeated the caller's own `message` and full `files[]` from the request, even on success — pure repetition, since the caller already has both. Successful entries now carry only `index`, `ok`, `sha` (or `staged`/`diffStat` in dry-run mode), and `output` when present. Failing entries are unchanged: `message`/`files` stay so the caller can identify the failed commit without cross-referencing the request. `MCP_JSON_FORMAT_VERSION` bumped to `"5"`.
+
 ## [3.0.0] — 2026-07-03
 
 Major release: token-cost reduction across the tool surface. Every tool now carries exactly one routing parameter, `git_blame` output is run-length grouped, and integer bounds are explicit. JSON format version bumped **3 → 4**.
