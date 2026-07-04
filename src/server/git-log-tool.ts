@@ -8,7 +8,7 @@ import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } fro
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
-import { WorkspacePickSchema } from "./schemas.js";
+import { RootPickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -260,7 +260,7 @@ export function registerGitLogTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: RootPickSchema.extend({
       format: z
         .enum(["markdown", "json", "oneline"])
         .optional()

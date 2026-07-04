@@ -88,7 +88,7 @@ describe("git_log execute handler", () => {
     addCommit(dir, "b.txt", "feat: commit B");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const text = await run({ root: dir, format: "json", since: SINCE_WIDE });
     const parsed = JSON.parse(text) as {
       groups: Array<{ commits: Array<{ subject: string }> }>;
     };
@@ -104,7 +104,7 @@ describe("git_log execute handler", () => {
     addCommit(dir, "x.txt", "chore: markdown test");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ workspaceRoot: dir, since: SINCE_WIDE });
+    const text = await run({ root: dir, since: SINCE_WIDE });
     expect(text).toContain("chore: markdown test");
   });
 
@@ -116,7 +116,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       since: SINCE_WIDE,
       maxCommits: 3,
@@ -129,11 +129,11 @@ describe("git_log execute handler", () => {
     expect(group?.truncated).toBe(true);
   });
 
-  test("non-git workspaceRoot → not_a_git_repository error in group", async () => {
+  test("non-git root → not_a_git_repository error in group", async () => {
     const plain = mkTmpDir("mcp-plain-log-");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ workspaceRoot: plain, format: "json" });
+    const text = await run({ root: plain, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ error?: string }>;
     };
@@ -147,7 +147,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       since: SINCE_WIDE,
       paths: ["important.ts"],
@@ -168,7 +168,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       since: SINCE_WIDE,
       grep: "add feature",
@@ -189,7 +189,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       since: SINCE_WIDE,
       author: "NoSuchAuthor",
@@ -208,13 +208,13 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
 
-    const wideText = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const wideText = await run({ root: dir, format: "json", since: SINCE_WIDE });
     const wideParsed = JSON.parse(wideText) as {
       groups: Array<{ commits: Array<{ subject: string }> }>;
     };
     expect(wideParsed.groups[0]?.commits ?? []).toHaveLength(1);
 
-    const narrowText = await run({ workspaceRoot: dir, format: "json", since: "2026-01-01" });
+    const narrowText = await run({ root: dir, format: "json", since: "2026-01-01" });
     const narrowParsed = JSON.parse(narrowText) as {
       groups: Array<{ commits: Array<{ subject: string }> }>;
     };
@@ -226,7 +226,7 @@ describe("git_log execute handler", () => {
     addCommit(dir, "pct.ts", "fix: handle 100% edge case");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ workspaceRoot: dir, format: "json", since: SINCE_WIDE });
+    const text = await run({ root: dir, format: "json", since: SINCE_WIDE });
     const parsed = JSON.parse(text) as {
       groups: Array<{ commits: Array<{ subject: string }> }>;
     };
@@ -241,7 +241,7 @@ describe("git_log execute handler", () => {
     addCommit(dir, "b.ts", "feat: beta");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ workspaceRoot: dir, format: "oneline", since: SINCE_WIDE });
+    const text = await run({ root: dir, format: "oneline", since: SINCE_WIDE });
 
     const lines = text.split("\n").filter((l) => l.trim());
     // Most recent first: beta then alpha
@@ -258,7 +258,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       since: SINCE_WIDE,
       branch: "--output=/tmp/x",
@@ -275,7 +275,7 @@ describe("git_log execute handler", () => {
 
     const run = captureTool(registerGitLogTool);
     const text = await run({
-      absoluteGitRoots: [dir1, dir2],
+      root: [dir1, dir2],
       format: "oneline",
       since: SINCE_WIDE,
     });

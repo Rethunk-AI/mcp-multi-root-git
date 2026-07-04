@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "workspaceRoot": {
-      "description": "Highest-priority root override.",
+      "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
     "format": {

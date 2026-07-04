@@ -91,10 +91,7 @@ export function registerGitDiffTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({
-      absoluteGitRoots: true,
-      allWorkspaceRoots: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       base: z
         .string()
         .optional()

@@ -41,7 +41,7 @@ describe("list_presets", () => {
     const dir = makeRepoWithPresets();
 
     const run = captureTool(registerListPresetsTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as { roots: Array<{ presets: Array<{ name: string }> }> };
 
     expect(parsed.roots).toHaveLength(1);
@@ -53,7 +53,7 @@ describe("list_presets", () => {
     const dir = makeRepoWithPresets();
 
     const run = captureTool(registerListPresetsTool);
-    const text = await run({ workspaceRoot: dir, format: "markdown" });
+    const text = await run({ root: dir, format: "markdown" });
 
     expect(text).toContain("# Git MCP presets");
     expect(text).toContain("default");
@@ -67,7 +67,7 @@ describe("list_presets", () => {
     writeTestGitConfig(dir);
 
     const run = captureTool(registerListPresetsTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as { roots: Array<{ fileExists: boolean }> };
 
     expect(parsed.roots[0]?.fileExists).toBe(false);
@@ -77,7 +77,7 @@ describe("list_presets", () => {
     const dir = mkTmpDir("mcp-git-list-presets-non-git-");
 
     const run = captureTool(registerListPresetsTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as { roots: Array<{ error?: Record<string, unknown> }> };
 
     expect(parsed.roots[0]?.error).toBeDefined();

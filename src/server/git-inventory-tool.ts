@@ -19,7 +19,7 @@ import {
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetNestedRoots } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
-import { MAX_INVENTORY_ROOTS_DEFAULT, WorkspacePickSchema } from "./schemas.js";
+import { MAX_INVENTORY_ROOTS_DEFAULT, RootPickSchema } from "./schemas.js";
 
 export function registerGitInventoryTool(server: FastMCP): void {
   server.addTool({
@@ -28,7 +28,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: RootPickSchema.extend({
       nestedRoots: z.array(z.string()).optional(),
       preset: z.string().optional(),
       presetMerge: z
@@ -41,9 +41,9 @@ export function registerGitInventoryTool(server: FastMCP): void {
       maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
     }),
     execute: async (args) => {
-      if (args.absoluteGitRoots != null && args.absoluteGitRoots.length > 0) {
+      if (Array.isArray(args.root)) {
         if (args.preset || (args.nestedRoots?.length ?? 0) > 0) {
-          return jsonRespond({ error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_NESTED_OR_PRESET_CONFLICT });
+          return jsonRespond({ error: ERROR_CODES.ROOT_LIST_NESTED_OR_PRESET_CONFLICT });
         }
       }
       const pre = requireGitAndRoots(server, args, args.preset);

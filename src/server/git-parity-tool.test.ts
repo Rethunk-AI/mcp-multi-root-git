@@ -35,14 +35,14 @@ function makeParityWorkspace(prefix: string): { root: string; sha: string } {
 }
 
 describe("git_parity", () => {
-  test("absoluteGitRoots evaluates sibling workspaces independently", async () => {
+  test("root array evaluates sibling workspaces independently", async () => {
     const a = makeParityWorkspace("parity-a-");
     const b = makeParityWorkspace("parity-b-");
     const run = captureTool(registerGitParityTool);
 
     const text = await run({
       format: "json",
-      absoluteGitRoots: [a.root, b.root],
+      root: [a.root, b.root],
       pairs: [{ left: "left", right: "right", label: "nested repos" }],
     });
 
@@ -62,7 +62,7 @@ describe("git_parity", () => {
     const run = captureTool(registerGitParityTool);
 
     const text = await run({
-      absoluteGitRoots: [w.root],
+      root: [w.root],
       pairs: [{ left: "left", right: "right", label: "test pair" }],
     });
 
@@ -75,7 +75,7 @@ describe("git_parity", () => {
     const w = makeParityWorkspace("parity-nopairs-");
     const run = captureTool(registerGitParityTool);
 
-    const text = await run({ absoluteGitRoots: [w.root], format: "json" });
+    const text = await run({ root: [w.root], format: "json" });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("no_pairs");
   });
@@ -97,7 +97,7 @@ describe("git_parity", () => {
     const run = captureTool(registerGitParityTool);
     const text = await run({
       format: "json",
-      absoluteGitRoots: [root],
+      root: [root],
       pairs: [{ left: "left", right: "right", label: "mismatch pair" }],
     });
     const parsed = JSON.parse(text) as {
@@ -129,7 +129,7 @@ describe("git_parity", () => {
 
     const run = captureTool(registerGitParityTool);
     const text = await run({
-      absoluteGitRoots: [root],
+      root: [root],
       pairs: [{ left: "left", right: "right", label: "md mismatch" }],
     });
     expect(text).toContain("MISMATCH");
@@ -143,7 +143,7 @@ describe("git_parity", () => {
 
     const text = await run({
       format: "json",
-      absoluteGitRoots: [w.root],
+      root: [w.root],
       pairs: [{ left: "../../outside", right: "right", label: "escape attempt" }],
     });
     const parsed = JSON.parse(text) as {
@@ -174,7 +174,7 @@ describe("git_parity", () => {
     const run = captureTool(registerGitParityTool);
     const text = await run({
       format: "json",
-      absoluteGitRoots: [root],
+      root: [root],
       pairs: [{ left: "left", right: "right", label: "no-head pair" }],
     });
     const parsed = JSON.parse(text) as {
@@ -189,19 +189,19 @@ describe("git_parity", () => {
     expect(pair?.error).toBeTruthy();
   });
 
-  test("invalid_absolute_git_root: plain directory rejected before execute", async () => {
-    // requireGitAndRoots validates absoluteGitRoots before execute runs;
-    // a non-git directory returns invalid_absolute_git_root, not not_a_git_repository.
+  test("invalid_root_path: plain directory rejected before execute", async () => {
+    // requireGitAndRoots validates the root array before execute runs;
+    // a non-git directory returns invalid_root_path, not not_a_git_repository.
     const plain = mkTmpDir("parity-plain-");
     const run = captureTool(registerGitParityTool);
 
     const text = await run({
       format: "json",
-      absoluteGitRoots: [plain],
+      root: [plain],
       pairs: [{ left: "left", right: "right" }],
     });
     const parsed = JSON.parse(text) as { error: string; path: string };
-    expect(parsed.error).toBe("invalid_absolute_git_root");
+    expect(parsed.error).toBe("invalid_root_path");
     expect(parsed.path).toBe(plain);
   });
 });

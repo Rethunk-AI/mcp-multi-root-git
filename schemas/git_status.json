@@ -4,22 +4,24 @@
   "description": "Parameter schema for the 'git_status' MCP tool.",
   "type": "object",
   "properties": {
-    "workspaceRoot": {
-      "description": "Highest-priority root override.",
-      "type": "string"
-    },
-    "allWorkspaceRoots": {
-      "default": false,
-      "description": "Fan out across all MCP roots.",
-      "type": "boolean"
-    },
-    "absoluteGitRoots": {
-      "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-      "maxItems": 256,
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "root": {
+      "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "string",
+          "const": "*"
+        }
+      ]
     },
     "format": {
       "default": "markdown",
@@ -35,7 +37,6 @@
     }
   },
   "required": [
-    "allWorkspaceRoots",
     "format",
     "includeSubmodules"
   ],

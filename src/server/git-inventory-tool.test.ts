@@ -30,7 +30,7 @@ describe("git_inventory execute handler", () => {
     const dir = makeRepoWithSeed("mcp-inv-basic-");
 
     const run = captureTool(registerGitInventoryTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
     expect(parsed.inventories).toHaveLength(1);
     expect(parsed.inventories[0]?.entries).toHaveLength(1);
@@ -41,29 +41,29 @@ describe("git_inventory execute handler", () => {
     const dir = makeRepoWithSeed("mcp-inv-md-");
 
     const run = captureTool(registerGitInventoryTool);
-    const text = await run({ workspaceRoot: dir });
+    const text = await run({ root: dir });
     expect(text).toContain("# Git inventory");
     expect(text).toContain(dir);
   });
 
-  test("absolute_git_roots_nested_or_preset_conflict when absoluteGitRoots + nestedRoots", async () => {
+  test("root_list_nested_or_preset_conflict when root array + nestedRoots", async () => {
     const dir = makeRepoWithSeed("mcp-inv-conflict-");
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({
-      absoluteGitRoots: [dir],
+      root: [dir],
       nestedRoots: ["sub"],
       format: "json",
     });
     const parsed = JSON.parse(text) as { error: string };
-    expect(parsed.error).toBe("absolute_git_roots_nested_or_preset_conflict");
+    expect(parsed.error).toBe("root_list_nested_or_preset_conflict");
   });
 
   test("remote_branch_mismatch when only remote is provided", async () => {
     const dir = makeRepoWithSeed("mcp-inv-rbmismatch-");
 
     const run = captureTool(registerGitInventoryTool);
-    const text = await run({ workspaceRoot: dir, format: "json", remote: "origin" });
+    const text = await run({ root: dir, format: "json", remote: "origin" });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("remote_branch_mismatch");
   });
@@ -73,7 +73,7 @@ describe("git_inventory execute handler", () => {
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       remote: "-evil-remote",
       branch: "main",
@@ -96,7 +96,7 @@ describe("git_inventory execute handler", () => {
     gitCmd(subDir, "commit", "-m", "init sub");
 
     const run = captureTool(registerGitInventoryTool);
-    const text = await run({ workspaceRoot: dir, format: "json", nestedRoots: ["sub"] });
+    const text = await run({ root: dir, format: "json", nestedRoots: ["sub"] });
     const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
     const entries = parsed.inventories[0]?.entries ?? [];
     expect(entries).toHaveLength(1);
@@ -109,7 +109,7 @@ describe("git_inventory execute handler", () => {
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       nestedRoots: ["../../outside"],
     });
@@ -123,7 +123,7 @@ describe("git_inventory execute handler", () => {
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       nestedRoots: ["does-not-exist"],
     });
@@ -149,7 +149,7 @@ describe("git_inventory execute handler", () => {
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({
-      workspaceRoot: dir,
+      root: dir,
       format: "json",
       nestedRoots: ["a", "b", "c"],
       maxRoots: 2,

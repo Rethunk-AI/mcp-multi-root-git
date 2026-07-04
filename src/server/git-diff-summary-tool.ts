@@ -231,7 +231,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.omit({ allWorkspaceRoots: true }).extend({
+    parameters: WorkspacePickSchema.extend({
       range: z
         .string()
         .optional()

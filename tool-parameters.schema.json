@@ -8,22 +8,24 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "workspaceRoot": {
-          "description": "Highest-priority root override.",
-          "type": "string"
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "root": {
+          "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string",
+              "const": "*"
+            }
+          ]
         },
         "format": {
           "default": "markdown",
@@ -39,7 +41,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "includeSubmodules"
       ],
@@ -49,22 +50,24 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "workspaceRoot": {
-          "description": "Highest-priority root override.",
-          "type": "string"
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "root": {
+          "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string",
+              "const": "*"
+            }
+          ]
         },
         "format": {
           "default": "markdown",
@@ -104,7 +107,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "presetMerge",
         "maxRoots"
@@ -115,22 +117,24 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "workspaceRoot": {
-          "description": "Highest-priority root override.",
-          "type": "string"
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "root": {
+          "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string",
+              "const": "*"
+            }
+          ]
         },
         "format": {
           "default": "markdown",
@@ -171,7 +175,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "presetMerge"
       ],
@@ -181,22 +184,24 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "workspaceRoot": {
-          "description": "Highest-priority root override.",
-          "type": "string"
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "root": {
+          "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string",
+              "const": "*"
+            }
+          ]
         },
         "format": {
           "default": "markdown",
@@ -208,7 +213,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format"
       ],
       "additionalProperties": false
@@ -217,22 +221,24 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "workspaceRoot": {
-          "description": "Highest-priority root override.",
-          "type": "string"
-        },
-        "allWorkspaceRoots": {
-          "default": false,
-          "description": "Fan out across all MCP roots.",
-          "type": "boolean"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "root": {
+          "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string",
+              "const": "*"
+            }
+          ]
         },
         "format": {
           "default": "markdown",
@@ -276,7 +282,6 @@
         }
       },
       "required": [
-        "allWorkspaceRoots",
         "format",
         "maxCommits"
       ],
@@ -287,16 +292,8 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "absoluteGitRoots": {
-          "description": "Absolute paths to git repo roots; use for sibling clones under a non-git parent.",
-          "maxItems": 256,
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         },
         "format": {
           "default": "markdown",
@@ -348,7 +345,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -401,7 +398,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -444,7 +441,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -466,7 +463,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -488,7 +485,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -532,7 +529,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -576,7 +573,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -604,7 +601,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -640,7 +637,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -751,7 +748,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -787,7 +784,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -852,7 +849,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -907,7 +904,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -935,7 +932,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -977,7 +974,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -1015,7 +1012,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {
@@ -1049,7 +1046,7 @@
       "type": "object",
       "properties": {
         "workspaceRoot": {
-          "description": "Highest-priority root override.",
+          "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
         "format": {

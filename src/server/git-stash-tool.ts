@@ -18,10 +18,7 @@ export function registerGitStashListTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }),
+    parameters: WorkspacePickSchema,
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
@@ -95,10 +92,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       index: z
         .number()
         .int()

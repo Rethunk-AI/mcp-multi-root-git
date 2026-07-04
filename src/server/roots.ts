@@ -6,7 +6,7 @@ import type { FastMCP } from "fastmcp";
 import { ERROR_CODES } from "./error-codes.js";
 import { gateGit, gitTopLevel } from "./git.js";
 import { loadPresetsFromGitTop, presetLoadErrorPayload } from "./presets.js";
-import { MAX_ABSOLUTE_GIT_ROOTS } from "./schemas.js";
+import { MAX_ROOT_PATHS } from "./schemas.js";
 
 function uriToPath(uri: string): string | null {
   if (!uri.startsWith("file://")) return null;
@@ -45,35 +45,30 @@ function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
   return basename(rootPath) === h;
 }
 
-type RootPick = {
-  workspaceRoot?: string;
-  allWorkspaceRoots?: boolean;
-  absoluteGitRoots?: string[];
-};
-
-/** Workspace pick args including optional `absoluteGitRoots` (same shape as tool args). */
-export type GitRootPickArgs = RootPick;
+/**
+ * Fan-out tool routing args. `root` is polymorphic:
+ * - string   → single repo path
+ * - string[] → explicit list of repo paths (sibling clones)
+ * - "*"      → every `file://` MCP root
+ * - omitted  → preset-aware default (first MCP root / cwd)
+ */
+export type RootPickArgs = { root?: string | string[] };
 
 type ResolveRootsResult =
   | { ok: true; roots: string[] }
   | { ok: false; error: Record<string, unknown> };
 
-function hasExclusiveWorkspacePick(args: RootPick): boolean {
-  if (args.workspaceRoot?.trim()) return true;
-  if (args.allWorkspaceRoots === true) return true;
-  return false;
-}
-
 /**
- * Resolve `absoluteGitRoots` to unique git toplevels (stable order, first occurrence wins).
+ * Resolve an explicit `root` path array to unique git toplevels
+ * (stable order, first occurrence wins).
  */
-export function resolveAbsoluteGitRootsList(raw: string[]): ResolveRootsResult {
-  if (raw.length > MAX_ABSOLUTE_GIT_ROOTS) {
+export function resolveRootPathList(raw: string[]): ResolveRootsResult {
+  if (raw.length > MAX_ROOT_PATHS) {
     return {
       ok: false,
       error: {
-        error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_TOO_MANY,
-        max: MAX_ABSOLUTE_GIT_ROOTS,
+        error: ERROR_CODES.ROOT_LIST_TOO_MANY,
+        max: MAX_ROOT_PATHS,
         count: raw.length,
       },
     };
@@ -83,51 +78,37 @@ export function resolveAbsoluteGitRootsList(raw: string[]): ResolveRootsResult {
   for (const item of raw) {
     const trimmed = item.trim();
     if (trimmed.length === 0) {
-      return { ok: false, error: { error: ERROR_CODES.INVALID_ABSOLUTE_GIT_ROOT, path: item } };
+      return { ok: false, error: { error: ERROR_CODES.INVALID_ROOT_PATH, path: item } };
     }
     const abs = resolve(trimmed);
     const top = gitTopLevel(abs);
     if (!top) {
-      return { ok: false, error: { error: ERROR_CODES.INVALID_ABSOLUTE_GIT_ROOT, path: abs } };
+      return { ok: false, error: { error: ERROR_CODES.INVALID_ROOT_PATH, path: abs } };
     }
     if (seen.has(top)) continue;
     seen.add(top);
     tops.push(top);
   }
   if (tops.length === 0) {
-    return { ok: false, error: { error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_EMPTY } };
+    return { ok: false, error: { error: ERROR_CODES.ROOT_LIST_EMPTY } };
   }
   return { ok: true, roots: tops };
 }
 
-function resolveWorkspaceRoots(server: FastMCP, args: RootPick): ResolveRootsResult {
-  if (args.workspaceRoot?.trim()) {
-    return { ok: true, roots: [resolve(args.workspaceRoot.trim())] };
-  }
-  const fileRoots = listFileRoots(server);
-  const fallback: ResolveRootsResult = { ok: true, roots: [process.cwd()] };
-  if (args.allWorkspaceRoots) {
-    return fileRoots.length === 0 ? fallback : { ok: true, roots: fileRoots };
-  }
+/** Default when `root` is omitted: first MCP file root, else cwd. */
+function defaultRoots(fileRoots: string[]): ResolveRootsResult {
   const primary = fileRoots[0];
-  return primary !== undefined ? { ok: true, roots: [primary] } : fallback;
+  return { ok: true, roots: [primary ?? process.cwd()] };
 }
 
 /**
  * When a preset name is requested and multiple MCP roots exist, pick the first root
  * whose git toplevel loads a preset file containing that name.
  */
-function resolveRootsForPreset(
-  server: FastMCP,
-  args: RootPick,
-  presetName: string,
-): ResolveRootsResult {
-  if (args.workspaceRoot?.trim() || args.allWorkspaceRoots) {
-    return resolveWorkspaceRoots(server, args);
-  }
+function resolveRootsForPreset(server: FastMCP, presetName: string): ResolveRootsResult {
   const fileRoots = listFileRoots(server);
   if (fileRoots.length <= 1) {
-    return resolveWorkspaceRoots(server, args);
+    return defaultRoots(fileRoots);
   }
   const matches: string[] = [];
   for (const r of fileRoots) {
@@ -150,17 +131,17 @@ function resolveRootsForPreset(
   if (pick !== undefined) {
     return { ok: true, roots: [pick] };
   }
-  return resolveWorkspaceRoots(server, args);
+  return defaultRoots(fileRoots);
 }
 
 type GitAndRootsResult =
   | { ok: true; roots: string[] }
   | { ok: false; error: Record<string, unknown> };
 
-/** `gateGit` plus workspace / preset root resolution; shared tool and resource prelude. */
+/** `gateGit` plus `root` resolution; shared fan-out tool and resource prelude. */
 export function requireGitAndRoots(
   server: FastMCP,
-  args: RootPick,
+  args: RootPickArgs,
   presetName: string | undefined,
 ): GitAndRootsResult {
   const gg = gateGit();
@@ -168,24 +149,27 @@ export function requireGitAndRoots(
     return { ok: false, error: gg.body };
   }
 
-  const abs = args.absoluteGitRoots;
-  if (abs != null && abs.length > 0) {
+  const root = args.root;
+  if (Array.isArray(root)) {
     if (presetName) {
-      return { ok: false, error: { error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_PRESET_CONFLICT } };
+      return { ok: false, error: { error: ERROR_CODES.ROOT_LIST_PRESET_CONFLICT } };
     }
-    if (hasExclusiveWorkspacePick(args)) {
-      return { ok: false, error: { error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_EXCLUSIVE } };
-    }
-    return resolveAbsoluteGitRootsList(abs);
+    return resolveRootPathList(root);
   }
 
-  const rootsRes = presetName
-    ? resolveRootsForPreset(server, args, presetName)
-    : resolveWorkspaceRoots(server, args);
-  if (!rootsRes.ok) {
-    return { ok: false, error: rootsRes.error };
+  const trimmed = root?.trim();
+  if (trimmed === "*") {
+    const fileRoots = listFileRoots(server);
+    return fileRoots.length === 0 ? defaultRoots(fileRoots) : { ok: true, roots: fileRoots };
   }
-  return { ok: true, roots: rootsRes.roots };
+  if (trimmed) {
+    return { ok: true, roots: [resolve(trimmed)] };
+  }
+
+  if (presetName) {
+    return resolveRootsForPreset(server, presetName);
+  }
+  return defaultRoots(listFileRoots(server));
 }
 
 type SingleRepoResult =
@@ -193,28 +177,20 @@ type SingleRepoResult =
   | { ok: false; error: Record<string, unknown> };
 
 /**
- * Convenience wrapper for single-repo tools: gate git, resolve roots, pick the first
- * root, and resolve its git toplevel. Returns `{ ok: true, gitTop }` or a structured
- * error payload ready for `jsonRespond`.
+ * Prelude for single-repo tools: gate git, resolve `workspaceRoot` (or the first
+ * MCP root / cwd), and resolve its git toplevel. Returns `{ ok: true, gitTop }`
+ * or a structured error payload ready for `jsonRespond`.
  */
 export function requireSingleRepo(
   server: FastMCP,
-  args: RootPick,
-  presetName: string | undefined = undefined,
+  args: { workspaceRoot?: string },
 ): SingleRepoResult {
-  const pre = requireGitAndRoots(server, args, presetName);
-  if (!pre.ok) return pre;
-  if (args.absoluteGitRoots != null && args.absoluteGitRoots.length > 0 && pre.roots.length !== 1) {
-    return {
-      ok: false,
-      error: {
-        error: ERROR_CODES.ABSOLUTE_GIT_ROOTS_SINGLE_REPO_ONLY,
-        rootCount: pre.roots.length,
-      },
-    };
+  const gg = gateGit();
+  if (!gg.ok) {
+    return { ok: false, error: gg.body };
   }
-  const rootInput = pre.roots[0];
-  if (!rootInput) return { ok: false, error: { error: ERROR_CODES.NO_WORKSPACE_ROOT } };
+  const ws = args.workspaceRoot?.trim();
+  const rootInput = ws ? resolve(ws) : (listFileRoots(server)[0] ?? process.cwd());
   const top = gitTopLevel(rootInput);
   if (!top)
     return { ok: false, error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: rootInput } };

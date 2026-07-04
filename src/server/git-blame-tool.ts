@@ -192,10 +192,7 @@ export function registerGitBlameTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       path: z.string().min(1).describe("Repo-relative path to the file to blame."),
       ref: z.string().optional().describe("Optional commit-ish (SHA, branch, tag) to blame at."),
       startLine: z

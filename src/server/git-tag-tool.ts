@@ -61,10 +61,7 @@ export function registerGitTagTool(server: FastMCP): void {
       readOnlyHint: false,
       destructiveHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       tag: z.string().min(1).describe("Tag name (e.g. 'v1.2.3')."),
       message: z
         .string()

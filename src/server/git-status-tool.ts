@@ -14,7 +14,7 @@ import {
 } from "./git.js";
 import { jsonRespond } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
-import { WorkspacePickSchema } from "./schemas.js";
+import { RootPickSchema } from "./schemas.js";
 
 export function registerGitStatusTool(server: FastMCP): void {
   server.addTool({
@@ -23,7 +23,7 @@ export function registerGitStatusTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: RootPickSchema.extend({
       includeSubmodules: z.boolean().optional().default(true),
     }),
     execute: async (args) => {

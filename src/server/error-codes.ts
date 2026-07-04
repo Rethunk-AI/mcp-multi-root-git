@@ -16,14 +16,12 @@ export const ERROR_CODES = {
   NOT_A_GIT_REPOSITORY: "not_a_git_repository",
   NO_WORKSPACE_ROOT: "no_workspace_root",
 
-  // absoluteGitRoots validation
-  ABSOLUTE_GIT_ROOTS_EMPTY: "absolute_git_roots_empty",
-  ABSOLUTE_GIT_ROOTS_EXCLUSIVE: "absolute_git_roots_exclusive",
-  ABSOLUTE_GIT_ROOTS_NESTED_OR_PRESET_CONFLICT: "absolute_git_roots_nested_or_preset_conflict",
-  ABSOLUTE_GIT_ROOTS_PRESET_CONFLICT: "absolute_git_roots_preset_conflict",
-  ABSOLUTE_GIT_ROOTS_SINGLE_REPO_ONLY: "absolute_git_roots_single_repo_only",
-  ABSOLUTE_GIT_ROOTS_TOO_MANY: "absolute_git_roots_too_many",
-  INVALID_ABSOLUTE_GIT_ROOT: "invalid_absolute_git_root",
+  // `root` array validation
+  INVALID_ROOT_PATH: "invalid_root_path",
+  ROOT_LIST_EMPTY: "root_list_empty",
+  ROOT_LIST_NESTED_OR_PRESET_CONFLICT: "root_list_nested_or_preset_conflict",
+  ROOT_LIST_PRESET_CONFLICT: "root_list_preset_conflict",
+  ROOT_LIST_TOO_MANY: "root_list_too_many",
 
   // Presets
   PRESET_FILE_INVALID: "preset_file_invalid",

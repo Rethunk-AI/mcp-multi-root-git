@@ -145,10 +145,7 @@ export function registerGitFetchTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: false, // Fetch modifies refs but not working tree; not strictly read-only but safe
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       remote: z
         .string()
         .optional()

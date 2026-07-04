@@ -191,10 +191,7 @@ export function registerGitShowTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       ref: z.string().min(1).describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
       path: z
         .string()

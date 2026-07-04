@@ -22,7 +22,7 @@ describe("git_status execute handler", () => {
     const dir = makeRepoWithSeed("mcp-status-basic-");
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ mcpRoot: string; repos: Array<{ label: string; ok: boolean }> }>;
     };
@@ -35,7 +35,7 @@ describe("git_status execute handler", () => {
     const plain = mkTmpDir("mcp-status-plain-");
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: plain, format: "json" });
+    const text = await run({ root: plain, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ repos: Array<{ ok: boolean; statusText: string }> }>;
     };
@@ -47,7 +47,7 @@ describe("git_status execute handler", () => {
     const dir = makeRepoWithSeed("mcp-status-md-");
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir });
+    const text = await run({ root: dir });
     expect(text).toContain("# Git status");
   });
 
@@ -56,7 +56,7 @@ describe("git_status execute handler", () => {
     const dir2 = makeRepoWithSeed("mcp-status-mr2-");
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ absoluteGitRoots: [dir1, dir2] });
+    const text = await run({ root: [dir1, dir2] });
     expect(text).toContain("# Multi-root git status");
   });
 
@@ -69,7 +69,7 @@ describe("git_status execute handler", () => {
     mkdirSync(join(dir, "sub"));
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir, format: "json", includeSubmodules: false });
+    const text = await run({ root: dir, format: "json", includeSubmodules: false });
     const parsed = JSON.parse(text) as {
       groups: Array<{ repos: Array<{ label: string }> }>;
     };
@@ -86,7 +86,7 @@ describe("git_status execute handler", () => {
     mkdirSync(join(dir, "sub"));
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ repos: Array<{ label: string; ok: boolean; statusText: string }> }>;
     };
@@ -104,7 +104,7 @@ describe("git_status execute handler", () => {
     );
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ repos: Array<{ label: string; ok: boolean; statusText: string }> }>;
     };
@@ -131,7 +131,7 @@ describe("git_status execute handler", () => {
     gitCmd(subDir, "commit", "-m", "init sub");
 
     const run = captureTool(registerGitStatusTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
+    const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as {
       groups: Array<{ repos: Array<{ label: string; ok: boolean }> }>;
     };

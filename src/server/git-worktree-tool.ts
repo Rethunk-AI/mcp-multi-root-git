@@ -26,10 +26,7 @@ export function registerGitWorktreeListTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }),
+    parameters: WorkspacePickSchema,
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
@@ -69,10 +66,7 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
       destructiveHint: false,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({
-      absoluteGitRoots: true,
-      allWorkspaceRoots: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       path: z
         .string()
         .min(1)
@@ -163,10 +157,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
       destructiveHint: true,
       idempotentHint: false,
     },
-    parameters: WorkspacePickSchema.omit({
-      absoluteGitRoots: true,
-      allWorkspaceRoots: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       path: z
         .string()
         .min(1)

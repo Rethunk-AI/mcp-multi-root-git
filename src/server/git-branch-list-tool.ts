@@ -147,10 +147,7 @@ export function registerGitBranchListTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      format: true,
-    }).extend({
+    parameters: WorkspacePickSchema.extend({
       includeRemotes: z
         .boolean()
         .optional()

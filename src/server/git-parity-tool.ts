@@ -7,7 +7,7 @@ import { validateRepoPath } from "./inventory.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { applyPresetParityPairs, type ParityPair } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
-import { WorkspacePickSchema } from "./schemas.js";
+import { RootPickSchema } from "./schemas.js";
 
 export function registerGitParityTool(server: FastMCP): void {
   server.addTool({
@@ -16,7 +16,7 @@ export function registerGitParityTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.extend({
+    parameters: RootPickSchema.extend({
       pairs: z
         .array(
           z.object({

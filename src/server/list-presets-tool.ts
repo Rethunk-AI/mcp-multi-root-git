@@ -7,7 +7,7 @@ import { gitTopLevel } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { loadPresetsFromGitTop, PRESET_FILE_PATH, presetLoadErrorPayload } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
-import { WorkspacePickSchema } from "./schemas.js";
+import { RootPickSchema } from "./schemas.js";
 
 export function registerListPresetsTool(server: FastMCP): void {
   server.addTool({
@@ -16,12 +16,7 @@ export function registerListPresetsTool(server: FastMCP): void {
     annotations: {
       readOnlyHint: true,
     },
-    parameters: WorkspacePickSchema.pick({
-      workspaceRoot: true,
-      allWorkspaceRoots: true,
-      absoluteGitRoots: true,
-      format: true,
-    }),
+    parameters: RootPickSchema,
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);
       if (!pre.ok) {

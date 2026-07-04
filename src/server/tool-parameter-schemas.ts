@@ -26,16 +26,16 @@ import {
 } from "./git-worktree-tool.js";
 import { registerListPresetsTool } from "./list-presets-tool.js";
 
-export const READ_ONLY_ABSOLUTE_ROOT_TOOLS = [
+export const FAN_OUT_ROOT_TOOLS = [
   "git_status",
   "git_inventory",
   "git_parity",
   "list_presets",
   "git_log",
-  "git_diff_summary",
 ] as const;
 
 export const READ_ONLY_SINGLE_REPO_TOOLS = [
+  "git_diff_summary",
   "git_diff",
   "git_show",
   "git_worktree_list",
@@ -59,7 +59,7 @@ export const MUTATING_TOOLS = [
 ] as const;
 
 export const ALL_PARAMETER_SCHEMA_TOOLS = [
-  ...READ_ONLY_ABSOLUTE_ROOT_TOOLS,
+  ...FAN_OUT_ROOT_TOOLS,
   ...READ_ONLY_SINGLE_REPO_TOOLS,
   ...MUTATING_TOOLS,
 ] as const;

@@ -4,22 +4,21 @@ import { MAX_INVENTORY_ROOTS_DEFAULT } from "./inventory.js";
 
 const FormatSchema = z.enum(["markdown", "json"]).optional().default("markdown");
 
-/** Max paths in `absoluteGitRoots` (matches `git_inventory` `maxRoots` hard cap). */
-export const MAX_ABSOLUTE_GIT_ROOTS = 256;
+/** Max entries when `root` is an array (matches `git_inventory` `maxRoots` hard cap). */
+export const MAX_ROOT_PATHS = 256;
 
+/** Single-repo tools: one optional repo-path override plus output format. */
 export const WorkspacePickSchema = z.object({
-  workspaceRoot: z.string().optional().describe("Highest-priority root override."),
-  allWorkspaceRoots: z
-    .boolean()
+  workspaceRoot: z.string().optional().describe("Repo path. Default: first MCP root / cwd."),
+  format: FormatSchema,
+});
+
+/** Fan-out tools: one polymorphic routing param plus output format. */
+export const RootPickSchema = z.object({
+  root: z
+    .union([z.string(), z.array(z.string()).max(MAX_ROOT_PATHS), z.literal("*")])
     .optional()
-    .default(false)
-    .describe("Fan out across all MCP roots."),
-  /** Independent git worktrees (sibling clones). Mutually exclusive with workspaceRoot, allWorkspaceRoots, and (git_inventory) preset/nestedRoots. */
-  absoluteGitRoots: z
-    .array(z.string())
-    .max(MAX_ABSOLUTE_GIT_ROOTS)
-    .optional()
-    .describe("Absolute paths to git repo roots; use for sibling clones under a non-git parent."),
+    .describe('Repo path, array of paths, or "*" for all MCP roots.'),
   format: FormatSchema,
 });
 
