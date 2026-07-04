@@ -194,12 +194,29 @@ describe("batch_commit execute handler", () => {
     const parsed = JSON.parse(text) as {
       ok: boolean;
       committed: number;
-      results: Array<{ ok: boolean; error?: string }>;
+      results: Array<{
+        ok: boolean;
+        error?: string;
+        sha?: string;
+        message?: string;
+        files?: string[];
+      }>;
     };
     expect(parsed.ok).toBe(false);
     expect(parsed.committed).toBe(1);
     expect(parsed.results[0]?.ok).toBe(true);
     expect(parsed.results[1]?.ok).toBe(false);
+
+    // Success entries drop the echoed request (message/files) — the caller
+    // already has them — but keep the SHA needed to confirm the commit.
+    expect(parsed.results[0]?.sha).toBeDefined();
+    expect(parsed.results[0]?.message).toBeUndefined();
+    expect(parsed.results[0]?.files).toBeUndefined();
+
+    // Failure entries keep message/files so the caller can diagnose which
+    // commit/files failed without cross-referencing the original request.
+    expect(parsed.results[1]?.message).toBe("feat: bad");
+    expect(parsed.results[1]?.files).toEqual(["nonexistent.ts"]);
   });
 });
 

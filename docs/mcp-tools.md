@@ -669,15 +669,11 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
   "results": [{
     "index": 0,
     "ok": true,
-    "sha": "a1b2c3d",
-    "message": "feat: add foo",
-    "files": ["src/foo.ts"]
+    "sha": "a1b2c3d"
   }, {
     "index": 1,
     "ok": true,
-    "sha": "b2c3d4e",
-    "message": "chore: update config",
-    "files": ["config.json"]
+    "sha": "b2c3d4e"
   }],
   "push": {
     "ok": true,
@@ -687,7 +683,9 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 }
 ```
 
-On first failure `ok` is `false`, `committed` reflects only the entries that succeeded before the error, and the failing entry includes `error` and `detail` fields. Remaining entries are skipped and not included in `results`.
+Successful `results[*]` entries carry only what's needed to confirm the commit landed (`index`, `ok`, `sha`, plus `output` when git printed something) — they omit `message`/`files` since the caller already supplied both in the request. Failing entries echo `message` and `files` back (alongside `error`/`detail`) so the caller can identify the failed commit without cross-referencing the request.
+
+On first failure `ok` is `false`, `committed` reflects only the entries that succeeded before the error, and the failing entry includes `message`, `files`, `error`, and `detail` fields. Remaining entries are skipped and not included in `results`.
 
 When `dryRun: true`, the top-level response includes `dryRun: true`; successful `results[*]` entries omit `sha` and instead include `staged` and `diffStat`.
 

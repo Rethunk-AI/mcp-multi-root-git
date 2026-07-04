@@ -468,8 +468,10 @@ export function registerBatchCommitTool(server: FastMCP): void {
             index: r.index,
             ok: r.ok,
             ...spreadDefined("sha", r.sha),
-            message: r.message,
-            files: r.files,
+            // message/files are the caller's own request echoed back — only worth
+            // repeating on failure, where the caller needs them to diagnose without
+            // cross-referencing the request.
+            ...spreadWhen(!r.ok, { message: r.message, files: r.files }),
             ...spreadDefined("staged", r.staged),
             ...spreadDefined("diffStat", r.diffStat),
             ...spreadDefined("error", r.error),

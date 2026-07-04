@@ -9,7 +9,7 @@ import { registerRethunkGitTools } from "./server/tools.js";
  * (renamed/nested/omitted fields). Surfaced via the FastMCP `instructions`
  * field below, so it is discoverable in the MCP `initialize` response.
  */
-export const MCP_JSON_FORMAT_VERSION = "4";
+export const MCP_JSON_FORMAT_VERSION = "5";
 
 const server = new FastMCP({
   name: "rethunk-git",
