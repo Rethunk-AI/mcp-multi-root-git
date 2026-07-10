@@ -113,6 +113,9 @@ export const ERROR_CODES = {
   // Reset
   RESET_FAILED: "reset_failed",
 
+  // Revert
+  REVERT_ABORT_FAILED: "revert_abort_failed",
+
   // Tag
   REF_NOT_FOUND: "ref_not_found",
   TAG_CREATE_FAILED: "tag_create_failed",

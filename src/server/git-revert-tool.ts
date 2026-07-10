@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { conflictPaths, isSafeGitAncestorRef, isWorkingTreeClean } from "./git-refs.js";
-import { jsonRespond, spreadDefined } from "./json.js";
+import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -20,8 +20,12 @@ async function revertHead(gitTop: string): Promise<string | undefined> {
   return sha === "" ? undefined : sha;
 }
 
-async function abortRevert(gitTop: string): Promise<void> {
-  await spawnGitAsync(gitTop, ["revert", "--abort"]);
+/** Result of attempting `git revert --abort` — callers must check `ok` before claiming a clean abort. */
+export async function abortRevert(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
+  const r = await spawnGitAsync(gitTop, ["revert", "--abort"]);
+  if (r.ok) return { ok: true };
+  const detail = (r.stderr || r.stdout).trim();
+  return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +67,9 @@ export function registerGitRevertTool(server: FastMCP): void {
         .int()
         .min(1)
         .optional()
-        .describe("Parent number (`-m N`) to diff against — required when reverting a merge commit."),
+        .describe(
+          "Parent number (`-m N`) to diff against — required when reverting a merge commit.",
+        ),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -81,7 +87,8 @@ export function registerGitRevertTool(server: FastMCP): void {
       if (!(await isWorkingTreeClean(gitTop))) {
         return jsonRespond({
           error: ERROR_CODES.WORKING_TREE_DIRTY,
-          detail: "git_revert requires a clean working tree. Commit or stash pending changes first.",
+          detail:
+            "git_revert requires a clean working tree. Commit or stash pending changes first.",
         });
       }
 
@@ -98,13 +105,17 @@ export function registerGitRevertTool(server: FastMCP): void {
       if (!r.ok) {
         const failedSha = await revertHead(gitTop);
         const paths = await conflictPaths(gitTop);
-        await abortRevert(gitTop);
+        const abortResult = await abortRevert(gitTop);
         return jsonRespond({
           ok: false,
-          aborted: true,
+          aborted: abortResult.ok,
           ...spreadDefined("commit", failedSha),
           conflicts: paths,
           ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
+          ...spreadWhen(!abortResult.ok, {
+            error: ERROR_CODES.REVERT_ABORT_FAILED,
+            ...spreadDefined("abortDetail", abortResult.detail),
+          }),
         });
       }
 
@@ -135,7 +146,11 @@ export function registerGitRevertTool(server: FastMCP): void {
       }
 
       // --- Committed: one new commit per source, oldest-first ---
-      const newCommitsResult = await spawnGitAsync(gitTop, ["rev-list", "--reverse", `${preHead}..HEAD`]);
+      const newCommitsResult = await spawnGitAsync(gitTop, [
+        "rev-list",
+        "--reverse",
+        `${preHead}..HEAD`,
+      ]);
       const newCommits = newCommitsResult.ok
         ? newCommitsResult.stdout
             .split("\n")
