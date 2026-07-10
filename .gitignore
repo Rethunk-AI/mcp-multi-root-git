@@ -4,6 +4,7 @@ dist/
 .env
 *.log
 *.tgz
+.coverage-ci.txt
 
 # Editor / local (keep repo tree clean)
 .DS_Store

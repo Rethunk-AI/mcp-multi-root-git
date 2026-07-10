@@ -44,7 +44,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "typecheck": "tsc --noEmit",
-    "ci": "bun run schema:tools:check && bun run schema:individual:check && bun run lint && bun run typecheck && bun run test && bun run build"
+    "ci": "bun run schema:tools:check && bun run schema:individual:check && bun run lint && bun run typecheck && set -o pipefail && bun run test:coverage 2>&1 | tee .coverage-ci.txt && bun run coverage:check .coverage-ci.txt 80 && bun run build"
   },
   "keywords": [
     "mcp",
