@@ -8,13 +8,6 @@ import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
-// NOTE(wave-2 integrator): this code belongs in the centralized ERROR_CODES
-// registry (src/server/error-codes.ts) alongside STASH_LIST_FAILED, but this
-// worker's task fence scoped edits to only git-stash-tool.ts + its test file.
-// Please add `STASH_PUSH_FAILED: "stash_push_failed"` to error-codes.ts and
-// swap this local constant for `ERROR_CODES.STASH_PUSH_FAILED`.
-const STASH_PUSH_FAILED = "stash_push_failed";
-
 // ---------------------------------------------------------------------------
 // git_stash_list
 // ---------------------------------------------------------------------------
@@ -218,7 +211,7 @@ export function registerGitStashPushTool(server: FastMCP): void {
 
       if (!r.ok) {
         return jsonRespond({
-          error: STASH_PUSH_FAILED,
+          error: ERROR_CODES.STASH_PUSH_FAILED,
           detail: output,
         });
       }

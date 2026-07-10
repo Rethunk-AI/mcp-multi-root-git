@@ -87,6 +87,7 @@ export const ERROR_CODES = {
 
   // Stash
   STASH_LIST_FAILED: "stash_list_failed",
+  STASH_PUSH_FAILED: "stash_push_failed",
 
   // Fetch
   // (uses UNSAFE_REMOTE_TOKEN and UNSAFE_REF_TOKEN)
