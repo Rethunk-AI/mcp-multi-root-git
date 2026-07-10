@@ -23,6 +23,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema` (single-repo: `workspaceRoot` + `format`), `RootPickSchema` (fan-out: polymorphic `root` + `format`), `MAX_INVENTORY_ROOTS_DEFAULT`, **`MAX_ROOT_PATHS`** (256) |
 | [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
 | [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `isContentEquivalentlyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `inferRemoteFromUpstream`; `conflictPaths` |
+| [`src/server/error-codes.ts`](src/server/error-codes.ts) | `ERROR_CODES` (centralised error-code registry — the exact `error` field strings on the wire), `ErrorCode` type |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below; `selectToolRegistrars(envValue, registrars)` — pure parse/filter fn for `RETHUNK_GIT_TOOLS` (reads env inside `registerRethunkGitTools`, not at module scope); `TOOL_REGISTRARS` ordered array |
 | [`src/server/git-status-tool.ts`](src/server/git-status-tool.ts) | `git_status` |
 | [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `git_inventory` |
@@ -34,6 +35,9 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/git-show-tool.ts`](src/server/git-show-tool.ts) | `git_show` — inspect commit message + diff or file content at a ref; read-only |
 | [`src/server/git-stash-tool.ts`](src/server/git-stash-tool.ts) | `git_stash_list`, `git_stash_apply` |
 | [`src/server/git-fetch-tool.ts`](src/server/git-fetch-tool.ts) | `git_fetch` — fetch remote refs without touching the working tree |
+| [`src/server/git-blame-tool.ts`](src/server/git-blame-tool.ts) | `git_blame` — file authorship, run-length grouped by contiguous same-commit line runs; read-only |
+| [`src/server/git-branch-list-tool.ts`](src/server/git-branch-list-tool.ts) | `git_branch_list` — list local (and optionally remote-tracking) branches; read-only |
+| [`src/server/git-reflog-tool.ts`](src/server/git-reflog-tool.ts) | `git_reflog` — show the reflog for a ref; read-only |
 | [`src/server/git-tag-tool.ts`](src/server/git-tag-tool.ts) | `git_tag` — create/delete annotated or lightweight tags |
 | [`src/server/git-worktree-tool.ts`](src/server/git-worktree-tool.ts) | `git_worktree_list`, `git_worktree_add`, `git_worktree_remove` |
 | [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating; exports `PushReport`, `runPushAfter` |
