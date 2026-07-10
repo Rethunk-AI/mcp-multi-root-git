@@ -1,11 +1,19 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
+
+// NOTE(wave-2 integrator): this code belongs in the centralized ERROR_CODES
+// registry (src/server/error-codes.ts) alongside STASH_LIST_FAILED, but this
+// worker's task fence scoped edits to only git-stash-tool.ts + its test file.
+// Please add `STASH_PUSH_FAILED: "stash_push_failed"` to error-codes.ts and
+// swap this local constant for `ERROR_CODES.STASH_PUSH_FAILED`.
+const STASH_PUSH_FAILED = "stash_push_failed";
 
 // ---------------------------------------------------------------------------
 // git_stash_list
@@ -135,6 +143,109 @@ export function registerGitStashApplyTool(server: FastMCP): void {
         return `# Stash ${verb}\n✓ ${stashRef}  → ${verb}`;
       }
       return `# Stash ${verb} (failed)\n✗ ${stashRef}\n\n\`\`\`\n${output}\n\`\`\``;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// git_stash_push
+// ---------------------------------------------------------------------------
+
+export function registerGitStashPushTool(server: FastMCP): void {
+  server.addTool({
+    name: "git_stash_push",
+    description:
+      "Stash working-tree changes (`git stash push`). Optional `message` for the stash subject, " +
+      "`includeUntracked` (-u) to also stash untracked files, `keepIndex` (--keep-index) to leave " +
+      "staged changes in the index, and `paths` to scope the stash to specific files. " +
+      "Returns the new stash ref/SHA, or `stashed: false` if there was nothing to stash.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    parameters: WorkspacePickSchema.extend({
+      message: z.string().optional().describe("Stash subject message (`git stash push -m <message>`)."),
+      includeUntracked: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Include untracked files in the stash (`git stash push -u`)."),
+      keepIndex: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Keep staged changes in the index after stashing (`git stash push --keep-index`).",
+        ),
+      paths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Scope the stash to specific paths, relative to git root (must resolve within repo root).",
+        ),
+    }),
+    execute: async (args) => {
+      const pre = requireSingleRepo(server, args);
+      if (!pre.ok) return jsonRespond(pre.error);
+      const { gitTop } = pre;
+
+      // Union + dedup + confine paths within the repo (escaping-attempt rejected).
+      const rawPaths: string[] = [];
+      if (Array.isArray(args.paths)) {
+        for (const p of args.paths as string[]) {
+          if (typeof p === "string" && p.trim()) {
+            rawPaths.push(p.trim());
+          }
+        }
+      }
+      const dedupedPaths = [...new Set(rawPaths)];
+      for (const p of dedupedPaths) {
+        const resolved = resolvePathForRepo(p, gitTop);
+        if (!assertRelativePathUnderTop(p, resolved, gitTop)) {
+          return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: p });
+        }
+      }
+
+      const stashArgs: string[] = ["stash", "push"];
+      if (args.includeUntracked) stashArgs.push("-u");
+      if (args.keepIndex) stashArgs.push("--keep-index");
+      if (args.message) stashArgs.push("-m", args.message);
+      if (dedupedPaths.length > 0) stashArgs.push("--", ...dedupedPaths);
+
+      const r = await spawnGitAsync(gitTop, stashArgs);
+      const output = (r.stdout || r.stderr).trim();
+
+      if (!r.ok) {
+        return jsonRespond({
+          error: STASH_PUSH_FAILED,
+          detail: output,
+        });
+      }
+
+      // `git stash push` exits 0 with this message when there is nothing to stash.
+      if (/no local changes to save/i.test(output)) {
+        if (args.format === "json") {
+          return jsonRespond({ stashed: false, reason: "no_local_changes" });
+        }
+        return "# Stash push\n_(no local changes to save)_";
+      }
+
+      const shaResult = await spawnGitAsync(gitTop, ["rev-parse", "stash@{0}"]);
+      const sha = shaResult.ok ? shaResult.stdout.trim() : "";
+      const subjectResult = await spawnGitAsync(gitTop, ["log", "-1", "--format=%s", "stash@{0}"]);
+      const message = subjectResult.ok ? subjectResult.stdout.trim() : "";
+
+      if (args.format === "json") {
+        return jsonRespond({
+          stashed: true,
+          ref: "stash@{0}",
+          sha,
+          message,
+        });
+      }
+
+      return `# Stash pushed\n✓ stash@{0} — ${message}${sha ? `  (\`${sha}\`)` : ""}`;
     },
   });
 }
