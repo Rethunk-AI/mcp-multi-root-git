@@ -4,7 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/%40rethunk%2Fmcp-multi-root-git.svg)](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**git** tools over MCP: status, multi-root inventory, `HEAD` parity, presets, logs, structured and raw diff views, commit inspection, fetch, stash, tag, batch commit, push, merge, cherry-pick, worktrees, soft-reset, blame, branch listing, and reflog. **Install and MCP client wiring:** **[docs/install.md](docs/install.md)** only — do not duplicate those steps elsewhere.
+**git** tools over MCP: status, multi-root inventory, `HEAD` parity, presets, logs, content search, structured and raw diff views, commit inspection, conflict inspection, fetch, remotes, describe, stash, tag, branch create/delete/rename, batch commit, push, merge, cherry-pick, revert, worktrees, soft-reset, blame, branch listing, and reflog. **Install and MCP client wiring:** **[docs/install.md](docs/install.md)** only — do not duplicate those steps elsewhere.
 
 **Repository:** [github.com/Rethunk-AI/mcp-multi-root-git](https://github.com/Rethunk-AI/mcp-multi-root-git) · **npmjs (manual releases):** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) · **GitHub Packages (CI on each tag):** [`@rethunk-ai/mcp-multi-root-git`](https://github.com/Rethunk-AI/mcp-multi-root-git/packages) — see [docs/install.md](docs/install.md) and [HUMANS.md](HUMANS.md) Publishing.
 
@@ -28,7 +28,7 @@
 All MCP tool parameters are published as JSON Schema (draft 2020-12) documents in the **[`schemas/`](schemas/)** directory. Tools and validators can use these schemas to validate tool input arguments without reading source code.
 
 **Schema files:**
-- `schemas/index.json` — Index of all 20 tool schemas with file paths
+- `schemas/index.json` — Index of all 30 tool schemas with file paths
 - `schemas/{tool_name}.json` — Individual schema for each tool (e.g., `schemas/batch_commit.json`, `schemas/git_status.json`)
 
 For programmatic use, read `schemas/index.json` to discover available tools and their schema files.
