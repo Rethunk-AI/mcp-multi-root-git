@@ -183,7 +183,8 @@ export function registerGitFetchTool(server: FastMCP): void {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch });
       }
 
-      // Build base fetch args (without --porcelain for now)
+      // Build the plain (non-porcelain) fetch args — used below as the fallback
+      // path when the porcelain attempt reports --porcelain is unsupported.
       const baseArgs: string[] = ["fetch"];
 
       if (prune) {
