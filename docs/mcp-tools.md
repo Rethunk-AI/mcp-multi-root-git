@@ -344,6 +344,8 @@ Pass a `root` array when the same parity pair should be checked across sibling c
 
 The response contains one **`parity[]`** entry per resolved git toplevel. An array `root` cannot be combined with `preset`; pass inline `pairs` for sibling-clone batches.
 
+**Diff-family filtering divergence (intentional):** `git_diff_summary` filters client-side via a `fileFilter` glob applied to the summarized file list; `git_diff` and `git_show` instead take server-confined `paths[]` (each entry validated with `resolvePathForRepo`/`assertRelativePathUnderTop` and rejected with `path_escapes_repo` on escape). Don't expect glob syntax on `git_diff`/`git_show` `paths[]`, and don't expect path confinement guarantees on `git_diff_summary`'s `fileFilter`.
+
 ### `git_diff_summary` — parameters
 
 | Parameter | Type | Default | Notes |
@@ -393,8 +395,8 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. |
-| `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. |
+| `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
+| `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
 | `path` | string | — | Optional single file path to scope the diff. Confined to the repo (`path_escapes_repo` on escape). |
 | `paths` | string[] | — | Multiple file paths to scope the diff; unioned with `path` (deduped). Each confined to the repo. |
 | `unified` | integer | — | Context lines around each change (passed as `-U<n>`, 0–100). Omit for git's default (3). |
@@ -428,7 +430,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. |
+| `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
 | `path` | string | Optional single path. When provided, the response shows that path's content at `ref` instead of the full commit diff. |
 | `stat` | boolean | When `true`, runs `git show --stat` — commit message plus per-file diffstat, no full patch (`statOutput` in JSON). |
 | `paths` | string[] | Filter the shown patch/stat to these repo-relative paths; unioned with `path`. Each confined to the repo. |
@@ -525,9 +527,9 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
 | `path` | string | — | **Required.** Repo-relative file to annotate. Confined to the repo (`path_escapes_repo` on escape). |
-| `ref` | string | working tree | Commit-ish to blame at. Validated as a safe ref token. |
-| `startLine` | int | — | Start of a line range (`-L`). Requires `endLine`. |
-| `endLine` | int | — | End of the line range, inclusive. Requires `startLine`. |
+| `ref` | string | working tree | Commit-ish to blame at. Validated as a safe ref token. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
+| `startLine` | int | — | Start of a line range (`-L`). Requires `endLine`. Max `1000000`. |
+| `endLine` | int | — | End of the line range, inclusive. Requires `startLine`. Max `1000000`. |
 | `maxLines` | int | `2000` | Max blamed lines to return (1–10000). Excess lines are dropped and signalled via `truncated`/`omittedLines`. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
@@ -655,7 +657,7 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged; or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel. |
+| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged (`from`/`to` each max `1000000`); or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel. |
 | `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. |
 | `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
 | `workspaceRoot` | string | Repo path. Default: first MCP root / cwd. |
@@ -934,7 +936,7 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `index` | int | `0` | Stash index to apply/pop (`stash@{index}`). |
+| `index` | int | `0` | Stash index to apply/pop (`stash@{index}`). Max `10000`. |
 | `pop` | boolean | `false` | When `true`, runs `git stash pop` instead of `git stash apply`. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
