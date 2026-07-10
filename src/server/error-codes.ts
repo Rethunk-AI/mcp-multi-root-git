@@ -65,8 +65,19 @@ export const ERROR_CODES = {
   // Log
   GIT_LOG_FAILED: "git_log_failed",
 
+  // Grep
+  GIT_GREP_FAILED: "git_grep_failed",
+
   // Show
   GIT_SHOW_FAILED: "git_show_failed",
+
+  // Remote
+  REMOTE_LIST_FAILED: "remote_list_failed",
+
+  // Describe
+  DESCRIBE_FAILED: "describe_failed",
+  NO_TAG_FOUND: "no_tag_found",
+  UNSAFE_MATCH_PATTERN: "unsafe_match_pattern",
 
   // Blame
   GIT_BLAME_FAILED: "git_blame_failed",
