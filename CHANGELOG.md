@@ -2,6 +2,32 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+Seven new tools (content search, conflict inspection, remote/describe read access, branch lifecycle, revert, and stash push), plus argv-safety and range-validation fixes across the diff/blame/show/diff-summary family. Additive JSON changes only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
+
+### Added
+
+- **`git_grep`** — read-only fan-out content search (`git grep -n -e <pattern>`) across one or more roots. Optional `ref` searches the tree at a commit/branch instead of the working tree; `paths` scopes the search (confined to the repo root); `ignoreCase`/`filesOnly`/`maxMatches` tune output. A clean "no matches" `git grep` exit is treated as success with an empty result set, not an error. Pickaxe/history content search (`-S`/`-G`) is out of scope.
+- `git_conflicts` — read-only inspection of unresolved merge conflicts after `git_merge`/`git_cherry_pick` reports them: detects the in-progress operation (merge/cherry-pick/revert/rebase) and parses each conflicted file's `<<<<<<</|||||||/=======/>>>>>>>` markers into structured ours/theirs/base hunks with line numbers and branch labels, so an agent can resolve conflicts without a raw file read. `withHunks`/`maxLinesPerFile` control cost.
+- `git_remote` — list configured git remotes (`git remote -v`), returning name/fetchUrl/pushUrl (pushUrl omitted when identical to fetchUrl).
+- `git_describe` — describe a commit relative to the nearest reachable tag (`git describe --long`), returning parsed tag/distance/sha.
+- `git_branch` — create, delete, or rename a local branch (`action: "create"|"delete"|"rename"`), with protected-branch rejection on every action (source, target, and rename endpoints) and `force` for `-D` deletes of unmerged branches.
+- `git_revert` — creates new commit(s) that undo one or more source commits (`git revert`), applied in listed order; never rewrites history, unlike `git_reset_soft`. Refuses on a dirty tree; on conflict aborts and leaves the tree clean, reporting structured conflict paths. `noCommit` stages the revert(s) without committing; `mainline` selects the parent when reverting a merge commit.
+- **`git_stash_push`** — stash working-tree changes (`git stash push`). Optional `message`, `includeUntracked` (-u), `keepIndex` (--keep-index), and `paths` to scope the stash. Returns the new stash ref/SHA/subject, or `{ stashed: false, reason: "no_local_changes" }` when there is nothing to stash.
+
+### Fixed
+
+- **`git_diff`/`git_blame`/`git_show`** — `base`/`head`/`ref` now accept ancestor notation (`HEAD~3`, `main^2`, `v1.0.0~2^1`) consistently across all three tools via a shared `isSafeGitCommitIsh` validator. Previously `git_diff` and `git_blame` rejected the documented `HEAD~3` example outright; `git_show` accepted ancestor notation but via a looser validator that lacked the `..`/`.lock`/`//`/`@{` guards the other tools had (now hardened to match).
+- **`git_diff_summary`/`git_cherry_pick` range endpoints** — `isSafeGitRangeToken` validated each side of an `A..B`/`A...B` range with the base ref-token check (no `~`/`^` support), so `git_diff_summary`'s own documented example `"HEAD~3..HEAD"` was rejected with `unsafe_range_token`. Endpoints (and the no-range single-ref fallthrough) now validate with `isSafeGitCommitIsh`; `git_diff_summary` also dropped its separate ad hoc range-parsing regex in favor of the shared validator.
+- `git_fetch` — corrected a stale comment describing the non-porcelain fallback path as pending work; no behavior change.
+
+### Changed
+
+- CI now runs each gate exactly once (build/lint/typecheck/schema-check/test were previously duplicated between `bun run ci` and separate CI steps); the local `ci` script gained the `schema:individual:check` step CI already ran, so the two stay in sync.
+- `git_fetch` moved from the read-only registrar group to the head of the mutating group (it updates refs) — the registration order now matches `tool-parameter-schemas.ts` and the docs table, which already classified it as mutating.
+- Added test coverage for `presets-resource.ts`'s `rethunk-git://presets` resource load handler (valid preset, invalid JSON, missing file) — it previously had none.
+
 ## [3.1.0] — 2026-07-04
 
 Token-cost reduction in `batch_commit` output. JSON format version bumped **4 → 5**.
