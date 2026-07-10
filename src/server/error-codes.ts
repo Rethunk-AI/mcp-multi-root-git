@@ -49,6 +49,12 @@ export const ERROR_CODES = {
   // Branch list
   BRANCH_LIST_FAILED: "branch_list_failed",
 
+  // Branch create/delete/rename
+  BRANCH_CREATE_FAILED: "branch_create_failed",
+  BRANCH_DELETE_FAILED: "branch_delete_failed",
+  BRANCH_RENAME_FAILED: "branch_rename_failed",
+  MISSING_NEW_NAME: "missing_new_name",
+
   // Commit / stage
   COMMIT_FAILED: "commit_failed",
   STAGE_FAILED: "stage_failed",
