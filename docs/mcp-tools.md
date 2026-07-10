@@ -242,7 +242,9 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"4"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"5"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+
+v5 changes from v4: `batch_commit` successful `results[*]` entries drop the echoed `message`/`files` (the caller already supplied both in the request); failing entries still carry `message`/`files` alongside `error`/`detail` for diagnosis.
 
 v4 changes from v3: `git_blame` output is run-length grouped (`lines[]` with per-line commit metadata → `groups[]` with metadata once per contiguous same-commit run); `git_diff_summary` per-file `truncated` is omitted when `false`.
 
