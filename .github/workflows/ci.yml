@@ -27,22 +27,25 @@ jobs:
     - name: Install dependencies
       run: bun install --frozen-lockfile
 
-    - name: Build
-      run: bun run build
-
-    - name: Lint and format check
-      run: bun run ci
-
     - name: Tool schema snapshot check
       run: bun run schema:tools:check
 
     - name: Individual tool schema snapshot check
       run: bun run schema:individual:check
 
+    - name: Lint and format check
+      run: bun run lint
+
+    - name: Typecheck
+      run: bun run typecheck
+
     - name: Unit tests with coverage
       run: |
         bun run test:coverage 2>&1 | tee /tmp/coverage.txt
         bun run coverage:check /tmp/coverage.txt 80
+
+    - name: Build
+      run: bun run build
 
     - name: Assert Node.js version
       run: node -e "const v=+process.version.slice(1).split('.')[0]; if(v<22)process.exit(1)"
