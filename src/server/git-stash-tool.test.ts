@@ -4,10 +4,14 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
+import {
+  registerGitStashApplyTool,
+  registerGitStashListTool,
+  registerGitStashPushTool,
+} from "./git-stash-tool.js";
 import {
   captureTool,
   cleanupTmpPaths,
@@ -160,5 +164,84 @@ describe("git_stash_apply execute handler", () => {
     const text = await run({ workspaceRoot: dir, index: 0 });
     expect(text).toContain("stash@{0}");
     expect(text).toContain("applied");
+  });
+});
+
+describe("git_stash_push execute handler", () => {
+  test("stashes dirty tracked changes and cleans the working tree", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "seed.txt"), "seed\nmodified\n");
+
+    const run = captureTool(registerGitStashPushTool);
+    const text = await run({ workspaceRoot: dir, format: "json", message: "wip: pushed" });
+    const parsed = JSON.parse(text) as {
+      stashed: boolean;
+      ref: string;
+      sha: string;
+      message: string;
+    };
+
+    expect(parsed.stashed).toBe(true);
+    expect(parsed.ref).toBe("stash@{0}");
+    expect(parsed.sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(parsed.message).toContain("wip: pushed");
+
+    // Working tree must be clean after a successful stash push.
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+
+    const listRun = captureTool(registerGitStashListTool);
+    const listText = await listRun({ workspaceRoot: dir, format: "json" });
+    const listParsed = JSON.parse(listText) as { stashes: unknown[] };
+    expect(listParsed.stashes).toHaveLength(1);
+  });
+
+  test("reports no_local_changes when the working tree is clean", async () => {
+    const dir = makeRepo();
+
+    const run = captureTool(registerGitStashPushTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as { stashed: boolean; reason: string };
+
+    expect(parsed.stashed).toBe(false);
+    expect(parsed.reason).toBe("no_local_changes");
+  });
+
+  test("path escape via paths array returns path_escapes_repo", async () => {
+    const dir = makeRepo();
+
+    const run = captureTool(registerGitStashPushTool);
+    const text = await run({
+      workspaceRoot: dir,
+      paths: ["../../etc/passwd"],
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string; path: string };
+
+    expect(parsed.error).toBe("path_escapes_repo");
+    expect(parsed.path).toBe("../../etc/passwd");
+  });
+
+  test("includeUntracked controls whether untracked files are stashed", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "untracked.txt"), "new file\n");
+
+    // Without the flag, untracked-only changes are not stashed at all.
+    const withoutFlag = captureTool(registerGitStashPushTool);
+    const textWithout = await withoutFlag({ workspaceRoot: dir, format: "json" });
+    const parsedWithout = JSON.parse(textWithout) as { stashed: boolean; reason?: string };
+    expect(parsedWithout.stashed).toBe(false);
+    expect(parsedWithout.reason).toBe("no_local_changes");
+    expect(existsSync(join(dir, "untracked.txt"))).toBe(true);
+
+    // With includeUntracked, the file is picked up and removed from the tree.
+    const withFlag = captureTool(registerGitStashPushTool);
+    const textWith = await withFlag({
+      workspaceRoot: dir,
+      format: "json",
+      includeUntracked: true,
+    });
+    const parsedWith = JSON.parse(textWith) as { stashed: boolean };
+    expect(parsedWith.stashed).toBe(true);
+    expect(existsSync(join(dir, "untracked.txt"))).toBe(false);
   });
 });
