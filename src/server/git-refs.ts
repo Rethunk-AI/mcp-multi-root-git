@@ -81,6 +81,25 @@ export function isSafeGitAncestorRef(s: string): boolean {
 }
 
 /**
+ * Same as `isSafeGitRefToken`, but also accepts a trailing run of ancestor
+ * operators (`~N` / `^N`, mixable and order-independent, e.g. `HEAD~3`,
+ * `main^2`, `v1.0.0~2^1`) as used by commit-ish arguments to `git diff`,
+ * `git blame`, and `git show`. The base name (everything before the first
+ * ancestor operator) must itself pass `isSafeGitRefToken` — so all of that
+ * function's guards (leading `-`, `..`, `.lock` suffix, `//`, `@{`,
+ * whitespace, `:`, etc.) still apply. Ancestor operators are only permitted
+ * as a trailing suffix run, not embedded mid-name (e.g. `a~b` is rejected).
+ */
+export function isSafeGitCommitIsh(s: string): boolean {
+  const t = s.trim();
+  if (t.length === 0 || t.length > 256) return false;
+  const suffixMatch = /(?:[~^][0-9]*)+$/.exec(t);
+  const base = suffixMatch ? t.slice(0, suffixMatch.index) : t;
+  if (base.length === 0) return false;
+  return isSafeGitRefToken(base);
+}
+
+/**
  * Same as `isSafeGitRefToken` but also allows the `A..B` / `A...B` range forms
  * used by `git log` / `git cherry-pick`. Splits once and validates each side.
  */

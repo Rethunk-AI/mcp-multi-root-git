@@ -13,6 +13,7 @@ import {
   isContentEquivalentlyMergedInto,
   isProtectedBranch,
   isSafeGitAncestorRef,
+  isSafeGitCommitIsh,
   isSafeGitRangeToken,
   isSafeGitRefToken,
 } from "./git-refs.js";
@@ -219,5 +220,66 @@ describe("isSafeGitAncestorRef", () => {
 
   test("rejects string longer than 256 chars", () => {
     expect(isSafeGitAncestorRef("a".repeat(257))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSafeGitCommitIsh
+// ---------------------------------------------------------------------------
+
+describe("isSafeGitCommitIsh", () => {
+  test("accepts HEAD~N and mixed/chained ancestor notation", () => {
+    expect(isSafeGitCommitIsh("HEAD~3")).toBe(true);
+    expect(isSafeGitCommitIsh("main^2")).toBe(true);
+    expect(isSafeGitCommitIsh("v1.0.0~2^1")).toBe(true);
+  });
+
+  test("accepts plain refs", () => {
+    expect(isSafeGitCommitIsh("main")).toBe(true);
+    expect(isSafeGitCommitIsh("feature/auth")).toBe(true);
+    expect(isSafeGitCommitIsh("HEAD")).toBe(true);
+    expect(isSafeGitCommitIsh("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")).toBe(true);
+  });
+
+  test("rejects range tokens (a..b)", () => {
+    expect(isSafeGitCommitIsh("a..b")).toBe(false);
+  });
+
+  test("rejects leading dash", () => {
+    expect(isSafeGitCommitIsh("-x")).toBe(false);
+  });
+
+  test("rejects .lock suffix", () => {
+    expect(isSafeGitCommitIsh("x.lock")).toBe(false);
+  });
+
+  test("rejects double-slash", () => {
+    expect(isSafeGitCommitIsh("a//b")).toBe(false);
+  });
+
+  test("rejects reflog @{ notation", () => {
+    expect(isSafeGitCommitIsh("a@{1}")).toBe(false);
+  });
+
+  test("rejects whitespace", () => {
+    expect(isSafeGitCommitIsh("a b")).toBe(false);
+  });
+
+  test("rejects colon (pathspec separator)", () => {
+    expect(isSafeGitCommitIsh("a:b")).toBe(false);
+  });
+
+  test("rejects ancestor operators embedded mid-name", () => {
+    expect(isSafeGitCommitIsh("a~b")).toBe(false);
+  });
+
+  test("rejects bare ancestor operators with no base name", () => {
+    expect(isSafeGitCommitIsh("~3")).toBe(false);
+    expect(isSafeGitCommitIsh("^1")).toBe(false);
+  });
+
+  test("rejects empty string and over-length tokens", () => {
+    expect(isSafeGitCommitIsh("")).toBe(false);
+    expect(isSafeGitCommitIsh("a".repeat(257))).toBe(false);
   });
 });
