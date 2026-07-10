@@ -101,19 +101,22 @@ export function isSafeGitCommitIsh(s: string): boolean {
 
 /**
  * Same as `isSafeGitRefToken` but also allows the `A..B` / `A...B` range forms
- * used by `git log` / `git cherry-pick`. Splits once and validates each side.
+ * used by `git log` / `git cherry-pick` / `git_diff_summary`. Splits once and
+ * validates each side (and the no-range single-ref fallthrough) with
+ * `isSafeGitCommitIsh`, so ancestor notation (`HEAD~3`, `main^2`) is accepted
+ * on either endpoint, e.g. `HEAD~3..HEAD` or `main...feature^2`.
  */
 export function isSafeGitRangeToken(s: string): boolean {
   const t = s.trim();
   if (t.includes("...")) {
     const parts = t.split("...");
-    return parts.length === 2 && parts.every((p) => isSafeGitRefToken(p));
+    return parts.length === 2 && parts.every((p) => isSafeGitCommitIsh(p));
   }
   if (t.includes("..")) {
     const parts = t.split("..");
-    return parts.length === 2 && parts.every((p) => isSafeGitRefToken(p));
+    return parts.length === 2 && parts.every((p) => isSafeGitCommitIsh(p));
   }
-  return isSafeGitRefToken(t);
+  return isSafeGitCommitIsh(t);
 }
 
 // ---------------------------------------------------------------------------

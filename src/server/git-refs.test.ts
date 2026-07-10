@@ -174,6 +174,11 @@ describe("isSafeGitRangeToken", () => {
     expect(isSafeGitRangeToken("v1.0.0..v1.1.0")).toBe(true);
   });
 
+  test("accepts ancestor notation on either endpoint", () => {
+    expect(isSafeGitRangeToken("HEAD~3..HEAD")).toBe(true);
+    expect(isSafeGitRangeToken("main...feature^2")).toBe(true);
+  });
+
   test("rejects ranges with more than two endpoints", () => {
     expect(isSafeGitRangeToken("a..b..c")).toBe(false);
   });
@@ -181,6 +186,8 @@ describe("isSafeGitRangeToken", () => {
   test("rejects ranges with invalid endpoint", () => {
     expect(isSafeGitRangeToken("main..-evil")).toBe(false);
     expect(isSafeGitRangeToken("-a..b")).toBe(false);
+    expect(isSafeGitRangeToken("-x..HEAD")).toBe(false);
+    expect(isSafeGitRangeToken("a.lock..b")).toBe(false);
     expect(isSafeGitRangeToken("a..b$(c)")).toBe(false);
     expect(isSafeGitRangeToken("..b")).toBe(false);
     expect(isSafeGitRangeToken("a..")).toBe(false);

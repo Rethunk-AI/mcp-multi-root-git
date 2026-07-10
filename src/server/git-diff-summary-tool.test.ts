@@ -17,8 +17,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
-import { isSafeGitUpstreamToken } from "./git.js";
 import { parseNumstatOutput, registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
+import { isSafeGitRangeToken } from "./git-refs.js";
 import {
   addCommit,
   captureTool,
@@ -126,19 +126,11 @@ function buildDiffArgs(
     return { ok: true, args: ["HEAD"] };
   }
 
-  const separatorMatch = /^(.+?)(\.{2,3})(.+)$/.exec(range.trim());
-  if (separatorMatch) {
-    const [, left, sep, right] = separatorMatch;
-    if (!isSafeGitUpstreamToken(left ?? "") || !isSafeGitUpstreamToken(right ?? "")) {
-      return { ok: false, error: `unsafe_range_token: ${range}` };
-    }
-    return { ok: true, args: [`${left}${sep}${right}`] };
-  }
-
-  if (!isSafeGitUpstreamToken(range.trim())) {
+  const trimmed = range.trim();
+  if (!isSafeGitRangeToken(trimmed)) {
     return { ok: false, error: `unsafe_range_token: ${range}` };
   }
-  return { ok: true, args: [range.trim()] };
+  return { ok: true, args: [trimmed] };
 }
 
 // ---------------------------------------------------------------------------
@@ -379,14 +371,20 @@ describe("buildDiffArgs", () => {
     expect(r).toEqual({ ok: true, args: ["abc1234"] });
   });
 
-  test("tilde in ref and other unsafe tokens are rejected (isSafeGitUpstreamToken failure)", () => {
-    const tildeResult = buildDiffArgs("HEAD~3");
-    expect(tildeResult.ok).toBe(false);
-    if (!tildeResult.ok) expect(tildeResult.error).toContain("unsafe_range_token");
+  test("ancestor notation is accepted, on a single ref and on either range endpoint", () => {
+    expect(buildDiffArgs("HEAD~3")).toEqual({ ok: true, args: ["HEAD~3"] });
+    expect(buildDiffArgs("HEAD~3..HEAD")).toEqual({ ok: true, args: ["HEAD~3..HEAD"] });
+    expect(buildDiffArgs("main...feature^2")).toEqual({ ok: true, args: ["main...feature^2"] });
+  });
 
+  test("unsafe tokens are rejected (isSafeGitRangeToken failure)", () => {
     const injectionResult = buildDiffArgs("; rm -rf /");
     expect(injectionResult.ok).toBe(false);
     if (!injectionResult.ok) expect(injectionResult.error).toContain("unsafe_range_token");
+
+    const rangeInjectionResult = buildDiffArgs("-x..HEAD");
+    expect(rangeInjectionResult.ok).toBe(false);
+    if (!rangeInjectionResult.ok) expect(rangeInjectionResult.error).toContain("unsafe_range_token");
   });
 });
 
@@ -455,6 +453,21 @@ describe("git_diff_summary execute handler", () => {
     const paths = parsed.files.map((f) => f.path);
     expect(paths).toContain("foo.ts");
     expect(paths).not.toContain("bar.md");
+  });
+
+  test("ancestor-notation range (HEAD~1..HEAD) diffs the two commits", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "range.ts", "const v = 1;\n", "chore: initial");
+    addCommit(dir, "range.ts", "const v = 2;\n", "chore: bump");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json", range: "HEAD~1..HEAD" });
+    const parsed = JSON.parse(text) as {
+      range: string;
+      files: Array<{ path: string }>;
+    };
+    expect(parsed.range).toBe("HEAD~1..HEAD");
+    expect(parsed.files.map((f) => f.path)).toContain("range.ts");
   });
 
   test("clean working tree returns empty files array", async () => {

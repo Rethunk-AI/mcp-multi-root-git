@@ -4,7 +4,8 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
+import { isSafeGitRangeToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -194,22 +195,13 @@ function buildDiffArgs(
     return { ok: true, args: ["HEAD"] };
   }
 
-  // Range like "A..B", "A...B", or a single ref
-  // Split on ".." or "..." separators to validate each token
-  const separatorMatch = /^(.+?)(\.{2,3})(.+)$/.exec(range.trim());
-  if (separatorMatch) {
-    const [, left, sep, right] = separatorMatch;
-    if (!isSafeGitUpstreamToken(left ?? "") || !isSafeGitUpstreamToken(right ?? "")) {
-      return { ok: false, error: `unsafe_range_token: ${range}` };
-    }
-    return { ok: true, args: [`${left}${sep}${right}`] };
-  }
-
-  // Single ref
-  if (!isSafeGitUpstreamToken(range.trim())) {
+  // "A..B", "A...B", or a single ref (ancestor notation like "HEAD~3" accepted
+  // on any endpoint) — delegates to the shared range validator.
+  const trimmed = range.trim();
+  if (!isSafeGitRangeToken(trimmed)) {
     return { ok: false, error: `unsafe_range_token: ${range}` };
   }
-  return { ok: true, args: [range.trim()] };
+  return { ok: true, args: [trimmed] };
 }
 
 /** Human-readable label for the range. */
