@@ -4,19 +4,29 @@ import { z } from "zod";
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitBlameTool } from "./git-blame-tool.js";
 import { registerGitBranchListTool } from "./git-branch-list-tool.js";
+import { registerGitBranchTool } from "./git-branch-tool.js";
 import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
+import { registerGitConflictsTool } from "./git-conflicts-tool.js";
+import { registerGitDescribeTool } from "./git-describe-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitDiffTool } from "./git-diff-tool.js";
 import { registerGitFetchTool } from "./git-fetch-tool.js";
+import { registerGitGrepTool } from "./git-grep-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
 import { registerGitReflogTool } from "./git-reflog-tool.js";
+import { registerGitRemoteTool } from "./git-remote-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
+import { registerGitRevertTool } from "./git-revert-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
-import { registerGitStashApplyTool, registerGitStashListTool } from "./git-stash-tool.js";
+import {
+  registerGitStashApplyTool,
+  registerGitStashListTool,
+  registerGitStashPushTool,
+} from "./git-stash-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
 import { registerGitTagTool } from "./git-tag-tool.js";
 import {
@@ -32,12 +42,16 @@ export const FAN_OUT_ROOT_TOOLS = [
   "git_parity",
   "list_presets",
   "git_log",
+  "git_grep",
 ] as const;
 
 export const READ_ONLY_SINGLE_REPO_TOOLS = [
   "git_diff_summary",
   "git_diff",
   "git_show",
+  "git_conflicts",
+  "git_remote",
+  "git_describe",
   "git_worktree_list",
   "git_stash_list",
   "git_blame",
@@ -52,10 +66,13 @@ export const MUTATING_TOOLS = [
   "git_merge",
   "git_cherry_pick",
   "git_reset_soft",
+  "git_revert",
   "git_tag",
+  "git_branch",
   "git_worktree_add",
   "git_worktree_remove",
   "git_stash_apply",
+  "git_stash_push",
 ] as const;
 
 export const ALL_PARAMETER_SCHEMA_TOOLS = [
@@ -105,24 +122,31 @@ export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> 
     registerGitParityTool(server);
     registerListPresetsTool(server);
     registerGitLogTool(server);
+    registerGitGrepTool(server);
     registerGitDiffSummaryTool(server);
     registerGitDiffTool(server);
     registerGitShowTool(server);
+    registerGitConflictsTool(server);
+    registerGitRemoteTool(server);
+    registerGitDescribeTool(server);
     registerGitWorktreeListTool(server);
     registerGitStashListTool(server);
-    registerGitFetchTool(server);
     registerGitBlameTool(server);
     registerGitBranchListTool(server);
     registerGitReflogTool(server);
+    registerGitFetchTool(server);
     registerBatchCommitTool(server);
     registerGitPushTool(server);
     registerGitMergeTool(server);
     registerGitCherryPickTool(server);
     registerGitResetSoftTool(server);
+    registerGitRevertTool(server);
     registerGitTagTool(server);
+    registerGitBranchTool(server);
     registerGitWorktreeAddTool(server);
     registerGitWorktreeRemoveTool(server);
     registerGitStashApplyTool(server);
+    registerGitStashPushTool(server);
   });
 
   return Object.fromEntries(

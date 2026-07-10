@@ -158,7 +158,10 @@ export function registerGitStashPushTool(server: FastMCP): void {
       idempotentHint: false,
     },
     parameters: WorkspacePickSchema.extend({
-      message: z.string().optional().describe("Stash subject message (`git stash push -m <message>`)."),
+      message: z
+        .string()
+        .optional()
+        .describe("Stash subject message (`git stash push -m <message>`)."),
       includeUntracked: z
         .boolean()
         .optional()

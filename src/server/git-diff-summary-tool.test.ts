@@ -384,7 +384,8 @@ describe("buildDiffArgs", () => {
 
     const rangeInjectionResult = buildDiffArgs("-x..HEAD");
     expect(rangeInjectionResult.ok).toBe(false);
-    if (!rangeInjectionResult.ok) expect(rangeInjectionResult.error).toContain("unsafe_range_token");
+    if (!rangeInjectionResult.ok)
+      expect(rangeInjectionResult.error).toContain("unsafe_range_token");
   });
 });
 

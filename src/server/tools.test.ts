@@ -12,7 +12,7 @@ import { registerRethunkGitTools, selectToolRegistrars } from "./tools.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** All 23 canonical tool names, in registration order, verified from source. */
+/** All 30 canonical tool names, in registration order, verified from source. */
 const ALL_TOOL_NAMES: string[] = [
   // Read-only
   "git_status",
@@ -20,25 +20,32 @@ const ALL_TOOL_NAMES: string[] = [
   "git_parity",
   "list_presets",
   "git_log",
+  "git_grep",
   "git_diff_summary",
   "git_diff",
   "git_show",
+  "git_conflicts",
+  "git_remote",
+  "git_describe",
   "git_worktree_list",
   "git_stash_list",
-  "git_fetch",
   "git_blame",
   "git_branch_list",
   "git_reflog",
   // Mutating
+  "git_fetch",
   "batch_commit",
   "git_push",
   "git_merge",
   "git_cherry_pick",
   "git_reset_soft",
+  "git_revert",
   "git_tag",
+  "git_branch",
   "git_worktree_add",
   "git_worktree_remove",
   "git_stash_apply",
+  "git_stash_push",
 ] as const;
 
 /** Minimal registrar stub used for pure unit tests of selectToolRegistrars. */
@@ -65,7 +72,7 @@ describe("selectToolRegistrars", () => {
       "git_push,git_status,batch_commit,git_push",
       STUB_REGISTRARS,
     );
-    // canonical order: git_status (0) < batch_commit (14) < git_push (15)
+    // canonical order: git_status (0) < batch_commit (18) < git_push (19)
     expect(selected.map((r) => r.name)).toEqual(["git_status", "batch_commit", "git_push"]);
     expect(unknown).toEqual([]);
   });
@@ -97,7 +104,7 @@ describe("selectToolRegistrars", () => {
 // ---------------------------------------------------------------------------
 
 describe("registerRethunkGitTools", () => {
-  test("unset RETHUNK_GIT_TOOLS → all 23 tools registered", () => {
+  test("unset RETHUNK_GIT_TOOLS → all 30 tools registered", () => {
     const savedEnv = process.env.RETHUNK_GIT_TOOLS;
     delete process.env.RETHUNK_GIT_TOOLS;
     try {
