@@ -17,11 +17,11 @@
       ]
     },
     "base": {
-      "description": "Base ref (e.g. \"main\", \"HEAD~3\"). Omit for unstaged changes.",
+      "description": "Base ref (e.g. \"main\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Omit for unstaged changes.",
       "type": "string"
     },
     "head": {
-      "description": "Head ref (e.g. \"feature-branch\"). Defaults to HEAD. Used only when `base` is set.",
+      "description": "Head ref (e.g. \"feature-branch\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Defaults to HEAD. Used only when `base` is set.",
       "type": "string"
     },
     "path": {

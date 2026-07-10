@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_branch",
+  "description": "Parameter schema for the 'git_branch' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Repo path. Default: first MCP root / cwd.",
+      "type": "string"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "create",
+        "delete",
+        "rename"
+      ],
+      "description": "Which branch operation to perform."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Branch name to create/delete, or the existing branch name for rename."
+    },
+    "from": {
+      "description": "Commit-ish to base a new branch on (create only). Default: HEAD.",
+      "type": "string"
+    },
+    "newName": {
+      "description": "New branch name (required for rename).",
+      "type": "string"
+    },
+    "force": {
+      "default": false,
+      "description": "Force-delete an unmerged branch (`git branch -D`). Delete only; never overrides protected-branch rejection.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "format",
+    "action",
+    "name",
+    "force"
+  ],
+  "additionalProperties": false
+}

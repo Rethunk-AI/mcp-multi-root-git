@@ -22,7 +22,7 @@
       "description": "Repo-relative path to the file to blame."
     },
     "ref": {
-      "description": "Optional commit-ish (SHA, branch, tag) to blame at.",
+      "description": "Optional commit-ish (SHA, branch, tag) to blame at. Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\").",
       "type": "string"
     },
     "startLine": {

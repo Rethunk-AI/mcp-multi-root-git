@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_grep",
+  "description": "Parameter schema for the 'git_grep' MCP tool.",
+  "type": "object",
+  "properties": {
+    "root": {
+      "description": "Repo path, array of paths, or \"*\" for all MCP roots.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "string",
+          "const": "*"
+        }
+      ]
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "pattern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Search pattern (basic regex), always passed as `-e <pattern>`."
+    },
+    "ref": {
+      "description": "Commit/branch/tag to search the tree at, instead of the working tree. Must be a safe ref token.",
+      "type": "string"
+    },
+    "paths": {
+      "description": "Limit search to these paths (must resolve within the repo root).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ignoreCase": {
+      "default": false,
+      "description": "Case-insensitive match (`-i`).",
+      "type": "boolean"
+    },
+    "filesOnly": {
+      "default": false,
+      "description": "List matching file paths only (`-l`), omitting line/text detail.",
+      "type": "boolean"
+    },
+    "maxMatches": {
+      "default": 200,
+      "description": "Max matches (or files, when `filesOnly`) per root (hard cap 1000, default 200).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    }
+  },
+  "required": [
+    "format",
+    "pattern",
+    "ignoreCase",
+    "filesOnly",
+    "maxMatches"
+  ],
+  "additionalProperties": false
+}

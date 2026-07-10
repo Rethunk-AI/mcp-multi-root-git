@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_conflicts",
+  "description": "Parameter schema for the 'git_conflicts' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Repo path. Default: first MCP root / cwd.",
+      "type": "string"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "withHunks": {
+      "default": true,
+      "description": "Parse conflict-marker hunks per file. Set false for just the path list.",
+      "type": "boolean"
+    },
+    "maxLinesPerFile": {
+      "default": 200,
+      "description": "Cap on lines scanned per file before marking `truncated: true`.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000
+    }
+  },
+  "required": [
+    "format",
+    "withHunks",
+    "maxLinesPerFile"
+  ],
+  "additionalProperties": false
+}

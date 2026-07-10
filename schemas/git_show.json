@@ -19,7 +19,7 @@
     "ref": {
       "type": "string",
       "minLength": 1,
-      "description": "Commit reference (SHA, branch, tag, or any git rev-spec)."
+      "description": "Commit reference (SHA, branch, tag, or ancestor notation like \"HEAD~3\", \"main^2\")."
     },
     "path": {
       "description": "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_revert",
+  "description": "Parameter schema for the 'git_revert' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Repo path. Default: first MCP root / cwd.",
+      "type": "string"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "sources": {
+      "minItems": 1,
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Commits to revert, applied in order: SHA, branch/tag name, or ancestor notation (`HEAD~1`)."
+    },
+    "noCommit": {
+      "default": false,
+      "description": "Pass `--no-commit`: apply the revert(s) to the index/working tree without committing (changes are left staged instead).",
+      "type": "boolean"
+    },
+    "mainline": {
+      "description": "Parent number (`-m N`) to diff against — required when reverting a merge commit.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "format",
+    "sources",
+    "noCommit"
+  ],
+  "additionalProperties": false
+}

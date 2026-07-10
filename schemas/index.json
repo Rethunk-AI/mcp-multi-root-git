@@ -30,6 +30,11 @@
       "description": "Parameter schema for the 'git_log' MCP tool."
     },
     {
+      "name": "git_grep",
+      "file": "git_grep.json",
+      "description": "Parameter schema for the 'git_grep' MCP tool."
+    },
+    {
       "name": "git_diff_summary",
       "file": "git_diff_summary.json",
       "description": "Parameter schema for the 'git_diff_summary' MCP tool."
@@ -43,6 +48,21 @@
       "name": "git_show",
       "file": "git_show.json",
       "description": "Parameter schema for the 'git_show' MCP tool."
+    },
+    {
+      "name": "git_conflicts",
+      "file": "git_conflicts.json",
+      "description": "Parameter schema for the 'git_conflicts' MCP tool."
+    },
+    {
+      "name": "git_remote",
+      "file": "git_remote.json",
+      "description": "Parameter schema for the 'git_remote' MCP tool."
+    },
+    {
+      "name": "git_describe",
+      "file": "git_describe.json",
+      "description": "Parameter schema for the 'git_describe' MCP tool."
     },
     {
       "name": "git_worktree_list",
@@ -100,9 +120,19 @@
       "description": "Parameter schema for the 'git_reset_soft' MCP tool."
     },
     {
+      "name": "git_revert",
+      "file": "git_revert.json",
+      "description": "Parameter schema for the 'git_revert' MCP tool."
+    },
+    {
       "name": "git_tag",
       "file": "git_tag.json",
       "description": "Parameter schema for the 'git_tag' MCP tool."
+    },
+    {
+      "name": "git_branch",
+      "file": "git_branch.json",
+      "description": "Parameter schema for the 'git_branch' MCP tool."
     },
     {
       "name": "git_worktree_add",
@@ -118,6 +148,11 @@
       "name": "git_stash_apply",
       "file": "git_stash_apply.json",
       "description": "Parameter schema for the 'git_stash_apply' MCP tool."
+    },
+    {
+      "name": "git_stash_push",
+      "file": "git_stash_push.json",
+      "description": "Parameter schema for the 'git_stash_push' MCP tool."
     }
   ]
 }

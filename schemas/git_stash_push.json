@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_stash_push",
+  "description": "Parameter schema for the 'git_stash_push' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Repo path. Default: first MCP root / cwd.",
+      "type": "string"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "message": {
+      "description": "Stash subject message (`git stash push -m <message>`).",
+      "type": "string"
+    },
+    "includeUntracked": {
+      "default": false,
+      "description": "Include untracked files in the stash (`git stash push -u`).",
+      "type": "boolean"
+    },
+    "keepIndex": {
+      "default": false,
+      "description": "Keep staged changes in the index after stashing (`git stash push --keep-index`).",
+      "type": "boolean"
+    },
+    "paths": {
+      "description": "Scope the stash to specific paths, relative to git root (must resolve within repo root).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "includeUntracked",
+    "keepIndex"
+  ],
+  "additionalProperties": false
+}

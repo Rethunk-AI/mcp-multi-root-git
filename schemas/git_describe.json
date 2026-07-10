@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "@rethunk/mcp-multi-root-git: git_describe",
+  "description": "Parameter schema for the 'git_describe' MCP tool.",
+  "type": "object",
+  "properties": {
+    "workspaceRoot": {
+      "description": "Repo path. Default: first MCP root / cwd.",
+      "type": "string"
+    },
+    "format": {
+      "default": "markdown",
+      "type": "string",
+      "enum": [
+        "markdown",
+        "json"
+      ]
+    },
+    "ref": {
+      "description": "Commit-ish to describe (default: HEAD).",
+      "type": "string"
+    },
+    "tags": {
+      "default": true,
+      "description": "When true (default), pass --tags so lightweight tags are also considered.",
+      "type": "boolean"
+    },
+    "match": {
+      "description": "Optional glob to restrict candidate tags (passed as --match). Safe glob subset only.",
+      "type": "string"
+    },
+    "abbrev": {
+      "description": "Number of hex digits for the abbreviated SHA (passed as --abbrev=<n>).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 40
+    }
+  },
+  "required": [
+    "format",
+    "tags"
+  ],
+  "additionalProperties": false
+}
