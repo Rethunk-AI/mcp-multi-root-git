@@ -8,7 +8,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { registerGitRemoteTool } from "./git-remote-tool.js";
-import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 

@@ -8,7 +8,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { registerGitDescribeTool } from "./git-describe-tool.js";
-import { addCommit, captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
+import {
+  addCommit,
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 

@@ -24,7 +24,12 @@ interface BranchResult {
 
 /** Resolve a ref (branch/commit-ish) to its full SHA; `null` if unresolvable. */
 async function getRefSha(gitTop: string, ref: string): Promise<string | null> {
-  const result = await spawnGitAsync(gitTop, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  const result = await spawnGitAsync(gitTop, [
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `${ref}^{commit}`,
+  ]);
   if (!result.ok) return null;
   const sha = result.stdout.trim();
   return sha === "" ? null : sha;
@@ -62,7 +67,9 @@ export function registerGitBranchTool(server: FastMCP): void {
         .boolean()
         .optional()
         .default(false)
-        .describe("Force-delete an unmerged branch (`git branch -D`). Delete only; never overrides protected-branch rejection."),
+        .describe(
+          "Force-delete an unmerged branch (`git branch -D`). Delete only; never overrides protected-branch rejection.",
+        ),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);

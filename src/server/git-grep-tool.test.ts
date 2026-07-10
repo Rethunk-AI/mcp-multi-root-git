@@ -144,7 +144,9 @@ describe("git_grep_tool", () => {
     const refParsed = JSON.parse(refResult) as {
       results: Array<{ matches?: Array<{ file: string; line: number; text: string }> }>;
     };
-    expect(refParsed.results[0]?.matches).toEqual([{ file: "foo.txt", line: 1, text: "old-needle" }]);
+    expect(refParsed.results[0]?.matches).toEqual([
+      { file: "foo.txt", line: 1, text: "old-needle" },
+    ]);
   });
 
   test("unsafe ref token rejected", async () => {

@@ -87,10 +87,7 @@ export function registerGitDescribeTool(server: FastMCP): void {
       readOnlyHint: true,
     },
     parameters: WorkspacePickSchema.extend({
-      ref: z
-        .string()
-        .optional()
-        .describe("Commit-ish to describe (default: HEAD)."),
+      ref: z.string().optional().describe("Commit-ish to describe (default: HEAD)."),
       tags: z
         .boolean()
         .optional()
