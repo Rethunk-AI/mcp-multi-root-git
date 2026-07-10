@@ -66,7 +66,7 @@ CI and `prepublishOnly` use:
 
 ```bash
 bun run schema:tools:check
-bun run schema:individual
+bun run schema:individual:check
 ```
 
 These artifacts are for inspection, drift checks, code generation, and clients that want offline schema snapshots. Runtime MCP schema discovery remains the source of truth for connected clients.
@@ -76,7 +76,7 @@ These artifacts are for inspection, drift checks, code generation, and clients t
 1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }`.
 2. **Legacy map:** `{ "<preset-name>": { ... } }` with optional top-level `"schemaVersion"` and `"$schema"`.
 
-Invalid JSON or schema errors return **`preset_file_invalid`** (not a silent empty result).
+Invalid JSON returns **`invalid_json`**; schema violations return **`invalid_schema`** (not a silent empty result).
 
 ### Preset entry (quick reference)
 
@@ -94,7 +94,7 @@ Relative preset paths must stay inside the git toplevel; escapes are rejected.
 
 ## Sibling clone batches
 
-Pass a **`root` array** on the fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`) when you want one read-only call to inspect independent sibling clones that are not all exposed as MCP workspace roots. This is most useful from agent workflows rooted at a parent directory or when an MCP client exposes only one repo root.
+Pass a **`root` array** on the fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep`) when you want one read-only call to inspect independent sibling clones that are not all exposed as MCP workspace roots. This is most useful from agent workflows rooted at a parent directory or when an MCP client exposes only one repo root.
 
 Example `git_status` batch:
 
@@ -154,17 +154,27 @@ Call tools by their registered id (prefix depends on client config name):
 | Compare HEAD between path pairs | `git_parity` |
 | List preset names | `list_presets` |
 | View commit log | `git_log` |
+| Search file contents across roots | `git_grep` |
 | View structured diff | `git_diff_summary` |
 | View raw diff text | `git_diff` |
 | Inspect commit content | `git_show` |
+| Blame lines in a file | `git_blame` |
+| List local/remote branches | `git_branch_list` |
+| Inspect the reflog | `git_reflog` |
+| List remotes | `git_remote` |
+| Describe HEAD relative to tags | `git_describe` |
+| Inspect unresolved merge conflicts | `git_conflicts` |
 | List stashes | `git_stash_list` |
+| Stash working-tree changes | `git_stash_push` |
 | Apply or pop a stash | `git_stash_apply` |
 | Fetch remote refs | `git_fetch` |
 | Create commits | `batch_commit` |
 | Push a branch | `git_push` |
 | Create or delete tags | `git_tag` |
+| Create, delete, or rename branches | `git_branch` |
 | Merge branches | `git_merge` |
 | Cherry-pick commits | `git_cherry_pick` |
+| Revert commits | `git_revert` |
 | Soft-reset HEAD | `git_reset_soft` |
 | Manage worktrees | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` |
 

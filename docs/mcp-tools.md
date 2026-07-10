@@ -1296,7 +1296,7 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`). |
+| `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`, multi-root `git_grep`). |
 | `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in ms; on expiry the child is killed (SIGTERM) and the call resolves as failed. Set `0` (or negative) to disable (unbounded). |
 | `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 30 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
 
@@ -1312,8 +1312,8 @@ Every tool carries exactly **one** routing parameter:
 
 | Tools | Parameter | Accepts |
 |-------|-----------|---------|
-| Fan-out: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log` | `root` | string (one repo path) \| string[] (explicit repo list) \| `"*"` (every MCP root) |
-| All other 18 tools | `workspaceRoot` | string (one repo path) |
+| Fan-out: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep` | `root` | string (one repo path) \| string[] (explicit repo list) \| `"*"` (every MCP root) |
+| All other 24 tools | `workspaceRoot` | string (one repo path) |
 
 ### `root` forms (fan-out tools)
 

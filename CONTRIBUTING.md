@@ -34,7 +34,7 @@ bun run setup-hooks    # one-time per clone: wire .githooks/
 | Hook | Runs |
 |------|------|
 | pre-commit | `bun run lint` |
-| pre-push | frozen install + build + check + test (mirrors CI) |
+| pre-push | frozen install + build + lint + test (mirrors CI) |
 
 Set `SKIP_GIT_HOOKS=1` to bypass.
 
@@ -65,11 +65,13 @@ One logical unit per commit. Max ~7 files. Split by theme, not by file count.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on PRs and pushes to `main`:
 
 1. `bun install --frozen-lockfile`
-2. `bun run build`
-3. `bun run lint` (Biome)
-4. `bun run schema:tools:check`
-5. `bun run test:coverage` + `bun run coverage:check /tmp/coverage.txt 80`
-6. Prerelease `npm pack` artifact uploaded (90-day retention)
+2. `bun run schema:tools:check`
+3. `bun run schema:individual:check`
+4. `bun run lint` (Biome)
+5. `bun run typecheck`
+6. `bun run test:coverage` + `bun run coverage:check /tmp/coverage.txt 80`
+7. `bun run build`
+8. Prerelease `npm pack` artifact uploaded (90-day retention)
 
 Match the CI steps locally before opening a PR.
 
