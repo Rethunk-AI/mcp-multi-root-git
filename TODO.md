@@ -2,34 +2,34 @@
 
 Feature asks driven by real pain points from agent sessions. Each item lists the motivating scenario and the expected tool shape.
 
-## High value — deepen current tools
+## Medium value — deepen current tools
 
-### `git_diff` — multi-path + context controls
+### `git_grep` — pickaxe history search
 
-**Pain:** `git_diff` now covers a single optional path plus base/head or staged mode, but agents still sometimes need one call that spans multiple paths with explicit context width.
-
-**Ask:**
-
-```ts
-git_diff({ paths?: string[], base?: "HEAD~1", head?: "HEAD", unified?: 3 })
-```
-
-### `git_show` — stat / multi-path modes
-
-**Pain:** `git_show` now covers a ref plus one optional path, but some sessions only need `--stat` output or a filtered set of paths without full patch text.
+**Pain:** `git_grep` covers content search (working tree or at a ref), but "when did this string appear/disappear?" still needs shell `git log -S`.
 
 **Ask:**
 
 ```ts
-git_show({ ref: "sha", stat?: true, paths?: string[] })
+git_grep({ pickaxe: { mode: "S" | "G", term: "needle" } })
+// → commits touching the term, oneline-style, instead of file/line matches
 ```
 
-## Medium value — nice to have
+Different output shape from content mode — design the payload before implementing.
 
-### `git_fetch` — structured ref deltas
+### `git_log` — follow renames for a single path
 
-Current output is string-based (`updatedRefs[]`, `newRefs[]`). Remaining gap is richer structured deltas:
+**Pain:** file-history questions ("who touched this file before it was renamed?") fall back to shell `git log --follow`.
+
+**Ask:**
 
 ```ts
-git_fetch({ updated: [{ ref, oldSha, newSha }], newRefs: [...] })
+git_log({ paths: ["src/one-file.ts"], follow: true })
+// git constraint: --follow requires exactly one path — validate that
 ```
+
+### `git_inventory` — ahead/behind between arbitrary ref pairs
+
+**Pain:** `git_inventory` reports upstream ahead/behind only; comparing arbitrary local refs (e.g. `main` vs a long-lived feature branch) needs shell `rev-list --count`.
+
+Small extension to `git_inventory` or `git_log`, not a new tool.
