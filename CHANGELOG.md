@@ -2,7 +2,7 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [3.2.0] — 2026-07-10
 
 Seven new tools (content search, conflict inspection, remote/describe read access, branch lifecycle, revert, and stash push), plus argv-safety and range-validation fixes across the diff/blame/show/diff-summary family. Additive JSON changes only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
 
@@ -344,6 +344,9 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
+[3.2.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v3.2.0
+[3.1.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v3.1.0
+[3.0.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v3.0.0
 [2.9.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.9.1
 [2.9.0]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.9.0
 [2.8.1]: https://github.com/Rethunk-AI/mcp-multi-root-git/releases/tag/v2.8.1
