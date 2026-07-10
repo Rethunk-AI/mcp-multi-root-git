@@ -60,6 +60,18 @@ describe("git_diff execute handler", () => {
     expect(parsed.diff).toContain("later.txt");
   });
 
+  test("accepts ancestor notation (HEAD~1) as base — the documented example", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    addCommit(repo, "later.txt", "later\n", "chore: later");
+    const run = captureTool(registerGitDiffTool);
+
+    const text = await run({ workspaceRoot: repo, base: "HEAD~1", format: "json" });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
+
+    expect(parsed.range).toBe("HEAD~1..HEAD");
+    expect(parsed.diff).toContain("later.txt");
+  });
+
   test("returns no changes message for clean unstaged markdown diff", async () => {
     const repo = makeRepoWithSeed("mcp-git-diff-test-");
     const run = captureTool(registerGitDiffTool);

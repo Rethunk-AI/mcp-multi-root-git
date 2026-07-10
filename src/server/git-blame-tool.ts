@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
-import { isSafeGitRefToken } from "./git-refs.js";
+import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -248,7 +248,12 @@ export function registerGitBlameTool(server: FastMCP): void {
     },
     parameters: WorkspacePickSchema.extend({
       path: z.string().min(1).describe("Repo-relative path to the file to blame."),
-      ref: z.string().optional().describe("Optional commit-ish (SHA, branch, tag) to blame at."),
+      ref: z
+        .string()
+        .optional()
+        .describe(
+          'Optional commit-ish (SHA, branch, tag) to blame at. Ancestor notation is accepted (e.g. "HEAD~3", "main^2").',
+        ),
       startLine: z
         .number()
         .int()
@@ -285,7 +290,7 @@ export function registerGitBlameTool(server: FastMCP): void {
 
       // Ref validation
       if (args.ref !== undefined) {
-        if (!isSafeGitRefToken(args.ref as string)) {
+        if (!isSafeGitCommitIsh(args.ref as string)) {
           return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
         }
       }

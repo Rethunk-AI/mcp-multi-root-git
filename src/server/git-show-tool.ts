@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
-import { isSafeGitAncestorRef } from "./git-refs.js";
+import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -192,7 +192,12 @@ export function registerGitShowTool(server: FastMCP): void {
       readOnlyHint: true,
     },
     parameters: WorkspacePickSchema.extend({
-      ref: z.string().min(1).describe("Commit reference (SHA, branch, tag, or any git rev-spec)."),
+      ref: z
+        .string()
+        .min(1)
+        .describe(
+          'Commit reference (SHA, branch, tag, or ancestor notation like "HEAD~3", "main^2").',
+        ),
       path: z
         .string()
         .optional()
@@ -217,7 +222,7 @@ export function registerGitShowTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const top = pre.gitTop;
 
-      if (!isSafeGitAncestorRef(args.ref as string)) {
+      if (!isSafeGitCommitIsh(args.ref as string)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 

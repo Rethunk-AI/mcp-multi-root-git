@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
+import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -31,7 +32,7 @@ function buildDiffArgs(opts: {
     const baseStr = opts.base?.trim() ?? "HEAD";
     const headStr = opts.head?.trim() ?? "HEAD";
 
-    if (!isSafeGitUpstreamToken(baseStr) || !isSafeGitUpstreamToken(headStr)) {
+    if (!isSafeGitCommitIsh(baseStr) || !isSafeGitCommitIsh(headStr)) {
       return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
     }
 
@@ -95,12 +96,14 @@ export function registerGitDiffTool(server: FastMCP): void {
       base: z
         .string()
         .optional()
-        .describe('Base ref (e.g. "main", "HEAD~3"). Omit for unstaged changes.'),
+        .describe(
+          'Base ref (e.g. "main"). Ancestor notation is accepted (e.g. "HEAD~3", "main^2"). Omit for unstaged changes.',
+        ),
       head: z
         .string()
         .optional()
         .describe(
-          'Head ref (e.g. "feature-branch"). Defaults to HEAD. Used only when `base` is set.',
+          'Head ref (e.g. "feature-branch"). Ancestor notation is accepted (e.g. "HEAD~3", "main^2"). Defaults to HEAD. Used only when `base` is set.',
         ),
       path: z
         .string()

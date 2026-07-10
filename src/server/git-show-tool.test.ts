@@ -112,6 +112,19 @@ describe("git_show_tool", () => {
     expect(result).toContain("unsafe_ref_token");
   });
 
+  test("git show rejects double-dot range token (hardening over prior ancestor-ref check)", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitShowTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "a..b",
+    });
+
+    expect(result).toContain("unsafe_ref_token");
+  });
+
   test("git show rejects path that escapes repo", async () => {
     const repo = makeRepo();
     addCommit(repo, "file.txt", "content\n", "feat: add file");

@@ -138,4 +138,40 @@ describe("git_blame_tool", () => {
     const parsed = JSON.parse(result) as { error: string };
     expect(parsed.error).toBe("path_escapes_repo");
   });
+
+  test("accepts ancestor notation (HEAD~1) as ref", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "hello.txt", "line one\n", "feat: add hello");
+    addCommit(repo, "hello.txt", "line one\nline two\n", "feat: add line two");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      path: "hello.txt",
+      ref: "HEAD~1",
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as { ref?: string; groups: BlameGroupJson[] };
+    expect(parsed.ref).toBe("HEAD~1");
+    // At HEAD~1 the file only had "line one" — blaming it should not fail.
+    expect(parsed.groups.length).toBe(1);
+    expect(parsed.groups[0]?.summary).toBe("feat: add hello");
+  });
+
+  test("rejects unsafe ref token", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      path: "file.txt",
+      ref: "--output=/tmp/x",
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toBe("unsafe_ref_token");
+  });
 });
