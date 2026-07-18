@@ -79,6 +79,11 @@ const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] =
  * Parse the RETHUNK_GIT_TOOLS env var and return the matching subset of
  * registrars plus any unrecognized token names.
  *
+ * Semantics:
+ * - unset / empty / whitespace-only → all tools
+ * - bare `*` (sole non-empty token) → all tools (all-tools sentinel; not an empty selection)
+ * - otherwise → exact name match (case-sensitive), canonical order, duplicates ignored
+ *
  * @param envValue  Raw value of process.env.RETHUNK_GIT_TOOLS (may be undefined).
  * @param registrars  Full ordered registrar list (injectable for tests).
  */
@@ -94,15 +99,27 @@ export function selectToolRegistrars(
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
 
-  // Unset, empty, or whitespace-only → register all tools.
-  if (tokens.length === 0) {
-    return { selected: registrars, unknown: [] };
+  // Unset, empty, whitespace-only, or bare "*" → register all tools.
+  // Bare "*" is an intentional all-tools sentinel (operators used to root="*"
+  // fan-out may set RETHUNK_GIT_TOOLS=* expecting the full surface — treating
+  // it as an unrecognized name that empties the allowlist is a footgun).
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "*")) {
+    // Shallow copy so callers cannot mutate the shared TOOL_REGISTRARS array.
+    return { selected: [...registrars], unknown: [] };
   }
 
   const knownNames = new Set(registrars.map((r) => r.name));
   const requested = new Set(tokens);
 
-  const unknown = tokens.filter((t) => !knownNames.has(t));
+  // Deduplicate unknown tokens while preserving first-seen order.
+  const unknownSeen = new Set<string>();
+  const unknown: string[] = [];
+  for (const t of tokens) {
+    if (!knownNames.has(t) && !unknownSeen.has(t)) {
+      unknownSeen.add(t);
+      unknown.push(t);
+    }
+  }
   // Preserve canonical order; deduplicate duplicate tokens automatically.
   const selected = registrars.filter((r) => requested.has(r.name));
 
@@ -122,7 +139,7 @@ export function registerRethunkGitTools(server: FastMCP): void {
   if (selected.length === 0 && (env ?? "").trim().length > 0) {
     process.stderr.write(
       `[rethunk-git] RETHUNK_GIT_TOOLS: every listed name was unrecognized — registering NO tools. ` +
-        `Set RETHUNK_GIT_TOOLS to a comma-separated list of valid tool names, or unset it to register all tools.\n`,
+        `Set RETHUNK_GIT_TOOLS to a comma-separated list of valid tool names, bare "*" for all tools, or unset it to register all tools.\n`,
     );
   }
 
