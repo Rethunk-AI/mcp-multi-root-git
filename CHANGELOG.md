@@ -2,9 +2,33 @@
 
 All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com); the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- **`RETHUNK_GIT_TOOLS=*`** — bare `*` is now an all-tools sentinel (registers every tool) instead of an unrecognized name that emptied the allowlist.
+
+### Changed
+
+- **CI** — `ci.yml` check job runs `bun run ci` so workflow gates stay aligned with the local script (including coverage `pipefail` and schema checks).
+- **CI** — workflow Bun pin aligned to `packageManager` **1.3.14**; GitHub Actions third-party action pins bumped (`5fa33af`).
+- **Release** — tag publish workflow no longer duplicates build or test after `bun run ci`; verifies a `CHANGELOG.md` section exists for the tagged version before publish.
+- **Release / CI pack** — workflows use `npm pack --ignore-scripts` and `npm publish --ignore-scripts` so `prepublishOnly` does not re-run the full CI suite.
+- **Publish preflight** — coverage threshold checks delegate to `bun run coverage:check` instead of duplicating parser logic.
+- **Schema artifacts** — capture now drives `registerRethunkGitTools` (same path as the live server) instead of a parallel `register*` list, so published parameter schemas cannot silently omit a newly added tool; `schema:individual` / `--check` hard-fails on missing capture schemas and rejects orphan `schemas/*.json` files left after renames/removals.
+- **Docs** — align `docs/mcp-tools.md` with wire contracts: `workspaceRoot` (not `workspace_root`), `preset_file_invalid` + `kind`, stash apply/pop conflict semantics, worktree list/remove gaps, protected-branch list including `head` and separator patterns, field-omission null exceptions, and related error-table cleanups (`MCP_JSON_FORMAT_VERSION` unchanged).
+- **`SECURITY.md`** — refresh threat model to the full 30-tool surface (read + mutate), including previously omitted mutators; disclose trusted-operator `workspaceRoot` / explicit `root` paths (no MCP-session whitelist this release); document shipped controls (realpath confinement, protected-branch enforcement, no force-push, argv-array spawn + ref validators); correct aspirational claims; add `RETHUNK_GIT_TOOLS` hardening, read-tool content-exfil risk, and soft-reset vs revert rewrite matrix.
+
+### Fixed
+
+- **Path confinement** — fail closed when `realpath` cannot resolve a path used for repo bounds checks (no ENOENT false-accept via intermediate symlinks outside the git toplevel); missing leaves under a symlink alias of the same toplevel still resolve correctly for deletion staging.
+- **`isSafeGitAncestorRef`** — now delegates to `isSafeGitCommitIsh`, rejecting `..` ranges, `.lock` suffixes, `//`, trailing `/`/`.`, mid-name `~`/`^`, and leading `+` (previously accepted by a looser charset-only check).
+- **`isSafeGitRefToken`** — rejects leading `+` (git force-update refspec); closes force-push/fetch via `branch=+name` when callers use this validator.
+- **`listWorktrees`** — returns `{ ok:false, detail }` on git failure instead of an empty array.
+
 ## [3.2.0] — 2026-07-10
 
-Seven new tools (content search, conflict inspection, remote/describe read access, branch lifecycle, revert, and stash push), plus argv-safety and range-validation fixes across the diff/blame/show/diff-summary family. Additive JSON changes only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
+Feature release: seven new tools (23 → 30 registered; content search, conflict inspection, remote/describe read access, branch lifecycle, revert, and stash push), plus argv-safety and range-validation fixes across the diff/blame/show/diff-summary family. The **`root`** fan-out routing param now applies to **six** read tools (see 3.0.0 migration — `git_grep` joins `git_status`, `git_inventory`, `git_parity`, `list_presets`, and `git_log`). Additive JSON changes only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
 
 ### Added
 
@@ -16,17 +40,17 @@ Seven new tools (content search, conflict inspection, remote/describe read acces
 - `git_revert` — creates new commit(s) that undo one or more source commits (`git revert`), applied in listed order; never rewrites history, unlike `git_reset_soft`. Refuses on a dirty tree; on conflict aborts and leaves the tree clean, reporting structured conflict paths. `noCommit` stages the revert(s) without committing; `mainline` selects the parent when reverting a merge commit.
 - **`git_stash_push`** — stash working-tree changes (`git stash push`). Optional `message`, `includeUntracked` (-u), `keepIndex` (--keep-index), and `paths` to scope the stash. Returns the new stash ref/SHA/subject, or `{ stashed: false, reason: "no_local_changes" }` when there is nothing to stash.
 
+### Changed
+
+- PR CI (`ci.yml`) now runs each gate exactly once (build/lint/typecheck/schema-check/test were previously duplicated between `bun run ci` and separate CI steps); the local `ci` script gained the `schema:individual:check` step CI already ran, so the two stay in sync. The tag release workflow (`release.yml`) still duplicated build and tests until the fixes documented under `[Unreleased]`.
+- `git_fetch` moved from the read-only registrar group to the head of the mutating group (it updates refs) — the registration order now matches `tool-parameter-schemas.ts` and the docs table, which already classified it as mutating.
+- Added test coverage for `presets-resource.ts`'s `rethunk-git://presets` resource load handler (valid preset, invalid JSON, missing file) — it previously had none.
+
 ### Fixed
 
 - **`git_diff`/`git_blame`/`git_show`** — `base`/`head`/`ref` now accept ancestor notation (`HEAD~3`, `main^2`, `v1.0.0~2^1`) consistently across all three tools via a shared `isSafeGitCommitIsh` validator. Previously `git_diff` and `git_blame` rejected the documented `HEAD~3` example outright; `git_show` accepted ancestor notation but via a looser validator that lacked the `..`/`.lock`/`//`/`@{` guards the other tools had (now hardened to match).
 - **`git_diff_summary`/`git_cherry_pick` range endpoints** — `isSafeGitRangeToken` validated each side of an `A..B`/`A...B` range with the base ref-token check (no `~`/`^` support), so `git_diff_summary`'s own documented example `"HEAD~3..HEAD"` was rejected with `unsafe_range_token`. Endpoints (and the no-range single-ref fallthrough) now validate with `isSafeGitCommitIsh`; `git_diff_summary` also dropped its separate ad hoc range-parsing regex in favor of the shared validator.
 - `git_fetch` — corrected a stale comment describing the non-porcelain fallback path as pending work; no behavior change.
-
-### Changed
-
-- CI now runs each gate exactly once (build/lint/typecheck/schema-check/test were previously duplicated between `bun run ci` and separate CI steps); the local `ci` script gained the `schema:individual:check` step CI already ran, so the two stay in sync.
-- `git_fetch` moved from the read-only registrar group to the head of the mutating group (it updates refs) — the registration order now matches `tool-parameter-schemas.ts` and the docs table, which already classified it as mutating.
-- Added test coverage for `presets-resource.ts`'s `rethunk-git://presets` resource load handler (valid preset, invalid JSON, missing file) — it previously had none.
 
 ## [3.1.0] — 2026-07-04
 
@@ -159,14 +183,11 @@ Bug-fix and documentation release; includes one new `git_log` output format.
 - **`git_cherry_pick`**: branch deletion after cherry-pick now uses patch-id equivalence by default so source branches with differing SHAs but identical content are correctly detected as merged. Pass `strictMergedRefEquality: true` for strict SHA-reachability semantics.
 - **`parseGitSubmodulePaths`**: non-regular files at `.gitmodules` (character devices, sockets — common in Claude Code / sandbox environments) are now rejected via `lstatSync().isFile()` before `readFileSync`, preventing `EACCES` errors.
 
-### Tests
+### Changed
 
 - Integration tests added for `git_stash_list`, `git_stash_apply`, `git_fetch`, `git_status`, `git_inventory`, and `git_parity` execute paths.
 - `isContentEquivalentlyMergedInto` integration tests via real git repos with cherry-picked and diverged histories.
 - `batch_commit` dryRun tests covering deleted-file unstaging.
-
-### Documentation
-
 - **`git_status`, `git_inventory`, `git_parity`, `list_presets`** now have complete parameter tables, JSON shape examples, and error code tables in `docs/mcp-tools.md`.
 - **`git_cherry_pick`** `strictMergedRefEquality` parameter added to docs; `deleteMergedBranches` description corrected (default is patch-id equivalence, not SHA-reachability).
 - **`batch_commit`** `files` parameter and `stage_failed` error code updated to document deleted-file staging path.
@@ -186,6 +207,14 @@ New git MCP tools, better `batch_commit` ergonomics, published schema coverage f
 - **`GIT_SUBPROCESS_PARALLELISM`** is now configurable via environment and clamps to a safe `2×CPU` maximum.
 - **`git_show`**, **`git_fetch`**, and **`git_tag`** now use the standard single-repo workspace pick (`workspaceRoot` / `rootIndex`) and omit multi-root-only parameters.
 - **Build / release tooling** now aligns on Bun `1.3.13`, updated dev dependencies, and the current prerelease tarball flow.
+- **README / HUMANS / AGENTS / CONTRIBUTING / install docs** refreshed for the current tool surface, shipped schema artifacts, and contributor workflow.
+- **`SECURITY.md`** added with repository access, git-operation risk, and disclosure guidance.
+- **`docs/mcp-tools.md`** now documents the full tool surface, `batch_commit` atomic staging semantics, and the shipped schema artifacts.
+- **`TODO.md`** backlog entries now reflect genuine remaining gaps instead of listing already-implemented tools as missing.
+- **`specs/` scaffold** added with standard `active`, `done`, and `parked` layout for repo planning.
+- **CHANGELOG references** for `v2.3.2`–`v2.3.4` were restored.
+- Coverage expanded across `list_presets`, `git_parity`, `git_cherry_pick`, `git_merge`, `git_show`, schema generation, and roots handling.
+- The shared git test harness now reuses repo-init / commit helpers and speeds up fixture setup.
 
 ### Fixed
 
@@ -193,20 +222,6 @@ New git MCP tools, better `batch_commit` ergonomics, published schema coverage f
 - **`git_push`** and **`batch_commit`** now surface raw git stdout/stderr on failure for easier recovery.
 - **Published schema snapshots** are now complete and in sync with the registered tool surface, including `schema:tools:check`.
 - **`publish:preflight`** now writes temporary coverage output under the platform temp directory instead of a hard-coded `/tmp` path.
-
-### Documentation
-
-- **README / HUMANS / AGENTS / CONTRIBUTING / install docs** refreshed for the current tool surface, shipped schema artifacts, and contributor workflow.
-- **`SECURITY.md`** added with repository access, git-operation risk, and disclosure guidance.
-- **`docs/mcp-tools.md`** now documents the full tool surface, `batch_commit` atomic staging semantics, and the shipped schema artifacts.
-- **`TODO.md`** backlog entries now reflect genuine remaining gaps instead of listing already-implemented tools as missing.
-- **`specs/` scaffold** added with standard `active`, `done`, and `parked` layout for repo planning.
-- **CHANGELOG references** for `v2.3.2`–`v2.3.4` were restored.
-
-### Tests
-
-- Coverage expanded across `list_presets`, `git_parity`, `git_cherry_pick`, `git_merge`, `git_show`, schema generation, and roots handling.
-- The shared git test harness now reuses repo-init / commit helpers and speeds up fixture setup.
 
 ## [2.3.4] — 2026-04-26
 
@@ -221,7 +236,7 @@ Publication-prep patch for the `absoluteGitRoots` line.
 
 - **CI coverage gate** now checks `% Lines` from Bun's coverage table instead of accidentally reading `% Funcs`.
 
-### Documentation
+### Changed
 
 - **`HUMANS.md`** — added sibling-clone `absoluteGitRoots` examples for `git_status` and `git_parity`.
 - **`docs/mcp-tools.md`** — clarified direct `git_push` use for already-committed work and `git_parity` sibling-clone batches.
@@ -238,12 +253,9 @@ Publication-prep patch for the `absoluteGitRoots` line.
 
 ## [2.3.2] — 2026-04-21
 
-### CI
+### Changed
 
 - Coverage gate added: `bun run test:coverage` enforces an 80% line-coverage minimum in CI (`check` job).
-
-### Documentation
-
 - **`CONTRIBUTING.md`** — new file; consolidates dev setup, hook table, commit conventions, CI description, PR checklist, path-confinement guidance, and how-to-add-a-tool guidance for mutating tools.
 - **`HUMANS.md`** — Development section replaced with a pointer to `CONTRIBUTING.md`; preset file, `git_not_found`, install reference, and publishing steps remain.
 - **`AGENTS.md`** — corrected pre-push hook description (missing `test` step) and updated canonical-docs link for dev/CI content.
@@ -253,7 +265,7 @@ Publication-prep patch for the `absoluteGitRoots` line.
 
 Documentation-only patch following the 2.3.0 release.
 
-### Documentation
+### Changed
 
 - **`README.md`** — one-liner description updated to include `git_log`, `git_push`, `git_worktree_*`, and `git_reset_soft`.
 - **`HUMANS.md`** — opening line corrected from "Read-only MCP git tools" to "MCP git tools" (mutating operations have been present since v2.2.0).
@@ -286,22 +298,13 @@ Consumers using `format: "json"` with `git_log` must update field names. All oth
 - **Token efficiency:** `readOnlyHint: true` added to `git_status`, `git_inventory`, `git_parity`, and `list_presets`. "See docs/mcp-tools.md" suffix dropped from all 9 tool descriptions; descriptions are now self-contained.
 - **`WorkspacePickSchema`** — `rootIndex` and `allWorkspaceRoots` parameters carry inline descriptions so LLMs can pick them without consulting external docs.
 - **`git_merge`** — protected-branch list in the description collapsed to a single canonical reference (was duplicated inline).
-
-### Internal
-
 - `requireSingleRepo` helper extracted to `roots.ts`; replaces copy-paste preludes across `batch_commit`, `git_diff_summary`, `git_merge`, `git_cherry_pick`, `git_push`, `git_reset_soft`, and all `git_worktree_*`.
 - `conflictPaths` extracted from `git-merge-tool.ts` to `git-refs.ts`; shared by `git_merge` and `git_cherry_pick`.
 - `inferRemoteFromUpstream` extracted to `git-refs.ts`; shared by `runPushAfter` (`batch_commit`) and `git_push`.
 - `isWorkingTreeClean` used consistently everywhere (was inlined in `git_reset_soft`).
-
-### Tests
-
 - Coverage: **88.6% lines / 92.8% functions** (up from 69.9% / 71.4%).
 - 262 tests across 15 files (up from 134 across 7 files).
 - New test files: `presets.test.ts`, `inventory.test.ts`, `git-utils.test.ts`, `json.test.ts`, `git-reset-soft-tool.test.ts`, `git-push-tool.test.ts`, `git-worktree-tool.test.ts`, `roots.test.ts`. `git-refs.test.ts` extended with `isSafeGitAncestorRef` cases.
-
-### Documentation
-
 - `docs/mcp-tools.md` — all new tools documented with parameter tables, JSON shapes, and error-code tables.
 - `AGENTS.md` — implementation map updated with all new and refactored modules.
 
@@ -319,28 +322,25 @@ Mutating git operations: merge, cherry-pick, and optional push-after for `batch_
 
 - **Internal** — shared ref/branch helpers extracted to a common module; merge/cherry-pick/batch-commit implementations now reuse the same dirty-tree guards, protected-name checks, and upstream detection.
 - **Tooling** — Biome upgraded to 2.4.11; dev dependency refresh.
-
-### Documentation
-
 - `docs/mcp-tools.md` — `git_merge` and `git_cherry_pick` sections with parameters, JSON shape, and error codes; `batch_commit` `push: "after"` option documented.
 
-## [2.1.0] — prior
+## [2.1.0] — 2026-04-12
 
 - Added `git_log` — path-filtered, time-windowed log across workspace roots.
 - Added `git_diff_summary` — structured, token-efficient diff viewer with per-file truncation and default exclusions (lock files, `dist`, vendor).
 - Added `batch_commit` — sequential multi-commit tool. Mutating, not idempotent.
 - Test harness: fake-server duck-type lets unit tests drive the full FastMCP execute path without a live transport.
 
-## [2.0.1] — prior
+## [2.0.1] — 2026-04-11
 
 - Bug fixes and internal cleanup; no public tool-surface change.
 
-## [2.0.0] — prior
+## [2.0.0] — 2026-04-11
 
 - **Breaking:** JSON response envelope removed. `MCP_JSON_FORMAT_VERSION` now `"2"`; payloads are minified, and optional fields are omitted when empty / `null` / `false` (consumers test for presence, not equality to `null`).
 - Initial preset file schema (`.rethunk/git-mcp-presets.json`) with wrapped and legacy-map layouts.
 
-## [1.0.0] — prior
+## [1.0.0] — 2026-04-05
 
 - Initial release: `git_status`, `git_inventory`, `git_parity`, `list_presets`.
 
