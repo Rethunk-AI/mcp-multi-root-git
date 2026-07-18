@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
@@ -28,7 +29,7 @@ const RECORD_SEP_OUT = "\x02"; // what git outputs (STX) — used as record-STAR
 // %x02 is placed at the START of each record (tformat adds \n as terminator after each).
 // Splitting stdout on \x02 then gives empty-first-chunk + one chunk per commit,
 // each structured as:  <fields>\x01\n\n <shortstat text>\n
-// Fields are separated by %x01; the trailing \x01 before \n leaves one empty last field (ignored).
+// Fields are separated by %x01; the trailing %x01 before \n leaves one empty last field (ignored).
 const PRETTY_FORMAT = "%x02%H%x01%s%x01%aN%x01%aE%x01%aI%x01";
 
 // ---------------------------------------------------------------------------
@@ -107,8 +108,9 @@ async function runGitLog(opts: {
   author: string | undefined;
   maxCommits: number;
   branch: string | undefined;
+  follow: boolean;
 }): Promise<LogResult | { error: string; path: string }> {
-  const { top, since, paths, grep, author, maxCommits, branch } = opts;
+  const { top, since, paths, grep, author, maxCommits, branch, follow } = opts;
 
   // Resolve branch first (needed for output metadata).
   const resolvedBranch = await gitCurrentBranch(top, branch);
@@ -124,6 +126,10 @@ async function runGitLog(opts: {
     String(fetchLimit),
     `--since=${since}`,
   ];
+
+  if (follow) {
+    logArgs.push("--follow");
+  }
 
   if (branch?.trim()) {
     logArgs.push(branch.trim());
@@ -256,7 +262,8 @@ export function registerGitLogTool(server: FastMCP): void {
   server.addTool({
     name: "git_log",
     description:
-      "Read-only `git log` across one or more roots. Returns author, date, subject, optional diff stats.",
+      "Read-only `git log` across one or more roots. Returns author, date, subject, optional diff stats. " +
+      "`follow: true` passes `--follow` for rename-aware history (requires exactly one `paths` entry).",
     annotations: {
       readOnlyHint: true,
     },
@@ -295,6 +302,13 @@ export function registerGitLogTool(server: FastMCP): void {
           `Max commits per root (hard cap ${MAX_COMMITS_HARD_CAP}, default ${DEFAULT_MAX_COMMITS}).`,
         ),
       branch: z.string().optional().describe("Ref/branch to log from. Default: HEAD."),
+      follow: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Pass `git log --follow` for rename-aware history. Requires exactly one entry in `paths`.",
+        ),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);
@@ -315,6 +329,15 @@ export function registerGitLogTool(server: FastMCP): void {
         }
       }
 
+      const follow = args.follow ?? false;
+      if (follow && rawPaths.length !== 1) {
+        return jsonRespond({
+          error: ERROR_CODES.INVALID_PATHS,
+          detail: "follow requires exactly one path",
+          pathCount: rawPaths.length,
+        });
+      }
+
       // Validate branch — reject leading-dash and other injection attempts.
       if (args.branch && !isSafeGitAncestorRef(args.branch)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch: args.branch });
@@ -322,7 +345,7 @@ export function registerGitLogTool(server: FastMCP): void {
 
       const maxCommits = Math.min(args.maxCommits ?? DEFAULT_MAX_COMMITS, MAX_COMMITS_HARD_CAP);
 
-      // Fan out across roots.
+      // Fan out across roots. Path confinement is per-root (each has its own toplevel).
       const jobs = pre.roots.map((rootInput) => ({ rootInput }));
       const results = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async ({ rootInput }) => {
         const top = gitTopLevel(rootInput);
@@ -333,6 +356,18 @@ export function registerGitLogTool(server: FastMCP): void {
             error: ERROR_CODES.NOT_A_GIT_REPOSITORY,
           };
         }
+
+        for (const p of rawPaths) {
+          const resolved = resolvePathForRepo(p, top);
+          if (!assertRelativePathUnderTop(p, resolved, top)) {
+            return {
+              _error: true as const,
+              workspaceRoot: rootInput,
+              error: ERROR_CODES.PATH_ESCAPES_REPO,
+            };
+          }
+        }
+
         const r = await runGitLog({
           top,
           since: rawSince,
@@ -341,6 +376,7 @@ export function registerGitLogTool(server: FastMCP): void {
           author: args.author,
           maxCommits,
           branch: args.branch,
+          follow,
         });
         if ("error" in r) {
           return { _error: true as const, workspaceRoot: rootInput, error: r.error };
@@ -351,6 +387,7 @@ export function registerGitLogTool(server: FastMCP): void {
       // Build filter summary string for markdown.
       const filterParts: string[] = [`since: ${rawSince}`];
       if (rawPaths.length > 0) filterParts.push(`paths: ${rawPaths.join(", ")}`);
+      if (follow) filterParts.push("follow");
       if (args.grep) filterParts.push(`grep: ${args.grep}`);
       if (args.author) filterParts.push(`author: ${args.author}`);
       const filterSummary = filterParts.join(" | ");

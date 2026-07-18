@@ -284,4 +284,108 @@ describe("git_log execute handler", () => {
     expect(text).toContain("feat: in-repo1");
     expect(text).toContain("feat: in-repo2");
   });
+
+  test("path-escape rejection: ../../etc/passwd → path_escapes_repo", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: commit A");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      paths: ["../../etc/passwd"],
+    });
+    const parsed = JSON.parse(text) as { groups: Array<{ error?: string }> };
+    expect(parsed.groups[0]?.error).toBe("path_escapes_repo");
+  });
+
+  test("follow: true requires exactly one path → invalid_paths", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const none = JSON.parse(
+      await run({ root: dir, format: "json", since: SINCE_WIDE, follow: true }),
+    ) as { error: string };
+    expect(none.error).toBe("invalid_paths");
+
+    const multi = JSON.parse(
+      await run({
+        root: dir,
+        format: "json",
+        since: SINCE_WIDE,
+        follow: true,
+        paths: ["a.txt", "b.txt"],
+      }),
+    ) as { error: string };
+    expect(multi.error).toBe("invalid_paths");
+  });
+
+  test("follow: true with one path returns rename-aware history", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "old-name.ts", "feat: initial");
+    // Pure rename (100% similarity) so git detects the rename for --follow.
+    gitCmd(dir, "mv", "old-name.ts", "new-name.ts");
+    gitCmd(dir, "commit", "-m", "refactor: rename old-name → new-name");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      paths: ["new-name.ts"],
+      follow: true,
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const subjects = (parsed.groups[0]?.commits ?? []).map((c) => c.subject);
+    expect(subjects).toContain("feat: initial");
+    expect(subjects).toContain("refactor: rename old-name → new-name");
+  });
+
+  test("invalid_since rejects shell metacharacters", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: "7.days; rm -rf /",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("invalid_since");
+  });
+
+  test("invalid_paths rejects shell metacharacters in a path entry", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      paths: ["a.txt;evil"],
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("invalid_paths");
+  });
+
+  test("unknown branch → git_log_failed group error", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      branch: "no-such-branch-xyz",
+    });
+    const parsed = JSON.parse(text) as { groups: Array<{ error?: string }> };
+    expect(parsed.groups[0]?.error).toBe("git_log_failed");
+  });
 });
