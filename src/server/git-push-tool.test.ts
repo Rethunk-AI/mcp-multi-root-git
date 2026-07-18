@@ -135,6 +135,49 @@ describe("git_push", () => {
     expect(parsed.error).toBe("unsafe_ref_token");
   });
 
+  test("rejects leading-plus force refspec branch (+main)", async () => {
+    const { dir } = makeRepoWithRemote();
+
+    const run = captureTool(registerGitPushTool);
+    const text = await run({ workspaceRoot: dir, branch: "+main", format: "json" });
+    const parsed = JSON.parse(text) as { error: string; ref: string };
+
+    expect(parsed.error).toBe("unsafe_ref_token");
+    expect(parsed.ref).toBe("+main");
+  });
+
+  test("push_failed when remote rejects a non-fast-forward push", async () => {
+    const { dir, remote } = makeRepoWithRemote();
+
+    // Divergent history: remote advances via a second clone; local advances separately.
+    const cloneDir = mkTmpDir("mcp-git-push-ff-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeFileSync(join(cloneDir, "remote-only.ts"), "export const r = 1;\n");
+    gitCmd(cloneDir, "add", "remote-only.ts");
+    gitCmd(cloneDir, "commit", "-m", "feat: remote-only");
+    gitCmd(cloneDir, "push", "origin", "main");
+
+    writeFileSync(join(dir, "local-only.ts"), "export const l = 1;\n");
+    gitCmd(dir, "add", "local-only.ts");
+    gitCmd(dir, "commit", "-m", "feat: local-only");
+
+    const run = captureTool(registerGitPushTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      error: string;
+      detail: string;
+      branch: string;
+      remote: string;
+    };
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe("push_failed");
+    expect(parsed.branch).toBe("main");
+    expect(parsed.remote).toBe("origin");
+    expect(parsed.detail.length).toBeGreaterThan(0);
+  });
+
   test("unsafe_remote_token for a bad remote argument", async () => {
     const { dir } = makeRepoWithRemote();
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -72,6 +73,18 @@ export function parseGitFetchOutput(output: string): { updatedRefs: string[]; ne
 }
 
 const ZEROS_SHA = "0000000000000000000000000000000000000000";
+
+/**
+ * True when `git fetch --porcelain` failed because the installed git is too old
+ * (pre-2.41). Exported for unit tests of the fallback path.
+ */
+export function isPorcelainUnsupported(stderr: string): boolean {
+  return (
+    stderr.includes("unknown option") ||
+    stderr.includes("unknown switch") ||
+    stderr.includes("invalid option")
+  );
+}
 
 /**
  * Parse `git fetch --porcelain` stdout.
@@ -179,7 +192,9 @@ export function registerGitFetchTool(server: FastMCP): void {
       if (!isSafeGitUpstreamToken(remote)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REMOTE_TOKEN, remote });
       }
-      if (branch && !isSafeGitUpstreamToken(branch)) {
+      // Branch is a fetch refspec fragment — use ref-token rules and reject a
+      // leading `+` (force-update refspec) so callers cannot forced-update locals.
+      if (branch && (!isSafeGitRefToken(branch) || branch.startsWith("+"))) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch });
       }
 
@@ -217,12 +232,7 @@ export function registerGitFetchTool(server: FastMCP): void {
 
       const porcelainResult = await spawnGitAsync(gitTop, porcelainArgs);
 
-      if (
-        !porcelainResult.ok &&
-        (porcelainResult.stderr.includes("unknown option") ||
-          porcelainResult.stderr.includes("unknown switch") ||
-          porcelainResult.stderr.includes("invalid option"))
-      ) {
+      if (!porcelainResult.ok && isPorcelainUnsupported(porcelainResult.stderr)) {
         // --porcelain not supported: fall back to plain fetch
         result = await spawnGitAsync(gitTop, baseArgs);
         structured = null;

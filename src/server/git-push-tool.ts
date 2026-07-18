@@ -55,7 +55,9 @@ export function registerGitPushTool(server: FastMCP): void {
       if (!branch) {
         return jsonRespond({ error: ERROR_CODES.PUSH_DETACHED_HEAD });
       }
-      if (!isSafeGitRefToken(branch)) {
+      // Reject leading `+` (git force-update refspec) even if the shared ref
+      // token helper still permits `+` mid-name — never force-push via argv.
+      if (!isSafeGitRefToken(branch) || branch.startsWith("+")) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: branch });
       }
 

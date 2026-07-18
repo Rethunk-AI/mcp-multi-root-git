@@ -6,16 +6,32 @@ import { join } from "node:path";
  * Tests for git_fetch tool: output parsing (unit) + execute path (integration).
  */
 
-import { parseGitFetchOutput, registerGitFetchTool } from "./git-fetch-tool.js";
+import {
+  isPorcelainUnsupported,
+  parseGitFetchOutput,
+  registerGitFetchTool,
+} from "./git-fetch-tool.js";
 import {
   captureTool,
   cleanupTmpPaths,
   gitCmd,
   makeRepoWithUpstream,
   mkTmpDir,
+  writeTestGitConfig,
 } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
+
+describe("git_fetch isPorcelainUnsupported", () => {
+  test("detects unknown-option / unknown-switch / invalid-option stderr", () => {
+    expect(isPorcelainUnsupported("error: unknown option `porcelain'")).toBe(true);
+    expect(isPorcelainUnsupported("error: unknown switch `porcelain'")).toBe(true);
+    expect(isPorcelainUnsupported("error: invalid option: --porcelain")).toBe(true);
+    expect(isPorcelainUnsupported("fatal: 'origin' does not appear to be a git repository")).toBe(
+      false,
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Unit: parseGitFetchOutput — exercises the real git <2.41 fallback parser
@@ -233,6 +249,118 @@ describe("git_fetch execute handler", () => {
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_remote_token");
+  });
+
+  test("rejects leading-plus force refspec branch (+main)", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-plus-", "mcp-fetch-plus-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      branch: "+main",
+    });
+    const parsed = JSON.parse(text) as { error: string; branch: string };
+    expect(parsed.error).toBe("unsafe_ref_token");
+    expect(parsed.branch).toBe("+main");
+  });
+
+  test("rejects unsafe branch tokens (shell metacharacters)", async () => {
+    const { work } = makeRepoWithUpstream("mcp-fetch-bad-branch-", "mcp-fetch-bad-branch-remote-");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      branch: "main;rm",
+    });
+    const parsed = JSON.parse(text) as { error: string; branch: string };
+    expect(parsed.error).toBe("unsafe_ref_token");
+    expect(parsed.branch).toBe("main;rm");
+  });
+
+  test("branch filter fetches only the named branch", async () => {
+    const { work, remote } = makeRepoWithUpstream("mcp-fetch-branch-", "mcp-fetch-branch-remote-");
+
+    const cloneDir = mkTmpDir("mcp-fetch-branch-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeFileSync(join(cloneDir, "other.ts"), "export const o = 1;\n");
+    gitCmd(cloneDir, "checkout", "-b", "other");
+    gitCmd(cloneDir, "add", "other.ts");
+    gitCmd(cloneDir, "commit", "-m", "feat: other");
+    gitCmd(cloneDir, "push", "origin", "other");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      branch: "main",
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; newRefs: string[] };
+    expect(parsed.ok).toBe(true);
+    // Branch-scoped fetch should not advertise the unrelated remote branch.
+    expect(parsed.newRefs.some((r) => r.includes("other"))).toBe(false);
+  });
+
+  test("tags:true fetches a tag created on the remote", async () => {
+    const { work, remote } = makeRepoWithUpstream("mcp-fetch-tags-", "mcp-fetch-tags-remote-");
+
+    const cloneDir = mkTmpDir("mcp-fetch-tags-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeTestGitConfig(cloneDir);
+    gitCmd(cloneDir, "tag", "v-fetch-tag");
+    gitCmd(cloneDir, "push", "origin", "v-fetch-tag");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      tags: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      newRefs: string[];
+      created?: Array<{ ref: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    const sawTag =
+      parsed.newRefs.some((r) => r.includes("v-fetch-tag")) ||
+      (parsed.created?.some((c) => c.ref.includes("v-fetch-tag")) ?? false);
+    expect(sawTag).toBe(true);
+  });
+
+  test("prune:true reports pruned remote-tracking refs", async () => {
+    const { work, remote } = makeRepoWithUpstream("mcp-fetch-prune-", "mcp-fetch-prune-remote-");
+
+    const cloneDir = mkTmpDir("mcp-fetch-prune-clone-");
+    gitCmd(cloneDir, "clone", remote, ".");
+    writeFileSync(join(cloneDir, "gone.ts"), "export const g = 1;\n");
+    gitCmd(cloneDir, "checkout", "-b", "to-prune");
+    gitCmd(cloneDir, "add", "gone.ts");
+    gitCmd(cloneDir, "commit", "-m", "feat: to-prune");
+    gitCmd(cloneDir, "push", "origin", "to-prune");
+
+    // Fetch once so work has origin/to-prune, then delete it on the remote.
+    gitCmd(work, "fetch", "origin");
+    gitCmd(cloneDir, "push", "origin", "--delete", "to-prune");
+
+    const run = captureTool(registerGitFetchTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      prune: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      pruned?: Array<{ ref: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    // Porcelain path surfaces pruned[]; older git may only delete silently.
+    if (parsed.pruned !== undefined) {
+      expect(parsed.pruned.some((p) => p.ref.includes("to-prune"))).toBe(true);
+    } else {
+      expect(gitCmd(work, "branch", "-r", "--list", "origin/to-prune").trim()).toBe("");
+    }
   });
 
   test("fetch with invalid remote returns ok:false in json", async () => {
