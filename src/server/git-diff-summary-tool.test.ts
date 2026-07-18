@@ -1,24 +1,21 @@
 /**
- * Tests for git_diff_summary_tool helpers.
+ * Tests for git_diff_summary_tool helpers and execute handler.
  *
- * Private helpers are copied locally so they can be tested in isolation
- * without exporting them from the module (same pattern as git-log-tool.test.ts).
- * `parseNumstatOutput` is exported from the source module and imported directly.
- *
- * We test:
- *  1. parseNumstatOutput — parses git diff --numstat per-file lines (real source function)
- *  2. parseDiffOutput — splits unified diff into per-file chunks
- *  3. extractFileInfo — determines path and status from chunk header/body
- *  4. truncateDiffBody — caps diff output to N lines
- *  5. matchesAnyPattern — glob exclusion/filter matching
- *  6. buildDiffArgs — maps range param to git CLI args
+ * Helpers are imported from the source module (exported for testability).
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
-import { join, matchesGlob } from "node:path";
-import { parseNumstatOutput, registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
-import { isSafeGitRangeToken } from "./git-refs.js";
+import { join } from "node:path";
+import {
+  buildDiffArgs,
+  extractFileInfo,
+  matchesAnyPattern,
+  parseDiffOutput,
+  parseNumstatOutput,
+  registerGitDiffSummaryTool,
+  truncateDiffBody,
+} from "./git-diff-summary-tool.js";
 import {
   addCommit,
   captureTool,
@@ -31,112 +28,7 @@ import {
 afterEach(cleanupTmpPaths);
 
 // ---------------------------------------------------------------------------
-// Local copies of private helpers (mirrors git-diff-summary-tool.ts)
-// ---------------------------------------------------------------------------
-
-function parseDiffOutput(diff: string): Array<{ header: string; body: string }> {
-  const chunks: Array<{ header: string; body: string }> = [];
-  const parts = diff.split(/(?=^diff --git )/m);
-  for (const part of parts) {
-    if (!part.startsWith("diff --git ")) continue;
-    const firstNewline = part.indexOf("\n");
-    const header = firstNewline >= 0 ? part.slice(0, firstNewline) : part;
-    const body = firstNewline >= 0 ? part.slice(firstNewline + 1) : "";
-    chunks.push({ header, body });
-  }
-  return chunks;
-}
-
-function extractFileInfo(
-  header: string,
-  body: string,
-): {
-  path: string;
-  oldPath?: string;
-  status: "modified" | "added" | "deleted" | "renamed";
-} {
-  const prefix = "diff --git a/";
-  const raw = header.startsWith(prefix) ? header.slice(prefix.length) : "";
-  const midLen = (raw.length - " b/".length) / 2;
-  let aPath = "";
-  let bPath = "";
-  if (Number.isInteger(midLen) && midLen > 0) {
-    const candidate = raw.slice(0, midLen);
-    if (raw.slice(midLen) === ` b/${candidate}`) {
-      aPath = candidate;
-      bPath = candidate;
-    }
-  }
-  if (!aPath) {
-    const headerMatch = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
-    aPath = headerMatch?.[1] ?? "";
-    bPath = headerMatch?.[2] ?? aPath;
-  }
-
-  let status: "modified" | "added" | "deleted" | "renamed" = "modified";
-  let oldPath: string | undefined;
-
-  if (/^new file mode/m.test(body)) {
-    status = "added";
-  } else if (/^deleted file mode/m.test(body)) {
-    status = "deleted";
-  } else if (/^rename from /m.test(body)) {
-    status = "renamed";
-    const fromMatch = /^rename from (.+)$/m.exec(body);
-    oldPath = fromMatch?.[1];
-    const toMatch = /^rename to (.+)$/m.exec(body);
-    if (toMatch?.[1]) {
-      bPath = toMatch[1];
-    }
-  }
-
-  const path = status === "deleted" ? aPath : bPath;
-  return { path, oldPath, status };
-}
-
-function truncateDiffBody(body: string, maxLines: number): { text: string; truncated: boolean } {
-  const lines = body.split("\n");
-  if (lines.length <= maxLines) {
-    return { text: body, truncated: false };
-  }
-  return { text: lines.slice(0, maxLines).join("\n"), truncated: true };
-}
-
-function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
-  const normalized = filePath.replace(/\\/g, "/");
-  for (const pattern of patterns) {
-    if (matchesGlob(normalized, pattern)) return true;
-    const basename = normalized.split("/").at(-1) ?? normalized;
-    if (matchesGlob(basename, pattern)) return true;
-  }
-  return false;
-}
-
-function buildDiffArgs(
-  range: string | undefined,
-): { ok: true; args: string[] } | { ok: false; error: string } {
-  if (range === undefined || range === "") {
-    return { ok: true, args: [] };
-  }
-  const normalized = range.trim().toLowerCase();
-  if (normalized === "staged" || normalized === "cached") {
-    return { ok: true, args: ["--cached"] };
-  }
-  if (normalized === "head") {
-    return { ok: true, args: ["HEAD"] };
-  }
-
-  const trimmed = range.trim();
-  if (!isSafeGitRangeToken(trimmed)) {
-    return { ok: false, error: `unsafe_range_token: ${range}` };
-  }
-  return { ok: true, args: [trimmed] };
-}
-
-// ---------------------------------------------------------------------------
 // Throwaway repo helpers
-// ---------------------------------------------------------------------------
-// Repo helpers (gitCmd, makeRepoWithSeed shared via test-harness.ts)
 // ---------------------------------------------------------------------------
 
 function makeRepo(): string {
@@ -173,6 +65,12 @@ describe("parseNumstatOutput", () => {
   test("returns empty map for empty input", () => {
     expect(parseNumstatOutput("").size).toBe(0);
   });
+
+  test("rename path 'old => new' is keyed by the new path", () => {
+    const m = parseNumstatOutput("10\t5\told.ts => new.ts");
+    expect(m.get("new.ts")).toEqual({ additions: 10, deletions: 5 });
+    expect(m.get("old.ts => new.ts")).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -205,7 +103,7 @@ describe("parseDiffOutput", () => {
     const diff = [
       "diff --git a/a.ts b/a.ts",
       "--- a/a.ts",
-      "+++ b/a.ts",
+      "+++ a/a.ts",
       "@@ -1 +1 @@",
       "-a",
       "+A",
@@ -273,11 +171,6 @@ describe("extractFileInfo", () => {
   });
 
   test("rename whose new path contains ' b/' parses with correct new path", () => {
-    // Header: "diff --git a/src/old.ts b/src/b/new.ts"
-    // Greedy regex would split at the first " b/" giving bPath="src/b/new.ts" — but only
-    // because the new path happens to start with "src/b/". For a path like
-    // "src/b/widget.ts" the greedy split produces the wrong aPath/bPath pair when
-    // aPath !== bPath. The fix must prefer "rename to" from the body.
     const header = "diff --git a/src/old.ts b/src/b/widget.ts";
     const body =
       "similarity index 90%\nrename from src/old.ts\nrename to src/b/widget.ts\n--- a/src/old.ts\n+++ b/src/b/widget.ts";
@@ -377,15 +270,14 @@ describe("buildDiffArgs", () => {
     expect(buildDiffArgs("main...feature^2")).toEqual({ ok: true, args: ["main...feature^2"] });
   });
 
-  test("unsafe tokens are rejected (isSafeGitRangeToken failure)", () => {
+  test("unsafe tokens are rejected with bare ERROR_CODES.UNSAFE_RANGE_TOKEN", () => {
     const injectionResult = buildDiffArgs("; rm -rf /");
     expect(injectionResult.ok).toBe(false);
-    if (!injectionResult.ok) expect(injectionResult.error).toContain("unsafe_range_token");
+    if (!injectionResult.ok) expect(injectionResult.error).toBe("unsafe_range_token");
 
     const rangeInjectionResult = buildDiffArgs("-x..HEAD");
     expect(rangeInjectionResult.ok).toBe(false);
-    if (!rangeInjectionResult.ok)
-      expect(rangeInjectionResult.error).toContain("unsafe_range_token");
+    if (!rangeInjectionResult.ok) expect(rangeInjectionResult.error).toBe("unsafe_range_token");
   });
 });
 
@@ -450,10 +342,16 @@ describe("git_diff_summary execute handler", () => {
 
     const run = captureTool(registerGitDiffSummaryTool);
     const text = await run({ workspaceRoot: dir, format: "json", fileFilter: "*.ts" });
-    const parsed = JSON.parse(text) as { files: Array<{ path: string }> };
+    const parsed = JSON.parse(text) as {
+      files: Array<{ path: string }>;
+      excludedFiles?: string[];
+      totalFiles: number;
+    };
     const paths = parsed.files.map((f) => f.path);
     expect(paths).toContain("foo.ts");
     expect(paths).not.toContain("bar.md");
+    expect(parsed.totalFiles).toBe(1);
+    expect(parsed.excludedFiles).toContain("bar.md");
   });
 
   test("ancestor-notation range (HEAD~1..HEAD) diffs the two commits", async () => {
@@ -508,5 +406,97 @@ describe("git_diff_summary execute handler", () => {
     const text = await run({ workspaceRoot: dir, format: "json", maxLinesPerFile: 2 });
     const parsed = JSON.parse(text) as { files: Array<{ truncated: boolean }> };
     expect(parsed.files[0]?.truncated).toBe(true);
+  });
+
+  test("maxFiles truncates and sets truncatedFiles", async () => {
+    const dir = makeRepo();
+    for (const name of ["a.ts", "b.ts", "c.ts"]) {
+      addCommit(dir, name, `const ${name[0]} = 1;\n`, `chore: ${name}`);
+      writeFileSync(join(dir, name), `const ${name[0]} = 2;\n`);
+    }
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      maxFiles: 1,
+      excludePatterns: [],
+    });
+    const parsed = JSON.parse(text) as {
+      totalFiles: number;
+      truncatedFiles?: number;
+      files: unknown[];
+    };
+    expect(parsed.totalFiles).toBe(3);
+    expect(parsed.truncatedFiles).toBe(2);
+    expect(parsed.files).toHaveLength(1);
+  });
+
+  test("default excludePatterns lists lock files in excludedFiles", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "app.ts", "const x = 1;\n", "chore: app");
+    addCommit(dir, "yarn.lock", "lock1\n", "chore: lock");
+    writeFileSync(join(dir, "app.ts"), "const x = 2;\n");
+    writeFileSync(join(dir, "yarn.lock"), "lock2\n");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      files: Array<{ path: string }>;
+      excludedFiles?: string[];
+      totalFiles: number;
+    };
+    expect(parsed.files.map((f) => f.path)).toContain("app.ts");
+    expect(parsed.files.map((f) => f.path)).not.toContain("yarn.lock");
+    expect(parsed.excludedFiles).toContain("yarn.lock");
+    expect(parsed.totalFiles).toBe(1);
+  });
+
+  test("unsafe range returns exact error===unsafe_range_token on the wire", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      range: "; rm -rf /",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("unsafe_range_token");
+  });
+
+  test("rename with content edits reports non-zero numstat counts", async () => {
+    const dir = makeRepo();
+    // Keep similarity high so git detects a rename (default -M threshold).
+    addCommit(
+      dir,
+      "old.ts",
+      "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n",
+      "chore: old",
+    );
+    gitCmd(dir, "mv", "old.ts", "new.ts");
+    writeFileSync(join(dir, "new.ts"), "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 99;\n");
+    gitCmd(dir, "add", "new.ts");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      range: "staged",
+      excludePatterns: [],
+    });
+    const parsed = JSON.parse(text) as {
+      files: Array<{
+        path: string;
+        status: string;
+        additions: number;
+        deletions: number;
+        oldPath?: string;
+      }>;
+    };
+    const renamed = parsed.files.find((f) => f.path === "new.ts" || f.status === "renamed");
+    expect(renamed).toBeDefined();
+    expect(renamed?.status).toBe("renamed");
+    expect(renamed?.oldPath).toBe("old.ts");
+    expect((renamed?.additions ?? 0) + (renamed?.deletions ?? 0)).toBeGreaterThan(0);
   });
 });

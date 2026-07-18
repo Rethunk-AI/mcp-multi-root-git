@@ -60,6 +60,8 @@ interface DiffSummary {
 /**
  * Parse `git diff --numstat` output into exact per-file counts.
  * Format per line: "<additions>\t<deletions>\t<path>"
+ * Renames emit "<additions>\t<deletions>\told => new" — keyed by the new path
+ * so lookups from extractFileInfo (which uses the destination path) succeed.
  * Binary files emit "-\t-\t<path>" and are recorded as 0/0.
  */
 export function parseNumstatOutput(
@@ -70,8 +72,14 @@ export function parseNumstatOutput(
     const parts = line.split("\t");
     if (parts.length < 3) continue;
     const [addStr, delStr, ...pathParts] = parts;
-    const filePath = pathParts.join("\t");
+    let filePath = pathParts.join("\t");
     if (!filePath) continue;
+    // Rename numstat: "old/path => new/path" — index under the new path.
+    const renameSep = " => ";
+    const renameIdx = filePath.indexOf(renameSep);
+    if (renameIdx >= 0) {
+      filePath = filePath.slice(renameIdx + renameSep.length);
+    }
     const additions = addStr === "-" ? 0 : Number.parseInt(addStr ?? "0", 10);
     const deletions = delStr === "-" ? 0 : Number.parseInt(delStr ?? "0", 10);
     if (!Number.isNaN(additions) && !Number.isNaN(deletions)) {
@@ -85,7 +93,7 @@ export function parseNumstatOutput(
  * Parse `git diff` output into per-file chunks.
  * Splits on "diff --git a/..." lines.
  */
-function parseDiffOutput(diff: string): Array<{ header: string; body: string }> {
+export function parseDiffOutput(diff: string): Array<{ header: string; body: string }> {
   const chunks: Array<{ header: string; body: string }> = [];
   // Each file section starts with "diff --git"
   const parts = diff.split(/(?=^diff --git )/m);
@@ -104,7 +112,7 @@ function parseDiffOutput(diff: string): Array<{ header: string; body: string }> 
  * Header: "diff --git a/old b/new"
  * Body may contain "rename from", "rename to", "new file mode", "deleted file mode".
  */
-function extractFileInfo(
+export function extractFileInfo(
   header: string,
   body: string,
 ): {
@@ -157,10 +165,14 @@ function extractFileInfo(
 }
 
 /**
- * Truncate diff body to at most `maxLines` lines (counting only hunk content lines).
+ * Truncate diff body to at most `maxLines` lines of the raw body text
+ * (includes index/---/+++/@@ headers — coarser than hunk-content-only counting).
  * Returns { text, truncated }.
  */
-function truncateDiffBody(body: string, maxLines: number): { text: string; truncated: boolean } {
+export function truncateDiffBody(
+  body: string,
+  maxLines: number,
+): { text: string; truncated: boolean } {
   const lines = body.split("\n");
   if (lines.length <= maxLines) {
     return { text: body, truncated: false };
@@ -169,7 +181,7 @@ function truncateDiffBody(body: string, maxLines: number): { text: string; trunc
 }
 
 /** Check whether a file path matches any of the given glob patterns. */
-function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
+export function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
   const normalized = filePath.replace(/\\/g, "/");
   for (const pattern of patterns) {
     if (matchesGlob(normalized, pattern)) return true;
@@ -181,7 +193,7 @@ function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
 }
 
 /** Build the diff args array from the `range` parameter. */
-function buildDiffArgs(
+export function buildDiffArgs(
   range: string | undefined,
 ): { ok: true; args: string[] } | { ok: false; error: string } {
   if (range === undefined || range === "") {
@@ -199,7 +211,7 @@ function buildDiffArgs(
   // on any endpoint) — delegates to the shared range validator.
   const trimmed = range.trim();
   if (!isSafeGitRangeToken(trimmed)) {
-    return { ok: false, error: `unsafe_range_token: ${range}` };
+    return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
   }
   return { ok: true, args: [trimmed] };
 }
@@ -290,9 +302,10 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
 
       // --- Parse diff chunks ---
       const chunks = parseDiffOutput(diffResult.stdout);
-      const totalFiles = chunks.length;
 
       // --- Apply excludePatterns and fileFilter ---
+      // totalFiles / totals count the post-filter set (before maxFiles truncation)
+      // so they stay consistent with each other; truncatedFiles covers display caps.
       const excludePatterns =
         args.excludePatterns !== undefined ? args.excludePatterns : DEFAULT_EXCLUDE_PATTERNS;
       const excludedFiles: string[] = [];
@@ -305,10 +318,13 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
           continue;
         }
         if (args.fileFilter && !matchesAnyPattern(filePath, [args.fileFilter])) {
+          excludedFiles.push(filePath);
           continue;
         }
         includedChunks.push(chunk);
       }
+
+      const totalFiles = includedChunks.length;
 
       // --- Truncate to maxFiles ---
       const maxFiles = args.maxFiles ?? 30;
@@ -318,15 +334,22 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       const processedChunks = includedChunks.slice(0, maxFiles);
 
       // --- Build FileDiff entries ---
+      // Sum stats over the full filtered set (includedChunks), not only the
+      // maxFiles-truncated display slice, so totals match totalFiles.
       let totalAdditions = 0;
       let totalDeletions = 0;
+      for (const chunk of includedChunks) {
+        const { path: filePath } = extractFileInfo(chunk.header, chunk.body);
+        const stat = statMap.get(filePath) ?? { additions: 0, deletions: 0 };
+        totalAdditions += stat.additions;
+        totalDeletions += stat.deletions;
+      }
+
       const files: FileDiff[] = [];
 
       for (const chunk of processedChunks) {
         const { path: filePath, oldPath, status } = extractFileInfo(chunk.header, chunk.body);
         const stat = statMap.get(filePath) ?? { additions: 0, deletions: 0 };
-        totalAdditions += stat.additions;
-        totalDeletions += stat.deletions;
 
         const { text: diffText, truncated } = truncateDiffBody(chunk.body, maxLinesPerFile);
         files.push({
