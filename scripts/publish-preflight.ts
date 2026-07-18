@@ -3,8 +3,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseAllFilesLineCoverage } from "../src/server/coverage.js";
-
 function run(command: string, args: string[]): string {
   console.log(`$ ${[command, ...args].join(" ")}`);
   const result = spawnSync(command, args, {
@@ -44,17 +42,9 @@ function assertVersionHasChangelog(): string {
 function runCoverageGate(): void {
   const output = run("bun", ["run", "test:coverage"]);
   const coverageDir = mkdtempSync(join(tmpdir(), "mcp-multi-root-git-coverage-"));
-  writeFileSync(join(coverageDir, "coverage.txt"), output);
-  const coverage = parseAllFilesLineCoverage(output);
-  if (coverage == null) {
-    process.stderr.write("No All files line coverage summary found.\n");
-    process.exit(1);
-  }
-  if (coverage < 80) {
-    process.stderr.write(`Line coverage ${coverage.toFixed(2)}% is below minimum 80.00%\n`);
-    process.exit(1);
-  }
-  console.log(`Line coverage OK: ${coverage.toFixed(2)}%`);
+  const coverageFile = join(coverageDir, "coverage.txt");
+  writeFileSync(coverageFile, output);
+  run("bun", ["run", "coverage:check", coverageFile, "80"]);
 }
 
 assertCleanTree();
