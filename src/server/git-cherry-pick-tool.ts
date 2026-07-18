@@ -20,6 +20,9 @@ import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+/** Hard cap on SHAs fed to a single `git cherry-pick` (ARG_MAX / runtime guard). */
+export const MAX_CHERRY_PICK_COMMITS = 100;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -42,6 +45,8 @@ interface ConflictReport {
   commit?: string;
   paths: string[];
   detail?: string;
+  abortFailed?: boolean;
+  abortDetail?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,8 +60,12 @@ async function cherryPickHead(gitTop: string): Promise<string | undefined> {
   return sha === "" ? undefined : sha;
 }
 
-async function abortCherryPick(gitTop: string): Promise<void> {
-  await spawnGitAsync(gitTop, ["cherry-pick", "--abort"]);
+/** Result of `git cherry-pick --abort` — callers must check `ok` before claiming a clean abort. */
+export async function abortCherryPick(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
+  const r = await spawnGitAsync(gitTop, ["cherry-pick", "--abort"]);
+  if (r.ok) return { ok: true };
+  const detail = (r.stderr || r.stdout).trim();
+  return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
 async function branchExists(gitTop: string, name: string): Promise<boolean> {
@@ -151,6 +160,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
     description:
       "Cherry-pick commits from one or more sources onto a destination. Sources: SHAs, `A..B` ranges, " +
       "or branch names (expanded to `onto..<branch>`, oldest-first). Already-reachable commits skipped. " +
+      `Hard-capped at ${MAX_CHERRY_PICK_COMMITS} commits per call (after dedupe). ` +
       "Refuses on dirty tree; stops on first conflict. Optional flags delete source branches/worktrees " +
       "after success using patch-id equivalence (set `strictMergedRefEquality: true` for strict ancestry). " +
       "Protected names always skipped.",
@@ -181,7 +191,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         .optional()
         .default(false)
         .describe(
-          "Remove local worktrees on branch-kind sources after success. Protected tails skipped.",
+          "Remove local worktrees on branch-kind sources after success. Protected names and path tails skipped.",
         ),
       strictMergedRefEquality: z
         .boolean()
@@ -242,6 +252,14 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       // --- Dedupe + skip already-present ---
       const { picks, perSourceKept } = await filterAndDedupe(gitTop, onto, resolved);
 
+      if (picks.length > MAX_CHERRY_PICK_COMMITS) {
+        return jsonRespond({
+          error: ERROR_CODES.CHERRY_PICK_TOO_MANY_COMMITS,
+          picked: picks.length,
+          max: MAX_CHERRY_PICK_COMMITS,
+        });
+      }
+
       // --- Apply cherry-pick (single atomic call) ---
       // `--empty=drop` silently drops commits that would produce no change against the
       // current tip — makes the tool idempotent when the same patch is re-applied.
@@ -254,12 +272,16 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         if (!r.ok) {
           const failedSha = await cherryPickHead(gitTop);
           const paths = await conflictPaths(gitTop);
-          await abortCherryPick(gitTop);
+          const abort = await abortCherryPick(gitTop);
           conflict = {
             stage: "cherry-pick",
             ...spreadDefined("commit", failedSha),
             paths,
             detail: (r.stderr || r.stdout).trim(),
+            ...spreadWhen(!abort.ok, {
+              abortFailed: true,
+              ...spreadDefined("abortDetail", abort.detail),
+            }),
           };
         } else {
           // Actual commits written = HEAD advance count (empty-drop may skip some).
@@ -333,7 +355,15 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               ...spreadDefined("commit", conflict?.commit),
               paths: conflict?.paths ?? [],
               ...spreadDefined("detail", conflict?.detail),
+              ...spreadWhen(conflict?.abortFailed === true, {
+                abortFailed: true,
+                ...spreadDefined("abortDetail", conflict?.abortDetail),
+              }),
             },
+          }),
+          ...spreadWhen(conflict?.abortFailed === true, {
+            error: ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
+            ...spreadDefined("abortDetail", conflict?.abortDetail),
           }),
         });
       }
@@ -357,6 +387,11 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         lines.push("", `Conflict at commit \`${conflict.commit ?? "?"}\` (${conflict.stage}):`);
         for (const p of conflict.paths) lines.push(`  conflict: ${p}`);
         if (conflict.detail) lines.push(`  detail: ${conflict.detail}`);
+        if (conflict.abortFailed) {
+          lines.push(
+            `  Error: ${ERROR_CODES.CHERRY_PICK_ABORT_FAILED}${conflict.abortDetail ? ` — ${conflict.abortDetail}` : ""}`,
+          );
+        }
       }
 
       return lines.join("\n");

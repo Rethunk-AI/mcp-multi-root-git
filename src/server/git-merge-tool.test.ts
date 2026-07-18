@@ -6,10 +6,11 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { registerGitMergeTool } from "./git-merge-tool.js";
+import { abortMerge, abortRebase, registerGitMergeTool } from "./git-merge-tool.js";
 import {
   addCommit,
   captureTool,
@@ -119,6 +120,27 @@ describe("git_merge fast-forward", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_merge strategy", () => {
+  test("ff-only on ahead-only source returns fast_forward", async () => {
+    const dir = makeRepo();
+    createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      strategy: "ff-only",
+      sources: ["feature/a"],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ ok: boolean; outcome: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.ok).toBe(true);
+    expect(parsed.results[0]?.outcome).toBe("fast_forward");
+    expect(existsSync(join(dir, "a.txt"))).toBe(true);
+  });
+
   test("ff-only on diverged branches returns cannot_fast_forward", async () => {
     const dir = makeRepo();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
@@ -205,6 +227,9 @@ describe("git_merge strategy", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.results[0]?.ok).toBe(false);
     expect(parsed.results[0]?.conflictStage).toBe("merge");
+    // Abort left a clean tree (no MERGE_HEAD / dirty porcelain).
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+    expect(() => gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD")).toThrow();
   });
 
   test("rebase strategy surfaces rebase conflict without merge fallback", async () => {
@@ -235,6 +260,75 @@ describe("git_merge strategy", () => {
       n.startsWith("rebase-"),
     );
     expect(hasRebaseDir).toBe(false);
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+  });
+
+  test("multi-source stops on first conflict and skips remaining sources", async () => {
+    const dir = makeRepo();
+    createBranchAhead(dir, "feature/ok", { "ok.txt": "ok\n" });
+
+    // Conflicting second source.
+    gitCmd(dir, "checkout", "-b", "feature/conflict");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta on main");
+
+    // Third source would apply cleanly if reached — must be skipped.
+    createBranchAhead(dir, "feature/skipped", { "skipped.txt": "skip\n" });
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      strategy: "merge",
+      sources: ["feature/ok", "feature/conflict", "feature/skipped"],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      applied: number;
+      total: number;
+      results: Array<{ source: string; ok: boolean }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.total).toBe(3);
+    expect(parsed.applied).toBe(1);
+    expect(parsed.results).toHaveLength(2); // stopped after conflict; third omitted
+    expect(parsed.results[0]?.source).toBe("feature/ok");
+    expect(parsed.results[0]?.ok).toBe(true);
+    expect(parsed.results[1]?.source).toBe("feature/conflict");
+    expect(parsed.results[1]?.ok).toBe(false);
+    expect(existsSync(join(dir, "ok.txt"))).toBe(true);
+    expect(existsSync(join(dir, "skipped.txt"))).toBe(false);
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+  });
+
+  test("into checks out a non-current destination branch", async () => {
+    const dir = makeRepo();
+    // dest starts at the same tip as main; feature/a is ahead → FF into dest.
+    gitCmd(dir, "branch", "dest", "HEAD");
+    createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
+    // Stay on main so `into: "dest"` must switch checkout.
+    expect(gitCmd(dir, "branch", "--show-current").trim()).toBe("main");
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      into: "dest",
+      sources: ["feature/a"],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      into: string;
+      results: Array<{ outcome: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.into).toBe("dest");
+    expect(parsed.results[0]?.outcome).toBe("fast_forward");
+    expect(gitCmd(dir, "branch", "--show-current").trim()).toBe("dest");
+    expect(existsSync(join(dir, "a.txt"))).toBe(true);
   });
 });
 
@@ -318,6 +412,38 @@ describe("git_merge cleanup", () => {
     expect(parsed.results[0]?.branchDeleted).toBe(true);
     expect(existsSync(wtPath)).toBe(false);
   });
+
+  test("deleteMergedWorktrees skips protected source name even when path tail is not protected", async () => {
+    const dir = makeRepo();
+    // Protected branch `dev` with a worktree whose basename is NOT a protected name.
+    gitCmd(dir, "checkout", "-b", "dev");
+    writeFileSync(join(dir, "d.txt"), "d\n");
+    gitCmd(dir, "add", "d.txt");
+    gitCmd(dir, "commit", "-m", "feat: d");
+    gitCmd(dir, "checkout", "main");
+
+    const wtContainer = mkTmpDir("mcp-wt-prot-");
+    const wtPath = trackTmpPath(join(wtContainer, "wt-agent-xyz"));
+    gitCmd(dir, "worktree", "add", wtPath, "dev");
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["dev"],
+      deleteMergedWorktrees: true,
+      deleteMergedBranches: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ branchDeleted?: boolean; worktreeRemoved?: string }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.worktreeRemoved).toBeUndefined();
+    expect(parsed.results[0]?.branchDeleted).toBeUndefined();
+    expect(existsSync(wtPath)).toBe(true);
+    expect(gitCmd(dir, "branch").trim()).toContain("dev");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -380,5 +506,59 @@ describe("git_merge guardrails", () => {
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("not_a_git_repository");
+  });
+
+  test("abortMerge reports failure instead of claiming a clean abort", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "feature/a");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
+
+    // Produce a real mid-merge conflict state.
+    expect(() => gitCmd(dir, "merge", "--no-ff", "--no-edit", "feature/a")).toThrow();
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
+
+    const gitDir = join(dir, ".git");
+    execFileSync("chmod", ["a-w", gitDir]);
+    try {
+      const result = await abortMerge(dir);
+      expect(result.ok).toBe(false);
+      expect(result.detail).toBeTruthy();
+    } finally {
+      execFileSync("chmod", ["u+w", gitDir]);
+    }
+
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
+    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+    gitCmd(dir, "merge", "--abort");
+  });
+
+  test("abortRebase reports failure instead of claiming a clean abort", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "feature/a");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
+
+    expect(() => gitCmd(dir, "rebase", "main", "feature/a")).toThrow();
+
+    const gitDir = join(dir, ".git");
+    execFileSync("chmod", ["a-w", gitDir]);
+    try {
+      const result = await abortRebase(dir);
+      expect(result.ok).toBe(false);
+      expect(result.detail).toBeTruthy();
+    } finally {
+      execFileSync("chmod", ["u+w", gitDir]);
+    }
+
+    const hasRebaseDir = readdirSync(gitDir).some((n: string) => n.startsWith("rebase-"));
+    expect(hasRebaseDir).toBe(true);
+    gitCmd(dir, "rebase", "--abort");
   });
 });

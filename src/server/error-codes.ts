@@ -33,7 +33,13 @@ export const ERROR_CODES = {
   INVALID_PATHS: "invalid_paths",
   INVALID_REMOTE_OR_BRANCH: "invalid_remote_or_branch",
   INVALID_SINCE: "invalid_since",
+  /** Canonical path-escape wire string (grep/diff/blame/show/stash). */
   PATH_ESCAPES_REPO: "path_escapes_repo",
+  /**
+   * Legacy path-escape alias used by `batch_commit`. Same failure class as
+   * `PATH_ESCAPES_REPO`; clients should treat both as equivalent until a
+   * future contract bump unifies them (Worker P owns batch_commit migration).
+   */
   PATH_ESCAPES_REPOSITORY: "path_escapes_repository",
   UNSAFE_RANGE_TOKEN: "unsafe_range_token",
   UNSAFE_REF_TOKEN: "unsafe_ref_token",
@@ -87,6 +93,7 @@ export const ERROR_CODES = {
 
   // Stash
   STASH_LIST_FAILED: "stash_list_failed",
+  STASH_APPLY_FAILED: "stash_apply_failed",
   STASH_PUSH_FAILED: "stash_push_failed",
 
   // Fetch
@@ -100,14 +107,18 @@ export const ERROR_CODES = {
   // Merge
   CANNOT_FAST_FORWARD: "cannot_fast_forward",
   DESTINATION_NOT_FOUND: "destination_not_found",
+  MERGE_ABORT_FAILED: "merge_abort_failed",
   MERGE_BASE_FAILED: "merge_base_failed",
   MERGE_CONFLICTS: "merge_conflicts",
   MERGE_FAILED: "merge_failed",
+  REBASE_ABORT_FAILED: "rebase_abort_failed",
   REBASE_CONFLICTS: "rebase_conflicts",
   SOURCE_NOT_FOUND: "source_not_found",
 
   // Cherry-pick
   CHECKOUT_FAILED: "checkout_failed",
+  CHERRY_PICK_ABORT_FAILED: "cherry_pick_abort_failed",
+  CHERRY_PICK_TOO_MANY_COMMITS: "cherry_pick_too_many_commits",
   RANGE_RESOLUTION_FAILED: "range_resolution_failed",
 
   // Reset

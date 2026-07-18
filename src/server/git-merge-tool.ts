@@ -29,7 +29,8 @@ const StrategySchema = z
     "`auto` (default): cascade fast-forward → rebase → merge-commit per source. " +
       "`ff-only`: only fast-forward, fail if diverged. " +
       "`rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). " +
-      "`merge`: always create a merge commit (no fast-forward).",
+      "`merge`: always create a merge commit (no fast-forward). " +
+      "Note: `auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs).",
   );
 
 // ---------------------------------------------------------------------------
@@ -52,7 +53,6 @@ interface SourceResult {
   conflictPaths?: string[];
   branchDeleted?: boolean;
   worktreeRemoved?: string;
-  skipReason?: string;
   error?: string;
   detail?: string;
 }
@@ -61,12 +61,25 @@ interface SourceResult {
 // Abort helpers
 // ---------------------------------------------------------------------------
 
-async function abortMerge(gitTop: string): Promise<void> {
-  await spawnGitAsync(gitTop, ["merge", "--abort"]);
+/** Result of `git merge --abort` — callers must check `ok` before claiming a clean abort. */
+export async function abortMerge(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
+  const r = await spawnGitAsync(gitTop, ["merge", "--abort"]);
+  if (r.ok) return { ok: true };
+  const detail = (r.stderr || r.stdout).trim();
+  return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
-async function abortRebase(gitTop: string): Promise<void> {
-  await spawnGitAsync(gitTop, ["rebase", "--abort"]);
+/** Result of `git rebase --abort` — callers must check `ok` before claiming a clean abort. */
+export async function abortRebase(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
+  const r = await spawnGitAsync(gitTop, ["rebase", "--abort"]);
+  if (r.ok) return { ok: true };
+  const detail = (r.stderr || r.stdout).trim();
+  return detail === "" ? { ok: false } : { ok: false, detail };
+}
+
+async function mergeInProgress(gitTop: string): Promise<boolean> {
+  const r = await spawnGitAsync(gitTop, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]);
+  return r.ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +88,9 @@ async function abortRebase(gitTop: string): Promise<void> {
 
 /**
  * Attempt to land `source` on `into`. Caller must ensure `into` is checked out.
- * On conflict the repo state is cleaned (merge/rebase aborted, HEAD restored to `into`).
+ * On conflict the repo is aborted when possible; if `--abort` itself fails the
+ * result carries `merge_abort_failed` / `rebase_abort_failed` and the tree may
+ * still be mid-merge/rebase.
  */
 async function mergeOneSource(
   gitTop: string,
@@ -137,6 +152,7 @@ async function mergeOneSource(
   }
 
   // --- rebase or auto (diverged case) ---
+  // Warning: rebaseSourceOntoInto rewrites the source branch tip in place.
   const rebased = await rebaseSourceOntoInto(gitTop, into, source);
   if (rebased.ok) {
     // Rebase succeeded; FF destination up to the now-rebased source tip.
@@ -156,7 +172,21 @@ async function mergeOneSource(
 async function fastForward(gitTop: string, source: string): Promise<SourceResult> {
   const r = await spawnGitAsync(gitTop, ["merge", "--ff-only", source]);
   if (!r.ok) {
-    await abortMerge(gitTop);
+    // ff-only refusal normally leaves no MERGE_HEAD — only abort when mid-merge.
+    if (await mergeInProgress(gitTop)) {
+      const abort = await abortMerge(gitTop);
+      if (!abort.ok) {
+        return {
+          source,
+          ok: false,
+          outcome: "conflicts",
+          conflictStage: "merge",
+          conflictPaths: [],
+          error: ERROR_CODES.MERGE_ABORT_FAILED,
+          detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+        };
+      }
+    }
     return {
       source,
       ok: false,
@@ -186,7 +216,18 @@ async function mergeCommit(
   const r = await spawnGitAsync(gitTop, ["merge", "--no-ff", "--no-edit", "-m", msg, source]);
   if (!r.ok) {
     const paths = await conflictPaths(gitTop);
-    await abortMerge(gitTop);
+    const abort = await abortMerge(gitTop);
+    if (!abort.ok) {
+      return {
+        source,
+        ok: false,
+        outcome: "conflicts",
+        conflictStage: "merge",
+        conflictPaths: paths,
+        error: ERROR_CODES.MERGE_ABORT_FAILED,
+        detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+      };
+    }
     return {
       source,
       ok: false,
@@ -209,6 +250,7 @@ async function mergeCommit(
 /**
  * Rebase `source` onto `into`, then return to `into`.
  * On failure: abort rebase, check out `into` again, return structured conflict.
+ * Successful rebase rewrites the source branch tip (new SHAs).
  */
 async function rebaseSourceOntoInto(
   gitTop: string,
@@ -219,9 +261,20 @@ async function rebaseSourceOntoInto(
   const r = await spawnGitAsync(gitTop, ["rebase", into, source]);
   if (!r.ok) {
     const paths = await conflictPaths(gitTop);
-    await abortRebase(gitTop);
-    // Ensure we're back on `into` regardless of rebase state.
+    const abort = await abortRebase(gitTop);
+    // Ensure we're back on `into` regardless of rebase state (best-effort).
     await spawnGitAsync(gitTop, ["checkout", into]);
+    if (!abort.ok) {
+      return {
+        source,
+        ok: false,
+        outcome: "conflicts",
+        conflictStage: "rebase",
+        conflictPaths: paths,
+        error: ERROR_CODES.REBASE_ABORT_FAILED,
+        detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+      };
+    }
     return {
       source,
       ok: false,
@@ -255,6 +308,8 @@ async function maybeRemoveWorktree(
   enabled: boolean,
 ): Promise<string | undefined> {
   if (!enabled) return undefined;
+  // Gate on the source branch name first (path basename may be an agent temp dir).
+  if (isProtectedBranch(source)) return undefined;
   const path = await worktreeForBranch(gitTop, source);
   if (!path) return undefined;
   // Re-check protected names against the worktree path's trailing segment too.
@@ -289,6 +344,7 @@ export function registerGitMergeTool(server: FastMCP): void {
     description:
       "Merge one or more source branches into a destination. `auto` cascades " +
       "fast-forward → rebase → merge-commit, preferring linear history. " +
+      "`auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs), not only the destination. " +
       "Refuses on dirty tree; stops on first conflict. Optional flags delete merged branches/worktrees " +
       "(protected names skipped: main, master, dev, develop, stable, trunk, prod, production, release/*, hotfix/*).",
     annotations: {
@@ -323,7 +379,7 @@ export function registerGitMergeTool(server: FastMCP): void {
         .optional()
         .default(false)
         .describe(
-          "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected tails skipped.",
+          "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected source names and path tails skipped.",
         ),
     }),
     execute: async (args) => {
@@ -431,7 +487,6 @@ export function registerGitMergeTool(server: FastMCP): void {
             }),
             ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
             ...spreadDefined("worktreeRemoved", r.worktreeRemoved),
-            ...spreadDefined("skipReason", r.skipReason),
             ...spreadDefined("error", r.error),
             ...spreadDefined("detail", r.detail),
           })),
