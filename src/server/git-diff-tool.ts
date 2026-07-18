@@ -5,16 +5,23 @@ import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
-import { jsonRespond } from "./json.js";
+import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Default byte cap on raw diff stdout to keep agent context bounded. */
+export const GIT_DIFF_DEFAULT_MAX_BYTES = 512_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /** Build the diff args array from parameters. */
-function buildDiffArgs(opts: {
+export function buildDiffArgs(opts: {
   base?: string;
   head?: string;
   paths?: string[];
@@ -23,22 +30,21 @@ function buildDiffArgs(opts: {
 }): { ok: true; args: string[] } | { ok: false; error: string } {
   const args: string[] = ["diff"];
 
-  // Handle staged flag first
-  if (opts.staged === true) {
-    args.push("--staged");
-  } else if (opts.base || opts.head) {
-    // Range-based diff: base..head or base...head
-    // If only base is given, use base~0..HEAD (implicit HEAD)
-    const baseStr = opts.base?.trim() ?? "HEAD";
-    const headStr = opts.head?.trim() ?? "HEAD";
+  // Docs: `staged` is ignored when `base` is provided; `head` is used only
+  // when `base` is set. Prefer base..head over --staged whenever base is set.
+  if (opts.base) {
+    const baseStr = opts.base.trim();
+    const headStr = opts.head?.trim() || "HEAD";
 
     if (!isSafeGitCommitIsh(baseStr) || !isSafeGitCommitIsh(headStr)) {
       return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
     }
 
-    // Use two-dot range: base..head
     args.push(`${baseStr}..${headStr}`);
+  } else if (opts.staged === true) {
+    args.push("--staged");
   }
+  // head without base is ignored (matches docs: head used only when base is set)
 
   // Apply unified context width if specified
   if (typeof opts.unified === "number") {
@@ -54,7 +60,7 @@ function buildDiffArgs(opts: {
 }
 
 /** Human-readable label for the range. */
-function rangeLabel(opts: {
+export function rangeLabel(opts: {
   base?: string;
   head?: string;
   paths?: string[];
@@ -62,12 +68,12 @@ function rangeLabel(opts: {
 }): string {
   let label = "";
 
-  if (opts.staged === true) {
-    label = "staged changes";
-  } else if (opts.base || opts.head) {
-    const baseStr = opts.base?.trim() ?? "HEAD";
-    const headStr = opts.head?.trim() ?? "HEAD";
+  if (opts.base) {
+    const baseStr = opts.base.trim();
+    const headStr = opts.head?.trim() || "HEAD";
     label = `${baseStr}..${headStr}`;
+  } else if (opts.staged === true) {
+    label = "staged changes";
   } else {
     label = "unstaged changes";
   }
@@ -79,6 +85,18 @@ function rangeLabel(opts: {
   return label;
 }
 
+/** Cap diff text at maxBytes; UTF-8 safe via Buffer slice. */
+export function truncateDiffOutput(
+  diff: string,
+  maxBytes: number,
+): { text: string; truncated: boolean } {
+  const buf = Buffer.from(diff, "utf8");
+  if (buf.length <= maxBytes) {
+    return { text: diff, truncated: false };
+  }
+  return { text: buf.subarray(0, maxBytes).toString("utf8"), truncated: true };
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -88,7 +106,8 @@ export function registerGitDiffTool(server: FastMCP): void {
     name: "git_diff",
     description:
       "Raw diff text for scoped file(s) or range. `staged: true` for staged changes, " +
-      "`base`/`head` for revision ranges, `path`/`paths` to scope, `unified` for context lines.",
+      "`base`/`head` for revision ranges, `path`/`paths` to scope, `unified` for context lines. " +
+      "Output is capped by `maxBytes` (default 512000) to bound agent context.",
     annotations: {
       readOnlyHint: true,
     },
@@ -127,6 +146,16 @@ export function registerGitDiffTool(server: FastMCP): void {
         .max(100)
         .optional()
         .describe("Context lines around each change (`-U<n>`). Default: 3. Use 0 for no context."),
+      maxBytes: z
+        .number()
+        .int()
+        .min(1024)
+        .max(10_000_000)
+        .optional()
+        .default(GIT_DIFF_DEFAULT_MAX_BYTES)
+        .describe(
+          `Max UTF-8 bytes of diff text to return (default ${GIT_DIFF_DEFAULT_MAX_BYTES}). Oversized output is truncated with truncated:true.`,
+        ),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -177,6 +206,10 @@ export function registerGitDiffTool(server: FastMCP): void {
         });
       }
 
+      const maxBytes =
+        typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES;
+      const { text: diffText, truncated } = truncateDiffOutput(result.stdout, maxBytes);
+
       const label = rangeLabel({
         base: args.base,
         head: args.head,
@@ -187,7 +220,8 @@ export function registerGitDiffTool(server: FastMCP): void {
       if (args.format === "json") {
         return jsonRespond({
           range: label,
-          diff: result.stdout,
+          diff: diffText,
+          ...spreadWhen(truncated, { truncated: true }),
         } as unknown as Record<string, unknown>);
       }
 
@@ -195,10 +229,13 @@ export function registerGitDiffTool(server: FastMCP): void {
       const lines: string[] = [];
       lines.push(`# Diff: ${label}`, "");
 
-      if (result.stdout.trim()) {
-        lines.push("```diff", result.stdout.trimEnd(), "```");
+      if (diffText.trim()) {
+        lines.push("```diff", diffText.trimEnd(), "```");
       } else {
         lines.push("_(no changes)_");
+      }
+      if (truncated) {
+        lines.push("", `_(diff truncated at ${maxBytes} bytes)_`);
       }
 
       return lines.join("\n");

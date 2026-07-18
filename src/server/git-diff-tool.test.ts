@@ -167,4 +167,63 @@ describe("git_diff execute handler", () => {
     expect(parsed.error).toBe("path_escapes_repo");
     expect(parsed.path).toBe("../../etc/passwd");
   });
+
+  test("base takes precedence over staged (docs: staged ignored when base set)", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const base = gitCmd(repo, "rev-parse", "HEAD").trim();
+    addCommit(repo, "later.txt", "later\n", "chore: later");
+    // Stage an unrelated unstaged-looking change that must NOT appear in base..HEAD
+    appendFileSync(join(repo, "seed.txt"), "staged-only\n");
+    gitCmd(repo, "add", "seed.txt");
+
+    const run = captureTool(registerGitDiffTool);
+    const text = await run({
+      workspaceRoot: repo,
+      base,
+      staged: true,
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
+
+    expect(parsed.range).toBe(`${base}..HEAD`);
+    expect(parsed.diff).toContain("later.txt");
+    expect(parsed.diff).not.toContain("staged-only");
+  });
+
+  test("head without base is ignored (unstaged diff, not HEAD..<head>)", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    addCommit(repo, "later.txt", "later\n", "chore: later");
+    appendFileSync(join(repo, "seed.txt"), "working-tree\n");
+
+    const run = captureTool(registerGitDiffTool);
+    const text = await run({
+      workspaceRoot: repo,
+      head: "HEAD~1",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
+
+    expect(parsed.range).toBe("unstaged changes");
+    expect(parsed.diff).toContain("working-tree");
+    expect(parsed.diff).not.toContain("later.txt");
+  });
+
+  test("maxBytes truncates oversized diff and sets truncated:true", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const big = `${"x".repeat(2000)}\n`;
+    addCommit(repo, "big.txt", "small\n", "chore: big");
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(repo, "big.txt"), big);
+
+    const run = captureTool(registerGitDiffTool);
+    const text = await run({
+      workspaceRoot: repo,
+      format: "json",
+      maxBytes: 1024,
+    });
+    const parsed = JSON.parse(text) as { diff: string; truncated?: boolean };
+
+    expect(parsed.truncated).toBe(true);
+    expect(Buffer.byteLength(parsed.diff, "utf8")).toBeLessThanOrEqual(1024);
+  });
 });
