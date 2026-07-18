@@ -372,9 +372,13 @@ export function registerBatchCommitTool(server: FastMCP): void {
       let indexTreeBefore: string | undefined;
       if (args.dryRun) {
         const wt = await spawnGitAsync(gitTop, ["write-tree"]);
-        if (wt.ok) {
-          indexTreeBefore = wt.stdout.trim();
+        if (!wt.ok) {
+          return jsonRespond({
+            error: ERROR_CODES.COMMIT_FAILED,
+            detail: (wt.stderr || wt.stdout).trim() || "failed to snapshot index before dryRun",
+          });
         }
+        indexTreeBefore = wt.stdout.trim();
       }
 
       for (let i = 0; i < args.commits.length; i++) {
@@ -521,10 +525,21 @@ export function registerBatchCommitTool(server: FastMCP): void {
         let indexSnap: string | undefined;
         if (unrelatedStaged.length > 0) {
           const wt = await spawnGitAsync(gitTop, ["write-tree"]);
-          if (wt.ok) {
-            indexSnap = wt.stdout.trim();
-            await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...unrelatedStaged]);
+          if (!wt.ok) {
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.COMMIT_FAILED,
+              detail:
+                (wt.stderr || wt.stdout).trim() ||
+                "failed to snapshot index for pre-staged path isolation",
+            });
+            break;
           }
+          indexSnap = wt.stdout.trim();
+          await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...unrelatedStaged]);
         }
 
         const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
