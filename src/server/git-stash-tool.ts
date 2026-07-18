@@ -4,7 +4,8 @@ import { z } from "zod";
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
-import { jsonRespond, spreadDefined } from "./json.js";
+import { conflictPaths } from "./git-refs.js";
+import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -90,7 +91,8 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       "Apply or pop a git stash. `index` defaults to 0. `pop: true` removes stash after applying.",
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      // pop:true deletes a stash entry — treat the tool as destructive for client filters.
+      destructiveHint: true,
       idempotentHint: false,
     },
     parameters: WorkspacePickSchema.extend({
@@ -122,12 +124,19 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       const applied = r.ok;
       const output = (r.stdout || r.stderr).trim();
 
+      // On apply/pop failure, surface unresolved conflict paths when present
+      // (mirrors merge/cherry-pick/revert). Leave the tree as git left it —
+      // stash conflicts are not auto-aborted.
+      const paths = applied ? [] : await conflictPaths(gitTop);
+
       if (args.format === "json") {
         return jsonRespond({
+          ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
           applied,
           stashIndex: args.index,
           popped: args.pop,
-          ...spreadDefined("output", output),
+          ...spreadDefined("output", output || undefined),
+          ...spreadWhen(paths.length > 0, { conflictPaths: paths }),
         });
       }
 
@@ -135,7 +144,9 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       if (applied) {
         return `# Stash ${verb}\n✓ ${stashRef}  → ${verb}`;
       }
-      return `# Stash ${verb} (failed)\n✗ ${stashRef}\n\n\`\`\`\n${output}\n\`\`\``;
+      const conflictBlock =
+        paths.length > 0 ? `\n\nConflicts:\n${paths.map((p) => `- ${p}`).join("\n")}` : "";
+      return `# Stash ${verb} (failed)\n✗ ${stashRef}\n\n\`\`\`\n${output}\n\`\`\`${conflictBlock}`;
     },
   });
 }
