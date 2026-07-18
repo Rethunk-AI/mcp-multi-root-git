@@ -23,7 +23,7 @@ function makeRepoWithPresets(): string {
   writeFileSync(
     join(presetDir, "git-mcp-presets.json"),
     JSON.stringify({
-      version: "1.0.0",
+      schemaVersion: "1",
       presets: {
         default: {
           nestedRoots: ["packages/a", "packages/b"],
