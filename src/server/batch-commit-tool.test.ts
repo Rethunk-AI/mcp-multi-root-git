@@ -5,19 +5,10 @@
  *  1. SHA extraction regex (unit) — mirrors the pattern inside the handler
  *  2. Path escape detection (unit) — uses exported isStrictlyUnderGitTop + resolvePathForRepo
  *  3. Integration: full stage-and-commit flow via spawnGitAsync against throwaway repos
- *
- * We test:
- *  1. SHA extraction regex parses standard git commit output
- *  2. SHA regex returns undefined for unrecognised output
- *  3. path_escapes_repository: dotdot path rejected before staging
- *  4. Single commit succeeds and SHA captured
- *  5. Multiple sequential commits all succeed
- *  6. Stops after first failure (nothing staged → commit_failed)
- *  7. Valid path that is exactly the git root is accepted
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
@@ -102,8 +93,9 @@ describe("path escape detection", () => {
     expect(isStrictlyUnderGitTop(outside, gitTop)).toBe(false);
   });
 
-  test("path equal to git root is accepted", () => {
+  test("path equal to git root is inside top (helper); batch_commit still rejects it", () => {
     const gitTop = mkTmpDir("mcp-top-");
+    // Confinement helper treats top === abs as inside; tool rejects whole-tree pathspecs separately.
     expect(isStrictlyUnderGitTop(gitTop, gitTop)).toBe(true);
   });
 });
@@ -566,16 +558,16 @@ describe("batch_commit line-range staging", () => {
   test("stages only lines in range when lines parameter is provided", async () => {
     const dir = makeRepo();
 
-    // Create base commit
-    writeFileSync(join(dir, "code.ts"), "const b = 0;\n");
+    // Two well-separated regions so the diff produces distinct hunks.
+    const filler = Array.from({ length: 20 }, (_, i) => `// filler ${i}`).join("\n");
+    const base = `const a = 1;\n\n${filler}\n\nconst z = 0;\n`;
+    writeFileSync(join(dir, "code.ts"), base);
     gitCmd(dir, "add", "code.ts");
     gitCmd(dir, "commit", "-m", "chore: base");
 
-    // Modify file with multiple sections
-    writeFileSync(
-      join(dir, "code.ts"),
-      "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconst e = 5;\n",
-    );
+    // Modify both regions; stage only the first hunk via lines.
+    const modified = base.replace("const a = 1", "const a = 100").replace("const z = 0", "const z = 99");
+    writeFileSync(join(dir, "code.ts"), modified);
 
     const run = captureTool(registerBatchCommitTool);
     const text = await run({
@@ -583,8 +575,8 @@ describe("batch_commit line-range staging", () => {
       format: "json",
       commits: [
         {
-          message: "feat: stage lines 2-3",
-          files: [{ path: "code.ts", lines: { from: 2, to: 3 } }],
+          message: "feat: stage lines 1-3",
+          files: [{ path: "code.ts", lines: { from: 1, to: 3 } }],
         },
       ],
     });
@@ -592,10 +584,16 @@ describe("batch_commit line-range staging", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.committed).toBe(1);
 
-    // Verify commit was created
     const logResult = await spawnGitAsync(dir, ["log", "--oneline"]);
     expect(logResult.ok).toBe(true);
-    expect(logResult.stdout).toContain("feat: stage lines 2-3");
+    expect(logResult.stdout).toContain("feat: stage lines 1-3");
+
+    // Out-of-range edit must remain unstaged/uncommitted.
+    const diffResult = await spawnGitAsync(dir, ["diff", "--", "code.ts"]);
+    expect(diffResult.stdout).toContain("const z = 99");
+    const showResult = await spawnGitAsync(dir, ["log", "-1", "-p"]);
+    expect(showResult.stdout).toContain("const a = 100");
+    expect(showResult.stdout).not.toContain("const z = 99");
   });
 
   test("stages whole file when lines parameter is absent", async () => {
@@ -875,5 +873,285 @@ describe("batch_commit deletion staging", () => {
     const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
     expect(parsed.ok).toBe(false);
     expect(parsed.results[0]?.error).toBe("stage_failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pathspec isolation, mid-entry rollback, directory rejection
+// ---------------------------------------------------------------------------
+
+describe("batch_commit pathspec isolation and stage rollback", () => {
+  test("commit excludes pre-staged unrelated index paths", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    writeFileSync(join(dir, "pre.ts"), "const p = 0;\n");
+    gitCmd(dir, "add", "base.ts", "pre.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    writeFileSync(join(dir, "pre.ts"), "const p = 99;\n");
+    writeFileSync(join(dir, "new.ts"), "export const n = 1;\n");
+    gitCmd(dir, "add", "pre.ts"); // pre-staged — must NOT ride into the commit
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: add new only", files: ["new.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    const show = await spawnGitAsync(dir, ["log", "-1", "--name-only", "--pretty=format:"]);
+    expect(show.stdout).toContain("new.ts");
+    expect(show.stdout).not.toContain("pre.ts");
+
+    // pre.ts remains staged after pathspec commit
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout).toContain("pre.ts");
+  });
+
+  test("mid-entry stage_failed unstages already-staged entry files", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "good.ts"), "const g = 0;\n");
+    writeFileSync(join(dir, "bad.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "good.ts", "bad.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    writeFileSync(join(dir, "good.ts"), "const g = 1;\n");
+    // bad.ts unchanged — lines range will fail with no hunks
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: partial stage fail",
+          files: ["good.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout.trim()).toBe("");
+    expect(staged.stdout).not.toContain("good.ts");
+  });
+
+  test("rejects '.' whole-tree pathspec", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "const n = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: ["."] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ error?: string; detail?: string }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("invalid_paths");
+    expect(parsed.results[0]?.detail).toContain(".");
+  });
+
+  test("rejects directory pathspec", async () => {
+    const dir = makeRepo();
+    mkdirSync(join(dir, "subdir"));
+    writeFileSync(join(dir, "subdir", "a.ts"), "const a = 1;\n");
+    gitCmd(dir, "add", "subdir/a.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: ["subdir"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("invalid_paths");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dryRun isolation + overlapping pre-staged cleanup
+// ---------------------------------------------------------------------------
+
+describe("batch_commit dryRun isolation", () => {
+  test("dryRun multi-entry diffStat is isolated per entry", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "file1.ts"), "const a = 1;\n");
+    writeFileSync(join(dir, "file2.ts"), "const b = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      dryRun: true,
+      commits: [
+        { message: "feat: first", files: ["file1.ts"] },
+        { message: "feat: second", files: ["file2.ts"] },
+      ],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ diffStat?: string; staged?: string[] }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.diffStat).toContain("file1.ts");
+    expect(parsed.results[0]?.diffStat).not.toContain("file2.ts");
+    expect(parsed.results[1]?.diffStat).toContain("file2.ts");
+    expect(parsed.results[1]?.diffStat).not.toContain("file1.ts");
+  });
+
+  test("dryRun restores overlapping pre-staged path after staging same path", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.ts"), "line1\nline2\nline3\nline4\nline5\n");
+    gitCmd(dir, "add", "shared.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Stage an edit to lines 1-2, leave more edits unstaged for dryRun lines staging
+    writeFileSync(join(dir, "shared.ts"), "LINE1\nLINE2\nline3\nline4\nline5\n");
+    gitCmd(dir, "add", "shared.ts");
+    writeFileSync(join(dir, "shared.ts"), "LINE1\nLINE2\nLINE3\nline4\nline5\n");
+
+    const before = await spawnGitAsync(dir, ["diff", "--cached"]);
+    expect(before.stdout).toContain("LINE1");
+
+    const run = captureTool(registerBatchCommitTool);
+    await run({
+      workspaceRoot: dir,
+      dryRun: true,
+      commits: [
+        {
+          message: "feat: preview more lines",
+          files: [{ path: "shared.ts", lines: { from: 3, to: 3 } }],
+        },
+      ],
+    });
+
+    // Index must match pre-call staged state (LINE1/LINE2 staged, LINE3 not)
+    const afterCached = await spawnGitAsync(dir, ["diff", "--cached"]);
+    expect(afterCached.stdout).toContain("LINE1");
+    expect(afterCached.stdout).toContain("LINE2");
+    expect(afterCached.stdout).not.toContain("LINE3");
+    const afterUnstaged = await spawnGitAsync(dir, ["diff", "--", "shared.ts"]);
+    expect(afterUnstaged.stdout).toContain("LINE3");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// commit_failed / push_failed / push_detached_head / invalid_line_range
+// ---------------------------------------------------------------------------
+
+describe("batch_commit commit_failed and push errors", () => {
+  test("commit_failed when pre-commit hook rejects", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    mkdirSync(join(dir, ".git", "hooks"), { recursive: true });
+    const hook = join(dir, ".git", "hooks", "pre-commit");
+    writeFileSync(hook, "#!/bin/sh\necho hook-reject\nexit 1\n");
+    chmodSync(hook, 0o755);
+
+    writeFileSync(join(dir, "new.ts"), "const n = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: hook fail", files: ["new.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ error?: string; detail?: string }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("commit_failed");
+  });
+
+  test('push: "after" on detached HEAD returns push_detached_head', async () => {
+    const { work } = makeRepoWithUpstream();
+    const sha = gitCmd(work, "rev-parse", "HEAD").trim();
+    gitCmd(work, "checkout", "--detach", sha);
+    writeFileSync(join(work, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      push: "after",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      push?: { ok: boolean; error?: string };
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+    expect(parsed.push?.ok).toBe(false);
+    expect(parsed.push?.error).toBe("push_detached_head");
+  });
+
+  test('push: "after" returns push_failed when remote rejects', async () => {
+    const { work, remote } = makeRepoWithUpstream();
+    // Point origin at a non-existent path so push fails after commits succeed.
+    gitCmd(work, "remote", "set-url", "origin", join(remote, "does-not-exist.git"));
+    writeFileSync(join(work, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: work,
+      format: "json",
+      push: "after",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      committed: number;
+      push?: { ok: boolean; error?: string };
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+    expect(parsed.push?.ok).toBe(false);
+    expect(parsed.push?.error).toBe("push_failed");
+  });
+
+  test("invalid_line_range when from > to", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "code.ts"), "const a = 1;\n");
+    gitCmd(dir, "add", "code.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "code.ts"), "const a = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "bad range",
+          files: [{ path: "code.ts", lines: { from: 10, to: 1 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("invalid_line_range");
   });
 });

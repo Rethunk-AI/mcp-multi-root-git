@@ -1,9 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { isStrictlyUnderGitTop, resolvePathForRepo } from "../repo-paths.js";
+import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
@@ -25,6 +27,9 @@ const FileEntrySchema = z.union([
           .max(1000000)
           .describe("End line number (1-indexed, inclusive)."),
       })
+      .refine((l) => l.from <= l.to, {
+        message: "lines.from must be <= lines.to",
+      })
       .describe("Line range to stage. Only hunks overlapping [from, to] are staged."),
   }),
 ]);
@@ -36,7 +41,10 @@ const CommitEntrySchema = z.object({
     .min(1)
     .describe(
       "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. " +
-        "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file.",
+        "Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`); " +
+        "on mid-entry stage failure, already-staged paths for that entry are unstaged. " +
+        "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. " +
+        "Rejects `.`, the repo root, and directory pathspecs.",
     ),
 });
 
@@ -54,8 +62,29 @@ const DryRunSchema = z
   .optional()
   .default(false)
   .describe(
-    "Stage files and return a preview without writing commits; unstages afterwards. Response is marked DRY RUN.",
+    "Stage files and return a preview without writing commits; restores the index afterwards. Response is marked DRY RUN.",
   );
+
+/**
+ * True when `path` would stage the whole tree or a directory (not a single file).
+ * Rejects `.`, `./`, paths resolving to gitTop, trailing-slash directory forms,
+ * and on-disk directories.
+ */
+function isWholeTreeOrDirectoryPathspec(path: string, gitTop: string): boolean {
+  const t = path.trim();
+  if (t === "" || t === "." || t === "./") return true;
+  if (t.endsWith("/") || t.endsWith("/.") || t.endsWith("/..")) return true;
+
+  const abs = resolvePathForRepo(path, gitTop);
+  if (resolve(abs) === resolve(gitTop)) return true;
+
+  try {
+    if (existsSync(abs) && statSync(abs).isDirectory()) return true;
+  } catch {
+    // ignore stat errors — treat as non-directory
+  }
+  return false;
+}
 
 /**
  * Parses a unified diff to extract hunks that overlap with a given line range.
@@ -192,26 +221,46 @@ async function stageFile(
     };
   }
 
-  // Line range case: extract overlapping hunks and apply patch
-  const diffResult = await spawnGitAsync(gitTop, ["diff", filePath]);
-  if (!diffResult.ok) {
-    return { ok: false, error: (diffResult.stderr || diffResult.stdout).trim() };
+  // Line range case: extract overlapping hunks and apply patch.
+  // Tracked files: unstaged worktree vs index (`git diff -- path`).
+  // Untracked files: synthesize a new-file diff via `--no-index` (exit 1 with
+  // differences is expected — treat non-empty stdout as success).
+  const tracked = await spawnGitAsync(gitTop, ["ls-files", "--error-unmatch", "--", filePath]);
+  let diffStdout: string;
+  if (tracked.ok) {
+    const diffResult = await spawnGitAsync(gitTop, ["diff", "--", filePath]);
+    if (!diffResult.ok && !diffResult.stdout.trim()) {
+      return { ok: false, error: (diffResult.stderr || diffResult.stdout).trim() };
+    }
+    diffStdout = diffResult.stdout;
+  } else {
+    const diffResult = await spawnGitAsync(gitTop, [
+      "diff",
+      "--no-index",
+      "--",
+      "/dev/null",
+      filePath,
+    ]);
+    // --no-index exits 1 when files differ; accept stdout as the patch body.
+    if (!diffResult.stdout.trim()) {
+      return {
+        ok: false,
+        error: (diffResult.stderr || diffResult.stdout || "No hunks found in line range").trim(),
+      };
+    }
+    diffStdout = diffResult.stdout;
   }
 
-  const partialPatch = extractOverlappingHunks(diffResult.stdout, lines.from, lines.to);
+  const partialPatch = extractOverlappingHunks(diffStdout, lines.from, lines.to);
   if (!partialPatch) {
     return { ok: false, error: "No hunks found in line range" };
   }
 
-  // Resolve the real git dir (works for linked worktrees where .git is a file, not a dir)
-  const gitDirResult = await spawnGitAsync(gitTop, ["rev-parse", "--absolute-git-dir"]);
-  if (!gitDirResult.ok) {
-    return { ok: false, error: (gitDirResult.stderr || gitDirResult.stdout).trim() };
-  }
-  const gitDir = gitDirResult.stdout.trim();
-
-  // Write partial patch to temp file in the git dir and apply it to the index
-  const tempPatchFile = `${gitDir}/.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`;
+  // Write partial patch to a temp file outside the git dir (avoids orphan files in .git)
+  const tempPatchFile = join(
+    tmpdir(),
+    `.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`,
+  );
   const { writeFileSync, unlinkSync } = await import("node:fs");
   writeFileSync(tempPatchFile, partialPatch, "utf8");
 
@@ -291,7 +340,11 @@ export function registerBatchCommitTool(server: FastMCP): void {
     name: "batch_commit",
     description:
       "Create multiple sequential git commits in one call. " +
-      "Each entry stages its files then commits. Stops on first failure. " +
+      "Each entry stages its files then commits. Unrelated pre-staged index paths " +
+      "are temporarily unstaged around the commit so they are not included " +
+      "(hunk-level staging is preserved — pathspec commit mode is not used). " +
+      "Stops on first failure; mid-entry stage failures unstage that entry's " +
+      "already-staged paths. " +
       'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
       readOnlyHint: false,
@@ -313,20 +366,14 @@ export function registerBatchCommitTool(server: FastMCP): void {
       const gitTop = pre.gitTop;
 
       const results: CommitResult[] = [];
-      const stagedFilesForCleanup: Set<string> = new Set();
 
-      // Snapshot already-staged paths BEFORE the preview loop so dry-run cleanup
-      // doesn't unstage files the caller had staged before invoking.
-      let preStagedPaths: Set<string> = new Set();
+      // Snapshot the full index before dry-run so cleanup restores pre-staged
+      // paths even when dryRun stages additional hunks onto the same paths.
+      let indexTreeBefore: string | undefined;
       if (args.dryRun) {
-        const snapResult = await spawnGitAsync(gitTop, ["diff", "--cached", "--name-only"]);
-        if (snapResult.ok) {
-          preStagedPaths = new Set(
-            snapResult.stdout
-              .split("\n")
-              .map((s) => s.trim())
-              .filter(Boolean),
-          );
+        const wt = await spawnGitAsync(gitTop, ["write-tree"]);
+        if (wt.ok) {
+          indexTreeBefore = wt.stdout.trim();
         }
       }
 
@@ -337,21 +384,38 @@ export function registerBatchCommitTool(server: FastMCP): void {
         // Normalize file entries to { path, lines? } format
         const fileEntries: Array<{ path: string; lines?: { from: number; to: number } }> = [];
         const filePaths: string[] = [];
+        let invalidLineRange = false;
         for (const fileEntry of entry.files) {
           if (typeof fileEntry === "string") {
             fileEntries.push({ path: fileEntry });
             filePaths.push(fileEntry);
           } else {
+            if (fileEntry.lines.from > fileEntry.lines.to) {
+              invalidLineRange = true;
+              filePaths.push(fileEntry.path);
+              break;
+            }
             fileEntries.push(fileEntry);
             filePaths.push(fileEntry.path);
           }
+        }
+        if (invalidLineRange) {
+          results.push({
+            index: i,
+            ok: false,
+            message: entry.message,
+            files: filePaths,
+            error: ERROR_CODES.INVALID_LINE_RANGE,
+            detail: "lines.from must be <= lines.to",
+          });
+          break;
         }
 
         // --- Validate all paths are under the git toplevel ---
         const escapedPaths: string[] = [];
         for (const path of filePaths) {
           const abs = resolvePathForRepo(path, gitTop);
-          if (!isStrictlyUnderGitTop(abs, gitTop)) {
+          if (!assertRelativePathUnderTop(path, abs, gitTop)) {
             escapedPaths.push(path);
           }
         }
@@ -367,9 +431,24 @@ export function registerBatchCommitTool(server: FastMCP): void {
           break;
         }
 
+        // --- Reject `.` / repo-root / directory pathspecs ---
+        const invalidPaths = filePaths.filter((p) => isWholeTreeOrDirectoryPathspec(p, gitTop));
+        if (invalidPaths.length > 0) {
+          results.push({
+            index: i,
+            ok: false,
+            message: entry.message,
+            files: filePaths,
+            error: ERROR_CODES.INVALID_PATHS,
+            detail: `directory or whole-tree pathspec rejected: ${invalidPaths.join(", ")}`,
+          });
+          break;
+        }
+
         // --- Stage files (with optional line ranges) ---
         let stagingFailed = false;
         let stagingError = "";
+        const stagedSoFar: string[] = [];
         for (const fileEntry of fileEntries) {
           const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
           if (!stageResult.ok) {
@@ -377,17 +456,15 @@ export function registerBatchCommitTool(server: FastMCP): void {
             stagingError = stageResult.error || "Unknown error";
             break;
           }
-          // Track for dry-run cleanup as soon as a file stages successfully — a later
-          // file in this same commit entry may still fail, and anything already staged
-          // must still be unstaged so a failed dry run never leaves index state behind.
-          // Excludes paths that were already staged before this call (so pre-existing
-          // staged state survives).
-          if (args.dryRun && !preStagedPaths.has(fileEntry.path)) {
-            stagedFilesForCleanup.add(fileEntry.path);
-          }
+          stagedSoFar.push(fileEntry.path);
         }
 
         if (stagingFailed) {
+          // Unstage anything this entry already staged (live + dryRun).
+          // dryRun final cleanup also restores via read-tree when available.
+          if (stagedSoFar.length > 0) {
+            await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...stagedSoFar]);
+          }
           results.push({
             index: i,
             ok: false,
@@ -400,10 +477,16 @@ export function registerBatchCommitTool(server: FastMCP): void {
           break;
         }
 
-        // --- Dry-run mode: collect preview and unstage ---
+        // --- Dry-run mode: collect preview scoped to this entry's paths ---
         if (args.dryRun) {
-          // Get diff stat for this staged entry
-          const diffStatResult = await spawnGitAsync(gitTop, ["diff", "--staged", "--stat"]);
+          // Path-scoped stat so multi-entry previews do not accumulate prior entries.
+          const diffStatResult = await spawnGitAsync(gitTop, [
+            "diff",
+            "--staged",
+            "--stat",
+            "--",
+            ...filePaths,
+          ]);
           const diffStat = diffStatResult.ok ? (diffStatResult.stdout || "").trim() : undefined;
 
           results.push({
@@ -414,12 +497,49 @@ export function registerBatchCommitTool(server: FastMCP): void {
             staged: filePaths,
             ...spreadDefined("diffStat", diffStat || undefined),
           });
-          continue; // Skip actual commit in dry-run mode
+
+          // Unstage this entry before the next so the next entry's staging starts clean
+          // relative to the snapshot (final read-tree still restores pre-call index).
+          await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...filePaths]);
+          continue;
         }
 
-        // --- Commit ---
+        // --- Commit: isolate entry files from unrelated pre-staged index paths ---
+        // `git commit -- <paths>` uses --only (worktree) mode and would squash
+        // hunk-level staging. Instead: snapshot index, temporarily unstage
+        // unrelated staged paths, commit from the index, then restore them.
+        const stagedNamesResult = await spawnGitAsync(gitTop, ["diff", "--cached", "--name-only"]);
+        const stagedNames = stagedNamesResult.ok
+          ? stagedNamesResult.stdout
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+        const entryPathSet = new Set(filePaths);
+        const unrelatedStaged = stagedNames.filter((p) => !entryPathSet.has(p));
+
+        let indexSnap: string | undefined;
+        if (unrelatedStaged.length > 0) {
+          const wt = await spawnGitAsync(gitTop, ["write-tree"]);
+          if (wt.ok) {
+            indexSnap = wt.stdout.trim();
+            await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...unrelatedStaged]);
+          }
+        }
+
         const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
         if (!commitResult.ok) {
+          // Restore unrelated staged paths even on failure so we don't leave the
+          // index worse than when we entered this entry.
+          if (indexSnap && unrelatedStaged.length > 0) {
+            await spawnGitAsync(gitTop, [
+              "restore",
+              `--source=${indexSnap}`,
+              "--staged",
+              "--",
+              ...unrelatedStaged,
+            ]);
+          }
           const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
           results.push({
             index: i,
@@ -431,6 +551,16 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ...spreadDefined("output", gitOutput || undefined),
           });
           break;
+        }
+
+        if (indexSnap && unrelatedStaged.length > 0) {
+          await spawnGitAsync(gitTop, [
+            "restore",
+            `--source=${indexSnap}`,
+            "--staged",
+            "--",
+            ...unrelatedStaged,
+          ]);
         }
 
         // --- Extract SHA from commit output ---
@@ -446,10 +576,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
         });
       }
 
-      // --- In dry-run mode, unstage all files ---
-      if (args.dryRun && stagedFilesForCleanup.size > 0) {
-        const filesToReset = Array.from(stagedFilesForCleanup);
-        await spawnGitAsync(gitTop, ["reset", "HEAD", "--", ...filesToReset]);
+      // --- In dry-run mode, restore the full pre-call index ---
+      if (args.dryRun && indexTreeBefore) {
+        await spawnGitAsync(gitTop, ["read-tree", indexTreeBefore]);
       }
 
       const allOk = results.length === args.commits.length && results.every((r) => r.ok);
