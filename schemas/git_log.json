@@ -11,15 +11,10 @@
           "type": "string"
         },
         {
-          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        {
-          "type": "string",
-          "const": "*"
         }
       ]
     },
@@ -62,11 +57,17 @@
     "branch": {
       "description": "Ref/branch to log from. Default: HEAD.",
       "type": "string"
+    },
+    "follow": {
+      "default": false,
+      "description": "Pass `git log --follow` for rename-aware history. Requires exactly one entry in `paths`.",
+      "type": "boolean"
     }
   },
   "required": [
     "format",
-    "maxCommits"
+    "maxCommits",
+    "follow"
   ],
   "additionalProperties": false
 }

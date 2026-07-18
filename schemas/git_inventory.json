@@ -11,15 +11,10 @@
           "type": "string"
         },
         {
-          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        {
-          "type": "string",
-          "const": "*"
         }
       ]
     },
@@ -52,6 +47,25 @@
     "branch": {
       "description": "Pair with `remote`.",
       "type": "string"
+    },
+    "compareRefs": {
+      "description": "Ahead/behind between two local refs (e.g. main vs a feature branch), independent of upstream tracking.",
+      "type": "object",
+      "properties": {
+        "left": {
+          "type": "string",
+          "description": "Base ref (ahead = commits in right not in left)."
+        },
+        "right": {
+          "type": "string",
+          "description": "Other ref (behind = commits in left not in right)."
+        }
+      },
+      "required": [
+        "left",
+        "right"
+      ],
+      "additionalProperties": false
     },
     "maxRoots": {
       "default": 64,

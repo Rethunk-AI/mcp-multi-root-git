@@ -77,7 +77,7 @@
                 }
               ]
             },
-            "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file."
+            "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Each path is staged individually (`git add` / partial patch / `git rm --cached`); on mid-entry stage failure, paths already staged for that entry are unstaged. Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. Directory and repository-root pathspecs (`.`) are rejected."
           }
         },
         "required": [
@@ -99,7 +99,7 @@
     },
     "dryRun": {
       "default": false,
-      "description": "Stage files and return a preview without writing commits; unstages afterwards. Response is marked DRY RUN.",
+      "description": "Stage files and return a preview without writing commits; restores the index afterwards. Response is marked DRY RUN.",
       "type": "boolean"
     }
   },

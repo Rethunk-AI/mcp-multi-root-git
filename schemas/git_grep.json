@@ -11,15 +11,10 @@
           "type": "string"
         },
         {
-          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        {
-          "type": "string",
-          "const": "*"
         }
       ]
     },
@@ -32,13 +27,38 @@
       ]
     },
     "pattern": {
+      "description": "Content-search pattern (basic regex), always passed as `-e <pattern>`. Required unless `pickaxe` is set.",
       "type": "string",
       "minLength": 1,
-      "maxLength": 500,
-      "description": "Search pattern (basic regex), always passed as `-e <pattern>`."
+      "maxLength": 500
+    },
+    "pickaxe": {
+      "description": "When set, run pickaxe history search instead of content grep. Returns `commits[]` (sha + subject) per root.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "S",
+            "G"
+          ],
+          "description": "`S` = pickaxe string (`git log -S`); `G` = pickaxe regex (`git log -G`)."
+        },
+        "term": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Search term / regex for pickaxe history."
+        }
+      },
+      "required": [
+        "mode",
+        "term"
+      ],
+      "additionalProperties": false
     },
     "ref": {
-      "description": "Commit/branch/tag to search the tree at, instead of the working tree. Must be a safe ref token.",
+      "description": "Commit/branch/tag: content mode searches that tree; pickaxe mode limits history to that tip. Must be a safe ref token.",
       "type": "string"
     },
     "paths": {
@@ -55,12 +75,12 @@
     },
     "filesOnly": {
       "default": false,
-      "description": "List matching file paths only (`-l`), omitting line/text detail.",
+      "description": "List matching file paths only (`-l`), omitting line/text detail. Content mode only.",
       "type": "boolean"
     },
     "maxMatches": {
       "default": 200,
-      "description": "Max matches (or files, when `filesOnly`) per root (hard cap 1000, default 200).",
+      "description": "Max matches/files/commits per root (hard cap 1000, default 200).",
       "type": "integer",
       "minimum": 1,
       "maximum": 1000
@@ -68,7 +88,6 @@
   },
   "required": [
     "format",
-    "pattern",
     "ignoreCase",
     "filesOnly",
     "maxMatches"

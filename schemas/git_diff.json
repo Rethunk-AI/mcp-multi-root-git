@@ -45,11 +45,19 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 100
+    },
+    "maxBytes": {
+      "default": 512000,
+      "description": "Max UTF-8 bytes of diff text to return (default 512000). Oversized output is truncated with truncated:true.",
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 10000000
     }
   },
   "required": [
     "format",
-    "staged"
+    "staged",
+    "maxBytes"
   ],
   "additionalProperties": false
 }

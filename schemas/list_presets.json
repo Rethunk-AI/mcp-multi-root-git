@@ -11,15 +11,10 @@
           "type": "string"
         },
         {
-          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        {
-          "type": "string",
-          "const": "*"
         }
       ]
     },

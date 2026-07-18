@@ -32,7 +32,7 @@
     },
     "strategy": {
       "default": "auto",
-      "description": "`auto` (default): cascade fast-forward → rebase → merge-commit per source. `ff-only`: only fast-forward, fail if diverged. `rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). `merge`: always create a merge commit (no fast-forward).",
+      "description": "`auto` (default): cascade fast-forward → rebase → merge-commit per source. `ff-only`: only fast-forward, fail if diverged. `rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). `merge`: always create a merge commit (no fast-forward). Note: `auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs).",
       "type": "string",
       "enum": [
         "auto",
@@ -52,7 +52,7 @@
     },
     "deleteMergedWorktrees": {
       "default": false,
-      "description": "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected tails skipped.",
+      "description": "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected source names and path tails skipped.",
       "type": "boolean"
     }
   },

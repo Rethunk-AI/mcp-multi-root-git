@@ -15,15 +15,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -57,15 +52,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -99,6 +89,25 @@
           "description": "Pair with `remote`.",
           "type": "string"
         },
+        "compareRefs": {
+          "description": "Ahead/behind between two local refs (e.g. main vs a feature branch), independent of upstream tracking.",
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "string",
+              "description": "Base ref (ahead = commits in right not in left)."
+            },
+            "right": {
+              "type": "string",
+              "description": "Other ref (behind = commits in left not in right)."
+            }
+          },
+          "required": [
+            "left",
+            "right"
+          ],
+          "additionalProperties": false
+        },
         "maxRoots": {
           "default": 64,
           "type": "integer",
@@ -124,15 +133,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -191,15 +195,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -228,15 +227,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -279,11 +273,17 @@
         "branch": {
           "description": "Ref/branch to log from. Default: HEAD.",
           "type": "string"
+        },
+        "follow": {
+          "default": false,
+          "description": "Pass `git log --follow` for rename-aware history. Requires exactly one entry in `paths`.",
+          "type": "boolean"
         }
       },
       "required": [
         "format",
-        "maxCommits"
+        "maxCommits",
+        "follow"
       ],
       "additionalProperties": false
     },
@@ -298,15 +298,10 @@
               "type": "string"
             },
             {
-              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "string"
               }
-            },
-            {
-              "type": "string",
-              "const": "*"
             }
           ]
         },
@@ -319,13 +314,38 @@
           ]
         },
         "pattern": {
+          "description": "Content-search pattern (basic regex), always passed as `-e <pattern>`. Required unless `pickaxe` is set.",
           "type": "string",
           "minLength": 1,
-          "maxLength": 500,
-          "description": "Search pattern (basic regex), always passed as `-e <pattern>`."
+          "maxLength": 500
+        },
+        "pickaxe": {
+          "description": "When set, run pickaxe history search instead of content grep. Returns `commits[]` (sha + subject) per root.",
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "S",
+                "G"
+              ],
+              "description": "`S` = pickaxe string (`git log -S`); `G` = pickaxe regex (`git log -G`)."
+            },
+            "term": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "Search term / regex for pickaxe history."
+            }
+          },
+          "required": [
+            "mode",
+            "term"
+          ],
+          "additionalProperties": false
         },
         "ref": {
-          "description": "Commit/branch/tag to search the tree at, instead of the working tree. Must be a safe ref token.",
+          "description": "Commit/branch/tag: content mode searches that tree; pickaxe mode limits history to that tip. Must be a safe ref token.",
           "type": "string"
         },
         "paths": {
@@ -342,12 +362,12 @@
         },
         "filesOnly": {
           "default": false,
-          "description": "List matching file paths only (`-l`), omitting line/text detail.",
+          "description": "List matching file paths only (`-l`), omitting line/text detail. Content mode only.",
           "type": "boolean"
         },
         "maxMatches": {
           "default": 200,
-          "description": "Max matches (or files, when `filesOnly`) per root (hard cap 1000, default 200).",
+          "description": "Max matches/files/commits per root (hard cap 1000, default 200).",
           "type": "integer",
           "minimum": 1,
           "maximum": 1000
@@ -355,7 +375,6 @@
       },
       "required": [
         "format",
-        "pattern",
         "ignoreCase",
         "filesOnly",
         "maxMatches"
@@ -460,11 +479,19 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        },
+        "maxBytes": {
+          "default": 512000,
+          "description": "Max UTF-8 bytes of diff text to return (default 512000). Oversized output is truncated with truncated:true.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 10000000
         }
       },
       "required": [
         "format",
-        "staged"
+        "staged",
+        "maxBytes"
       ],
       "additionalProperties": false
     },
@@ -892,7 +919,7 @@
                     }
                   ]
                 },
-                "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file."
+                "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Each path is staged individually (`git add` / partial patch / `git rm --cached`); on mid-entry stage failure, paths already staged for that entry are unstaged. Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. Directory and repository-root pathspecs (`.`) are rejected."
               }
             },
             "required": [
@@ -914,7 +941,7 @@
         },
         "dryRun": {
           "default": false,
-          "description": "Stage files and return a preview without writing commits; unstages afterwards. Response is marked DRY RUN.",
+          "description": "Stage files and return a preview without writing commits; restores the index afterwards. Response is marked DRY RUN.",
           "type": "boolean"
         }
       },
@@ -994,7 +1021,7 @@
         },
         "strategy": {
           "default": "auto",
-          "description": "`auto` (default): cascade fast-forward → rebase → merge-commit per source. `ff-only`: only fast-forward, fail if diverged. `rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). `merge`: always create a merge commit (no fast-forward).",
+          "description": "`auto` (default): cascade fast-forward → rebase → merge-commit per source. `ff-only`: only fast-forward, fail if diverged. `rebase`: rebase source onto destination, then fast-forward (no merge-commit fallback). `merge`: always create a merge commit (no fast-forward). Note: `auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs).",
           "type": "string",
           "enum": [
             "auto",
@@ -1014,7 +1041,7 @@
         },
         "deleteMergedWorktrees": {
           "default": false,
-          "description": "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected tails skipped.",
+          "description": "Remove local worktrees on source branches after clean merge (`git worktree remove`). Protected source names and path tails skipped.",
           "type": "boolean"
         }
       },
@@ -1064,7 +1091,7 @@
         },
         "deleteMergedWorktrees": {
           "default": false,
-          "description": "Remove local worktrees on branch-kind sources after success. Protected tails skipped.",
+          "description": "Remove local worktrees on branch-kind sources after success. Protected names and path tails skipped.",
           "type": "boolean"
         },
         "strictMergedRefEquality": {
@@ -1268,7 +1295,7 @@
         "path": {
           "type": "string",
           "minLength": 1,
-          "description": "Filesystem path for the new worktree (relative paths resolved from git toplevel)."
+          "description": "Filesystem path for the new worktree (relative or absolute; must resolve under the git toplevel)."
         },
         "branch": {
           "type": "string",

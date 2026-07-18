@@ -37,7 +37,7 @@
     },
     "deleteMergedWorktrees": {
       "default": false,
-      "description": "Remove local worktrees on branch-kind sources after success. Protected tails skipped.",
+      "description": "Remove local worktrees on branch-kind sources after success. Protected names and path tails skipped.",
       "type": "boolean"
     },
     "strictMergedRefEquality": {
