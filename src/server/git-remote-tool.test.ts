@@ -5,9 +5,11 @@
  * case.
  */
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { chmodSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-import * as gitModule from "./git.js";
+import { resetGitPathStateForTests } from "./git.js";
 import { parseGitRemoteOutput, registerGitRemoteTool } from "./git-remote-tool.js";
 import {
   captureTool,
@@ -124,28 +126,42 @@ describe("git_remote execute handler", () => {
   });
 
   test("returns remote_list_failed when git remote -v exits non-zero", async () => {
+    // Prefer a PATH wrapper over mock.module — Bun module mocks leak across files
+    // that already imported spawnGitAsync and break later suites.
     const repo = makeRepoWithSeed("mcp-git-remote-fail-");
-    const spawnGitAsyncMock = mock(async () => ({
-      ok: false as const,
-      stderr: "fatal: simulated remote list failure",
-      stdout: "",
-    }));
+    const which = Bun.spawnSync(["which", "git"], { stdout: "pipe", stderr: "pipe" });
+    const realGit = which.stdout.toString().trim();
+    expect(realGit.length).toBeGreaterThan(0);
 
-    mock.module("./git.js", () => ({
-      ...gitModule,
-      spawnGitAsync: spawnGitAsyncMock,
-    }));
+    const bin = mkTmpDir("mcp-fake-git-");
+    writeFileSync(
+      join(bin, "git"),
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        'if [[ "$1" == "remote" && "$2" == "-v" ]]; then',
+        '  echo "fatal: simulated remote list failure" >&2',
+        "  exit 128",
+        "fi",
+        `exec "${realGit}" "$@"`,
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(bin, "git"), 0o755);
 
+    const prevPath = process.env.PATH ?? "";
+    process.env.PATH = `${bin}:${prevPath}`;
+    resetGitPathStateForTests();
     try {
       const run = captureTool(registerGitRemoteTool);
       const text = await run({ workspaceRoot: repo, format: "json" });
       const parsed = JSON.parse(text) as { error: string; detail?: string };
 
       expect(parsed.error).toBe("remote_list_failed");
-      expect(parsed.detail).toBe("fatal: simulated remote list failure");
-      expect(spawnGitAsyncMock.mock.calls.length).toBeGreaterThan(0);
+      expect(parsed.detail).toContain("fatal: simulated remote list failure");
     } finally {
-      mock.restore();
+      process.env.PATH = prevPath;
+      resetGitPathStateForTests();
     }
   });
 });
