@@ -1,9 +1,10 @@
 /**
- * Tool parameter surface checks.
+ * Tool parameter surface checks — routing params + parity with tools.ts registrars.
  */
 
 import { describe, expect, test } from "bun:test";
 
+import { captureToolDefinitions } from "./test-harness.js";
 import {
   ALL_PARAMETER_SCHEMA_TOOLS,
   captureToolParameterSchemas,
@@ -11,11 +12,33 @@ import {
   MUTATING_TOOLS,
   READ_ONLY_SINGLE_REPO_TOOLS,
 } from "./tool-parameter-schemas.js";
+import { registerRethunkGitTools } from "./tools.js";
 
 describe("tool parameter schemas", () => {
-  test("generates JSON Schema for every registered tool", () => {
+  test("capture keys match registerRethunkGitTools and category union", () => {
+    const prev = process.env.RETHUNK_GIT_TOOLS;
+    delete process.env.RETHUNK_GIT_TOOLS;
+    let registeredNames: string[];
+    try {
+      registeredNames = captureToolDefinitions((server) => {
+        registerRethunkGitTools(server);
+      }).map((t) => t.name);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.RETHUNK_GIT_TOOLS;
+      } else {
+        process.env.RETHUNK_GIT_TOOLS = prev;
+      }
+    }
+
     const schemas = captureToolParameterSchemas();
-    expect(Object.keys(schemas).sort()).toEqual([...ALL_PARAMETER_SCHEMA_TOOLS].sort());
+    const captureKeys = Object.keys(schemas);
+
+    // Live tools.ts registrar path is the source of truth for capture.
+    expect(captureKeys).toEqual(registeredNames);
+    // Category arrays must classify every registered tool (and no extras).
+    expect([...ALL_PARAMETER_SCHEMA_TOOLS].sort()).toEqual([...registeredNames].sort());
+
     for (const [name, schema] of Object.entries(schemas)) {
       expect(name.length).toBeGreaterThan(0);
       expect(schema.properties).toBeDefined();

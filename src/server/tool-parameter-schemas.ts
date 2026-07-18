@@ -1,41 +1,13 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { registerBatchCommitTool } from "./batch-commit-tool.js";
-import { registerGitBlameTool } from "./git-blame-tool.js";
-import { registerGitBranchListTool } from "./git-branch-list-tool.js";
-import { registerGitBranchTool } from "./git-branch-tool.js";
-import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
-import { registerGitConflictsTool } from "./git-conflicts-tool.js";
-import { registerGitDescribeTool } from "./git-describe-tool.js";
-import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
-import { registerGitDiffTool } from "./git-diff-tool.js";
-import { registerGitFetchTool } from "./git-fetch-tool.js";
-import { registerGitGrepTool } from "./git-grep-tool.js";
-import { registerGitInventoryTool } from "./git-inventory-tool.js";
-import { registerGitLogTool } from "./git-log-tool.js";
-import { registerGitMergeTool } from "./git-merge-tool.js";
-import { registerGitParityTool } from "./git-parity-tool.js";
-import { registerGitPushTool } from "./git-push-tool.js";
-import { registerGitReflogTool } from "./git-reflog-tool.js";
-import { registerGitRemoteTool } from "./git-remote-tool.js";
-import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
-import { registerGitRevertTool } from "./git-revert-tool.js";
-import { registerGitShowTool } from "./git-show-tool.js";
-import {
-  registerGitStashApplyTool,
-  registerGitStashListTool,
-  registerGitStashPushTool,
-} from "./git-stash-tool.js";
-import { registerGitStatusTool } from "./git-status-tool.js";
-import { registerGitTagTool } from "./git-tag-tool.js";
-import {
-  registerGitWorktreeAddTool,
-  registerGitWorktreeListTool,
-  registerGitWorktreeRemoveTool,
-} from "./git-worktree-tool.js";
-import { registerListPresetsTool } from "./list-presets-tool.js";
+import { registerRethunkGitTools } from "./tools.js";
 
+/**
+ * Fan-out read tools: polymorphic `root` routing (string | string[] | "*").
+ * Must stay in sync with the tools that use RootPickSchema — asserted against
+ * live `registerRethunkGitTools` capture in tests.
+ */
 export const FAN_OUT_ROOT_TOOLS = [
   "git_status",
   "git_inventory",
@@ -45,6 +17,9 @@ export const FAN_OUT_ROOT_TOOLS = [
   "git_grep",
 ] as const;
 
+/**
+ * Read-only single-repo tools: `workspaceRoot` routing only.
+ */
 export const READ_ONLY_SINGLE_REPO_TOOLS = [
   "git_diff_summary",
   "git_diff",
@@ -59,6 +34,9 @@ export const READ_ONLY_SINGLE_REPO_TOOLS = [
   "git_reflog",
 ] as const;
 
+/**
+ * Mutating tools: `workspaceRoot` routing only.
+ */
 export const MUTATING_TOOLS = [
   "git_fetch",
   "batch_commit",
@@ -75,6 +53,7 @@ export const MUTATING_TOOLS = [
   "git_stash_push",
 ] as const;
 
+/** Category union used for routing assertions; must equal live registrar names. */
 export const ALL_PARAMETER_SCHEMA_TOOLS = [
   ...FAN_OUT_ROOT_TOOLS,
   ...READ_ONLY_SINGLE_REPO_TOOLS,
@@ -103,51 +82,37 @@ export type ToolParameterSchemaDocument = {
   tools: Record<string, JsonObjectSchema>;
 };
 
-function captureParameterTools(register: (server: FastMCP) => void): CapturedTool[] {
+/**
+ * Capture parameter Zod schemas by driving the same registrar path as the live
+ * server (`registerRethunkGitTools`), so adding a tool only in `tools.ts` is
+ * enough for schema capture — no parallel register* list here.
+ *
+ * Clears `RETHUNK_GIT_TOOLS` for the duration so allowlist filtering cannot
+ * silently omit tools from published artifacts.
+ */
+export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> {
   const tools: CapturedTool[] = [];
   const server = {
     sessions: [],
     addTool(tool: { name: string; parameters: z.ZodType; execute: ExecuteFn }) {
       tools.push({ name: tool.name, parameters: tool.parameters });
     },
+    addResource() {
+      // Presets resource is always registered; capture only needs tools.
+    },
   } as unknown as FastMCP;
-  register(server);
-  return tools;
-}
 
-export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> {
-  const tools = captureParameterTools((server) => {
-    registerGitStatusTool(server);
-    registerGitInventoryTool(server);
-    registerGitParityTool(server);
-    registerListPresetsTool(server);
-    registerGitLogTool(server);
-    registerGitGrepTool(server);
-    registerGitDiffSummaryTool(server);
-    registerGitDiffTool(server);
-    registerGitShowTool(server);
-    registerGitConflictsTool(server);
-    registerGitRemoteTool(server);
-    registerGitDescribeTool(server);
-    registerGitWorktreeListTool(server);
-    registerGitStashListTool(server);
-    registerGitBlameTool(server);
-    registerGitBranchListTool(server);
-    registerGitReflogTool(server);
-    registerGitFetchTool(server);
-    registerBatchCommitTool(server);
-    registerGitPushTool(server);
-    registerGitMergeTool(server);
-    registerGitCherryPickTool(server);
-    registerGitResetSoftTool(server);
-    registerGitRevertTool(server);
-    registerGitTagTool(server);
-    registerGitBranchTool(server);
-    registerGitWorktreeAddTool(server);
-    registerGitWorktreeRemoveTool(server);
-    registerGitStashApplyTool(server);
-    registerGitStashPushTool(server);
-  });
+  const prev = process.env.RETHUNK_GIT_TOOLS;
+  delete process.env.RETHUNK_GIT_TOOLS;
+  try {
+    registerRethunkGitTools(server);
+  } finally {
+    if (prev === undefined) {
+      delete process.env.RETHUNK_GIT_TOOLS;
+    } else {
+      process.env.RETHUNK_GIT_TOOLS = prev;
+    }
+  }
 
   return Object.fromEntries(
     tools.map((tool) => [tool.name, z.toJSONSchema(tool.parameters) as JsonObjectSchema]),
