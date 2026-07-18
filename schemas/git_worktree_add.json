@@ -19,7 +19,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "description": "Filesystem path for the new worktree (relative or absolute; must resolve under the git toplevel)."
+      "description": "Filesystem path for the new worktree (relative paths resolved from git toplevel). Sibling directories outside the repo toplevel are allowed; leading `-` and NUL are rejected."
     },
     "branch": {
       "type": "string",

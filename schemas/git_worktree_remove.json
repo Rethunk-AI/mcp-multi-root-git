@@ -19,7 +19,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "description": "Path of the worktree to remove. Must not be the main worktree."
+      "description": "Path of the worktree to remove. Must not be the main worktree. Sibling paths outside the repo toplevel are allowed; leading `-` and NUL are rejected."
     },
     "force": {
       "default": false,
