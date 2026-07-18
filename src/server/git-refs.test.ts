@@ -16,8 +16,9 @@ import {
   isSafeGitCommitIsh,
   isSafeGitRangeToken,
   isSafeGitRefToken,
+  listWorktrees,
 } from "./git-refs.js";
-import { cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
+import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -120,9 +121,21 @@ describe("isProtectedBranch", () => {
     expect(isProtectedBranch("   ")).toBe(true);
   });
 
-  test("release on its own (no suffix) is not matched by pattern", () => {
-    // Pattern requires at least one char after release[-/]
+  test("PROTECTED_PATTERN requires separator + non-empty suffix (not release* prefix glob)", () => {
+    // Intentional: /^(release|hotfix)[-/].+$/i — bare names and glued prefixes are unprotected.
+    // AGENTS/docs must describe this pattern, not a broader release* / hotfix* glob.
     expect(isProtectedBranch("release")).toBe(false);
+    expect(isProtectedBranch("hotfix")).toBe(false);
+    expect(isProtectedBranch("Release")).toBe(false);
+    expect(isProtectedBranch("releasefoo")).toBe(false);
+    expect(isProtectedBranch("hotfix123")).toBe(false);
+    expect(isProtectedBranch("release/")).toBe(false);
+    expect(isProtectedBranch("hotfix-")).toBe(false);
+  });
+
+  test("exact head is protected (case-insensitive)", () => {
+    expect(isProtectedBranch("head")).toBe(true);
+    expect(isProtectedBranch("HEAD")).toBe(true);
   });
 
   test("refs/heads/ prefix is stripped before checking", () => {
@@ -147,6 +160,13 @@ describe("isSafeGitRefToken", () => {
     expect(isSafeGitRefToken("HEAD@{1}")).toBe(false);
     expect(isSafeGitRefToken("refs/heads/main/")).toBe(false);
     expect(isSafeGitRefToken("main.lock")).toBe(false);
+  });
+
+  test("rejects leading plus (force-update refspec)", () => {
+    expect(isSafeGitRefToken("+main")).toBe(false);
+    expect(isSafeGitRefToken("+feature/auth")).toBe(false);
+    // Mid-name plus remains allowed (charset includes +).
+    expect(isSafeGitRefToken("feature+auth")).toBe(true);
   });
 
   test("rejects shell metacharacters and spaces", () => {
@@ -203,6 +223,7 @@ describe("isSafeGitAncestorRef", () => {
     expect(isSafeGitAncestorRef("HEAD~1")).toBe(true);
     expect(isSafeGitAncestorRef("HEAD~10")).toBe(true);
     expect(isSafeGitAncestorRef("HEAD^1")).toBe(true);
+    expect(isSafeGitAncestorRef("v1.0.0~2^1")).toBe(true);
   });
 
   test("accepts plain branch names and full SHAs", () => {
@@ -211,14 +232,26 @@ describe("isSafeGitAncestorRef", () => {
     expect(isSafeGitAncestorRef("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")).toBe(true);
   });
 
-  test("rejects leading dash", () => {
+  test("rejects leading dash and leading plus", () => {
     expect(isSafeGitAncestorRef("-ref")).toBe(false);
+    expect(isSafeGitAncestorRef("+HEAD~1")).toBe(false);
   });
 
   test("rejects shell metacharacters", () => {
     expect(isSafeGitAncestorRef("HEAD;evil")).toBe(false);
     expect(isSafeGitAncestorRef("HEAD$(cmd)")).toBe(false);
     expect(isSafeGitAncestorRef("HEAD ref")).toBe(false);
+  });
+
+  test("rejects range / lock / slash / mid-name ancestor (parity with isSafeGitCommitIsh)", () => {
+    expect(isSafeGitAncestorRef("a..b")).toBe(false);
+    expect(isSafeGitAncestorRef("a...b")).toBe(false);
+    expect(isSafeGitAncestorRef("main.lock")).toBe(false);
+    expect(isSafeGitAncestorRef("a//b")).toBe(false);
+    expect(isSafeGitAncestorRef("main/")).toBe(false);
+    expect(isSafeGitAncestorRef("main.")).toBe(false);
+    expect(isSafeGitAncestorRef("a~b")).toBe(false);
+    expect(isSafeGitAncestorRef("HEAD@{1}")).toBe(false);
   });
 
   test("rejects empty string", () => {
@@ -288,5 +321,33 @@ describe("isSafeGitCommitIsh", () => {
   test("rejects empty string and over-length tokens", () => {
     expect(isSafeGitCommitIsh("")).toBe(false);
     expect(isSafeGitCommitIsh("a".repeat(257))).toBe(false);
+  });
+
+  test("rejects leading plus (force-update refspec)", () => {
+    expect(isSafeGitCommitIsh("+main")).toBe(false);
+    expect(isSafeGitCommitIsh("+HEAD~1")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listWorktrees
+// ---------------------------------------------------------------------------
+
+describe("listWorktrees", () => {
+  test("returns worktrees for a real repo", async () => {
+    const dir = makeRepo();
+    const listed = await listWorktrees(dir);
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.worktrees.length).toBeGreaterThanOrEqual(1);
+    expect(listed.worktrees[0]?.path).toBeTruthy();
+  });
+
+  test("propagates git failure instead of empty list", async () => {
+    const dir = mkTmpDir("mcp-git-refs-nongit-");
+    const listed = await listWorktrees(dir);
+    expect(listed.ok).toBe(false);
+    if (listed.ok) return;
+    expect(listed.detail.length).toBeGreaterThan(0);
   });
 });

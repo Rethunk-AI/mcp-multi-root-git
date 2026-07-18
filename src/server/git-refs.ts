@@ -56,12 +56,13 @@ export function isProtectedBranch(name: string): boolean {
  * Conservative check for branch/ref names passed to git argv.
  * Rejects anything outside the ASCII subset `A-Z a-z 0-9 _ . / + -`,
  * sequences git itself rejects (`..`, `@{`, leading `-`, trailing `.lock`/`/`),
- * and pathological tokens.
+ * leading `+` (git force-refspec), and pathological tokens.
  */
 export function isSafeGitRefToken(s: string): boolean {
   const t = s.trim();
   if (t.length === 0 || t.length > 256) return false;
-  if (t.startsWith("-")) return false;
+  // Leading `-` is a git option; leading `+` is a force-update refspec.
+  if (t.startsWith("-") || t.startsWith("+")) return false;
   if (t.endsWith("/") || t.endsWith(".lock") || t.endsWith(".")) return false;
   if (t.includes("..")) return false;
   if (t.includes("@{")) return false;
@@ -70,14 +71,13 @@ export function isSafeGitRefToken(s: string): boolean {
 }
 
 /**
- * Same as `isSafeGitRefToken` but also allows `~N` / `^N` ancestor notation used
- * by `git reset --soft HEAD~3`. Permits `~` and `^` suffix characters.
+ * Same as `isSafeGitCommitIsh` — trailing `~N` / `^N` ancestor notation used
+ * by `git reset --soft HEAD~3`, plus the full `isSafeGitRefToken` base guards
+ * (`..`, `.lock`, `//`, `@{`, leading `+/-`, etc.). Kept as a named export for
+ * call sites that only need ancestor-capable single refs (not ranges).
  */
 export function isSafeGitAncestorRef(s: string): boolean {
-  const t = s.trim();
-  if (t.length === 0 || t.length > 256) return false;
-  if (t.startsWith("-")) return false;
-  return /^[A-Za-z0-9_./+~^-]+$/.test(t);
+  return isSafeGitCommitIsh(s);
 }
 
 /**
@@ -86,7 +86,7 @@ export function isSafeGitAncestorRef(s: string): boolean {
  * `main^2`, `v1.0.0~2^1`) as used by commit-ish arguments to `git diff`,
  * `git blame`, and `git show`. The base name (everything before the first
  * ancestor operator) must itself pass `isSafeGitRefToken` — so all of that
- * function's guards (leading `-`, `..`, `.lock` suffix, `//`, `@{`,
+ * function's guards (leading `-`/`+`, `..`, `.lock` suffix, `//`, `@{`,
  * whitespace, `:`, etc.) still apply. Ancestor operators are only permitted
  * as a trailing suffix run, not embedded mid-name (e.g. `a~b` is rejected).
  */
@@ -261,10 +261,18 @@ export interface WorktreeEntry {
   head: string | null;
 }
 
-/** Parse `git worktree list --porcelain` into structured entries. */
-export async function listWorktrees(cwd: string): Promise<WorktreeEntry[]> {
+/**
+ * Parse `git worktree list --porcelain` into structured entries.
+ * Returns `{ ok: false, detail }` when git fails — callers must not treat
+ * failure as an empty worktree list.
+ */
+export async function listWorktrees(
+  cwd: string,
+): Promise<{ ok: true; worktrees: WorktreeEntry[] } | { ok: false; detail: string }> {
   const r = await spawnGitAsync(cwd, ["worktree", "list", "--porcelain"]);
-  if (!r.ok) return [];
+  if (!r.ok) {
+    return { ok: false, detail: (r.stderr || r.stdout).trim() || "git worktree list failed" };
+  }
   const out: WorktreeEntry[] = [];
   let cur: Partial<WorktreeEntry> = {};
   for (const line of r.stdout.split("\n")) {
@@ -283,13 +291,17 @@ export async function listWorktrees(cwd: string): Promise<WorktreeEntry[]> {
     }
   }
   if (cur.path) out.push({ path: cur.path, branch: cur.branch ?? null, head: cur.head ?? null });
-  return out;
+  return { ok: true, worktrees: out };
 }
 
-/** Path of the worktree currently checked out on `branch`; `null` if none. */
+/**
+ * Path of the worktree currently checked out on `branch`; `null` if none
+ * or if listing worktrees failed (fail closed for destructive callers).
+ */
 export async function worktreeForBranch(cwd: string, branch: string): Promise<string | null> {
-  const trees = await listWorktrees(cwd);
-  const hit = trees.find((t) => t.branch === branch);
+  const listed = await listWorktrees(cwd);
+  if (!listed.ok) return null;
+  const hit = listed.worktrees.find((t) => t.branch === branch);
   return hit?.path ?? null;
 }
 
