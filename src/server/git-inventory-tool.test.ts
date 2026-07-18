@@ -8,7 +8,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
-import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepoWithSeed,
+  makeRepoWithUpstream,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -159,5 +166,130 @@ describe("git_inventory execute handler", () => {
     expect(group?.nestedRootsTruncated).toBe(true);
     expect(group?.nestedRootsOmittedCount).toBe(1);
     expect(group?.entries).toHaveLength(2);
+  });
+
+  test("fixed upstream happy path: remote+branch emits upstream object and ahead/behind", async () => {
+    const { work } = makeRepoWithUpstream("mcp-inv-fixed-up-", "mcp-inv-fixed-remote-");
+    // Advance local ahead of origin/main
+    writeFileSync(join(work, "extra.txt"), "extra\n");
+    gitCmd(work, "add", "extra.txt");
+    gitCmd(work, "commit", "-m", "feat: local ahead");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: work,
+      format: "json",
+      remote: "origin",
+      branch: "main",
+    });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{
+        upstream?: { mode: string; remote: string; branch: string };
+        entries: Array<{ ahead?: string; behind?: string; upstreamRef?: string }>;
+      }>;
+    };
+    expect(parsed.inventories[0]?.upstream).toEqual({
+      mode: "fixed",
+      remote: "origin",
+      branch: "main",
+    });
+    const entry = parsed.inventories[0]?.entries[0];
+    expect(entry?.upstreamRef).toBe("origin/main");
+    expect(entry?.ahead).toBe("1");
+    expect(entry?.behind).toBe("0");
+  });
+
+  test("compareRefs: ahead/behind between two local branches", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-compare-");
+    gitCmd(dir, "branch", "feature");
+    gitCmd(dir, "checkout", "feature");
+    writeFileSync(join(dir, "feat.txt"), "feat\n");
+    gitCmd(dir, "add", "feat.txt");
+    gitCmd(dir, "commit", "-m", "feat: on feature");
+    gitCmd(dir, "checkout", "main");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      compareRefs: { left: "main", right: "feature" },
+    });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{
+        entries: Array<{
+          compareRefs?: { left: string; right: string; ahead?: string; behind?: string };
+        }>;
+      }>;
+    };
+    const cr = parsed.inventories[0]?.entries[0]?.compareRefs;
+    expect(cr?.left).toBe("main");
+    expect(cr?.right).toBe("feature");
+    expect(cr?.ahead).toBe("1");
+    expect(cr?.behind).toBe("0");
+  });
+
+  test("compareRefs unsafe token rejected", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-compare-unsafe-");
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      compareRefs: { left: "--evil", right: "main" },
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("unsafe_ref_token");
+  });
+
+  test("preset nestedRoots loads from .rethunk/git-mcp-presets.json", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-preset-");
+    const sub = join(dir, "pkg");
+    mkdirSync(sub);
+    gitCmd(sub, "init", "-b", "main");
+    gitCmd(sub, "config", "user.email", "test@test.com");
+    gitCmd(sub, "config", "user.name", "Test User");
+    writeFileSync(join(sub, "f.ts"), "const x = 1;\n");
+    gitCmd(sub, "add", "f.ts");
+    gitCmd(sub, "commit", "-m", "init pkg");
+
+    mkdirSync(join(dir, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(dir, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({ schemaVersion: "1", presets: { inv: { nestedRoots: ["pkg"] } } }),
+    );
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: dir, format: "json", preset: "inv" });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{ presetSchemaVersion?: string; entries: InventoryEntry[] }>;
+    };
+    expect(parsed.inventories[0]?.presetSchemaVersion).toBe("1");
+    expect(parsed.inventories[0]?.entries).toHaveLength(1);
+    expect(parsed.inventories[0]?.entries[0]?.label).toBe("pkg");
+  });
+
+  test("preset_not_found when named preset missing", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-preset-miss-");
+    mkdirSync(join(dir, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(dir, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({
+        schemaVersion: "1",
+        presets: { other: { nestedRoots: ["pkg"] } },
+      }),
+    );
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: dir, format: "json", preset: "nope" });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("preset_not_found");
+  });
+
+  test("string non-git root → skipReason not a git repository (plain text)", async () => {
+    const plain = mkTmpDir("mcp-inv-nongit-");
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: plain, format: "json" });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    expect(parsed.inventories[0]?.entries[0]?.skipReason).toBe("(not a git repository)");
+    expect(parsed.inventories[0]?.entries[0]?.skipReason).not.toContain("{");
   });
 });

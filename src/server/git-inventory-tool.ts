@@ -9,6 +9,7 @@ import {
   gitTopLevel,
   isSafeGitUpstreamToken,
 } from "./git.js";
+import { isSafeGitAncestorRef } from "./git-refs.js";
 import {
   buildInventorySectionMarkdown,
   collectInventoryEntry,
@@ -24,7 +25,8 @@ import { MAX_INVENTORY_ROOTS_DEFAULT, RootPickSchema } from "./schemas.js";
 export function registerGitInventoryTool(server: FastMCP): void {
   server.addTool({
     name: "git_inventory",
-    description: "Read-only status + ahead/behind per root.",
+    description:
+      "Read-only status + ahead/behind per root. Optional `compareRefs` adds ahead/behind between two local refs (independent of upstream).",
     annotations: {
       readOnlyHint: true,
     },
@@ -38,6 +40,15 @@ export function registerGitInventoryTool(server: FastMCP): void {
         .describe("Merge with preset instead of replacing."),
       remote: z.string().optional().describe("Pair with `branch`."),
       branch: z.string().optional().describe("Pair with `remote`."),
+      compareRefs: z
+        .object({
+          left: z.string().describe("Base ref (ahead = commits in right not in left)."),
+          right: z.string().describe("Other ref (behind = commits in left not in right)."),
+        })
+        .optional()
+        .describe(
+          "Ahead/behind between two local refs (e.g. main vs a feature branch), independent of upstream tracking.",
+        ),
       maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
     }),
     execute: async (args) => {
@@ -71,6 +82,20 @@ export function registerGitInventoryTool(server: FastMCP): void {
         upstream = { mode: "fixed", remote: rawRemote, branch: rawBranch };
       }
 
+      let compareRefs: { left: string; right: string } | undefined;
+      if (args.compareRefs) {
+        const left = args.compareRefs.left.trim();
+        const right = args.compareRefs.right.trim();
+        if (!isSafeGitAncestorRef(left) || !isSafeGitAncestorRef(right)) {
+          return jsonRespond({
+            error: ERROR_CODES.UNSAFE_REF_TOKEN,
+            left: args.compareRefs.left,
+            right: args.compareRefs.right,
+          });
+        }
+        compareRefs = { left, right };
+      }
+
       const useFixed = upstream.mode === "fixed";
 
       const allJson: {
@@ -85,17 +110,21 @@ export function registerGitInventoryTool(server: FastMCP): void {
       for (const workspaceRoot of pre.roots) {
         const top = gitTopLevel(workspaceRoot);
         if (!top) {
-          const err = { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: workspaceRoot };
           if (args.format === "json") {
             allJson.push({
               workspaceRoot: workspaceRoot,
               ...(upstream.mode === "fixed" ? { upstream } : {}),
               entries: [
-                makeSkipEntry(workspaceRoot, workspaceRoot, upstream.mode, JSON.stringify(err)),
+                makeSkipEntry(
+                  workspaceRoot,
+                  workspaceRoot,
+                  upstream.mode,
+                  "(not a git repository)",
+                ),
               ],
             });
           } else {
-            mdChunks.push(`### ${workspaceRoot}\n${jsonRespond(err)}`);
+            mdChunks.push(`### ${workspaceRoot}\n(not a git repository)`);
           }
           continue;
         }
@@ -144,7 +173,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
             jobs.push({ label: rel, abs });
           }
           const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, (j) =>
-            collectInventoryEntry(j.label, j.abs, upstream.remote, upstream.branch),
+            collectInventoryEntry(j.label, j.abs, upstream.remote, upstream.branch, compareRefs),
           );
           entries.push(...computed);
         } else if (!gitRevParseGitDir(top)) {
@@ -152,7 +181,13 @@ export function registerGitInventoryTool(server: FastMCP): void {
             makeSkipEntry(".", top, upstream.mode, "(not a git work tree — unexpected)"),
           );
         } else {
-          const one = await collectInventoryEntry(".", top, upstream.remote, upstream.branch);
+          const one = await collectInventoryEntry(
+            ".",
+            top,
+            upstream.remote,
+            upstream.branch,
+            compareRefs,
+          );
           entries.push(one);
         }
 
