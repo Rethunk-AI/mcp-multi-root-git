@@ -3,7 +3,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -36,11 +36,12 @@ describe("git_worktree_list", () => {
     const run = captureTool(registerGitWorktreeListTool);
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as {
-      worktrees: { path: string; branch: string | null }[];
+      worktrees: { path: string; branch: string | null; head: string | null }[];
     };
 
     expect(parsed.worktrees).toHaveLength(1);
     expect(parsed.worktrees[0]?.branch).toContain("main");
+    expect(parsed.worktrees[0]?.head).toMatch(/^[0-9a-f]{40}$/);
   });
 
   test("markdown format includes the branch name", async () => {
@@ -60,12 +61,32 @@ describe("git_worktree_list", () => {
     const run = captureTool(registerGitWorktreeListTool);
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as {
-      worktrees: { path: string; branch: string | null }[];
+      worktrees: { path: string; branch: string | null; head: string | null }[];
     };
 
     expect(parsed.worktrees).toHaveLength(2);
     const branches = parsed.worktrees.map((w) => w.branch);
     expect(branches.some((b) => b?.includes("feature/listed"))).toBe(true);
+    for (const w of parsed.worktrees) {
+      expect(w.head).toMatch(/^[0-9a-f]{40}$/);
+    }
+  });
+
+  test("detached HEAD worktree reports branch:null and a head SHA", async () => {
+    const dir = makeRepo();
+    const wtPath = trackTmpPath(join(dir, "../wt-detached"));
+    gitCmd(dir, "worktree", "add", "--detach", wtPath);
+
+    const run = captureTool(registerGitWorktreeListTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      worktrees: { path: string; branch: string | null; head: string | null }[];
+    };
+
+    const detached = parsed.worktrees.find((w) => w.path === wtPath);
+    expect(detached).toBeDefined();
+    expect(detached?.branch).toBeNull();
+    expect(detached?.head).toMatch(/^[0-9a-f]{40}$/);
   });
 
   test("returns not_a_git_repository for a plain directory", async () => {
@@ -160,6 +181,26 @@ describe("git_worktree_add", () => {
     expect(parsed.baseRef).toBe(sha);
   });
 
+  test("trims whitespace on branch and baseRef before spawn", async () => {
+    const dir = makeRepo();
+    const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    const wtPath = trackTmpPath(join(dir, "../wt-trim"));
+
+    const run = captureTool(registerGitWorktreeAddTool);
+    const text = await run({
+      workspaceRoot: dir,
+      path: wtPath,
+      branch: "  feature/trimmed  ",
+      baseRef: `  ${sha}  `,
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; branch: string; baseRef: string };
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.branch).toBe("feature/trimmed");
+    expect(parsed.baseRef).toBe(sha);
+  });
+
   test("refuses to add worktree on a protected branch", async () => {
     const dir = makeRepo();
     const run = captureTool(registerGitWorktreeAddTool);
@@ -172,6 +213,21 @@ describe("git_worktree_add", () => {
     const parsed = JSON.parse(text) as { error: string };
 
     expect(parsed.error).toBe("protected_branch");
+  });
+
+  test("refuses protected exact and pattern branch names beyond main", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitWorktreeAddTool);
+    for (const branch of ["master", "develop", "production", "release/1.0", "hotfix-123"]) {
+      const text = await run({
+        workspaceRoot: dir,
+        path: `/tmp/wt-protected-${branch.replace(/[/]/g, "-")}`,
+        branch,
+        format: "json",
+      });
+      const parsed = JSON.parse(text) as { error: string };
+      expect(parsed.error).toBe("protected_branch");
+    }
   });
 
   test("refuses on unsafe branch name", async () => {
@@ -201,6 +257,52 @@ describe("git_worktree_add", () => {
     const parsed = JSON.parse(text) as { error: string };
 
     expect(parsed.error).toBe("unsafe_ref_token");
+  });
+
+  test("rejects leading-dash worktree path as invalid_paths", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitWorktreeAddTool);
+    const text = await run({
+      workspaceRoot: dir,
+      path: "-evil-wt",
+      branch: "feature/dash",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string; path: string };
+
+    expect(parsed.error).toBe("invalid_paths");
+    expect(parsed.path).toBe("-evil-wt");
+  });
+
+  test("rejects NUL in worktree path", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitWorktreeAddTool);
+    const text = await run({
+      workspaceRoot: dir,
+      path: "good\0bad",
+      branch: "feature/nul",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+
+    expect(parsed.error).toBe("invalid_paths");
+  });
+
+  test("allows sibling worktree outside git toplevel", async () => {
+    const dir = makeRepo();
+    const wtPath = trackTmpPath(join(dir, "../wt-sibling-outside"));
+    const run = captureTool(registerGitWorktreeAddTool);
+    const text = await run({
+      workspaceRoot: dir,
+      path: wtPath,
+      branch: "feature/sibling",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; path: string };
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.path).toBe(wtPath);
+    expect(existsSync(wtPath)).toBe(true);
   });
 
   test("returns not_a_git_repository for a plain directory", async () => {
@@ -268,6 +370,48 @@ describe("git_worktree_remove", () => {
     const parsed = JSON.parse(text) as { error: string };
 
     expect(parsed.error).toBe("worktree_not_found");
+  });
+
+  test("dirty linked worktree fails with hint; force:true removes it", async () => {
+    const dir = makeRepo();
+    const wtPath = trackTmpPath(join(dir, "../wt-dirty-force"));
+    gitCmd(dir, "worktree", "add", "-b", "feature/dirty-force", wtPath);
+    writeFileSync(join(wtPath, "dirty.txt"), "uncommitted\n");
+
+    const run = captureTool(registerGitWorktreeRemoveTool);
+    const failText = await run({ workspaceRoot: dir, path: wtPath, format: "json" });
+    const failParsed = JSON.parse(failText) as {
+      ok: boolean;
+      error: string;
+      hint?: string;
+    };
+    expect(failParsed.ok).toBe(false);
+    expect(failParsed.error).toBe("worktree_remove_failed");
+    expect(failParsed.hint).toContain("force: true");
+    expect(existsSync(wtPath)).toBe(true);
+
+    const okText = await run({
+      workspaceRoot: dir,
+      path: wtPath,
+      force: true,
+      format: "json",
+    });
+    const okParsed = JSON.parse(okText) as { ok: boolean };
+    expect(okParsed.ok).toBe(true);
+    expect(existsSync(wtPath)).toBe(false);
+  });
+
+  test("rejects leading-dash path on remove", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitWorktreeRemoveTool);
+    const text = await run({
+      workspaceRoot: dir,
+      path: "-evil-remove",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+
+    expect(parsed.error).toBe("invalid_paths");
   });
 
   test("returns not_a_git_repository for a plain directory", async () => {
