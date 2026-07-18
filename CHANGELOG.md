@@ -4,7 +4,9 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
-Additive JSON / behavior only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
+## [3.3.0] — 2026-07-18
+
+Feature and hardening release: deepen fan-out reads (pickaxe / follow / compareRefs), tighten path and ref safety, isolate `batch_commit` staging, and align CI/release with the local `ci` script. Additive JSON / behavior only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
 
 ### Added
 
@@ -39,7 +41,7 @@ Additive JSON / behavior only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
 - **`isSafeGitAncestorRef`** — now delegates to `isSafeGitCommitIsh`, rejecting `..` ranges, `.lock` suffixes, `//`, trailing `/`/`.`, mid-name `~`/`^`, and leading `+` (previously accepted by a looser charset-only check).
 - **`isSafeGitRefToken`** — rejects leading `+` (git force-update refspec); closes force-push/fetch via `branch=+name` when callers use this validator.
 - **`listWorktrees`** — returns `{ ok:false, detail }` on git failure instead of an empty array.
-- **`batch_commit` index isolation** — unrelated pre-staged paths are temporarily unstaged around an index-based `git commit` (avoids pathspec/`--only`, which would squash hunk staging); mid-entry `stage_failed` unstages that entry's paths; dryRun restores the pre-call index via `write-tree`/`read-tree`; rejects `.` / repo-root / directory pathspecs (`invalid_paths`); line-range staging uses `git diff --` / `--no-index` for untracked and rejects `from > to` (`invalid_line_range`).
+- **`batch_commit` index isolation** — unrelated pre-staged paths are temporarily unstaged around an index-based `git commit` (avoids pathspec/`--only`, which would squash hunk staging); mid-entry `stage_failed` unstages that entry's paths; dryRun restores the pre-call index via `write-tree`/`read-tree`; fails closed when index snapshot `write-tree` fails; rejects `.` / repo-root / directory pathspecs (`invalid_paths`); line-range staging uses `git diff --` / `--no-index` for untracked and rejects `from > to` (`invalid_line_range`).
 - **`git_log` path confinement** — each `paths` entry gated with `resolvePathForRepo` / `assertRelativePathUnderTop`; escaping paths yield `path_escapes_repo` per root.
 - **`git_parity` / `git_inventory` non-git wording** — `pairs[*].error` and inventory `skipReason` use plain description strings (no nested minified JSON).
 - **`git_diff` / `git_diff_summary` / `git_conflicts`** — honor docs precedence (`base` over `staged`; ignore `head` without `base`); emit bare `unsafe_range_token`; fix rename numstat counts; report `path_escapes_repo` on escaped conflict paths; flag incomplete conflict markers as `truncated`.
