@@ -1,16 +1,21 @@
 /**
  * Tests for git_conflicts tool.
  *
- * Covers: state detection ("merge"), path + parsed hunk content on a real
- * merge conflict, the no-conflict empty-files case, and maxLinesPerFile
- * truncation.
+ * Covers: state detection (merge/cherry-pick/revert/rebase), path + parsed hunk
+ * content (including diff3 base), incomplete-marker truncation, path escape,
+ * and maxLinesPerFile truncation.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { registerGitConflictsTool } from "./git-conflicts-tool.js";
+import {
+  detectConflictState,
+  parseConflictHunks,
+  readConflictFile,
+  registerGitConflictsTool,
+} from "./git-conflicts-tool.js";
 import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
@@ -38,8 +43,7 @@ function makeMergeConflictRepo(): string {
   gitCmd(dir, "commit", "-m", "chore: beta");
 
   // Plain `git merge` (not the git_merge tool) — fails and leaves MERGE_HEAD
-  // plus conflict markers in the working tree, as spike-verified:
-  //   <<<<<<< HEAD / BETA / ======= / ALPHA / >>>>>>> feature
+  // plus conflict markers in the working tree.
   try {
     gitCmd(dir, "merge", "feature", "-q");
   } catch {
@@ -121,9 +125,6 @@ describe("git_conflicts no-conflict repo", () => {
 describe("git_conflicts maxLinesPerFile truncation", () => {
   test("file longer than maxLinesPerFile is marked truncated and hunk beyond cutoff is dropped", async () => {
     const dir = makeRepoWithSeed("mcp-conflicts-truncate-");
-    // Pad the baseline with filler lines before the conflicting line, well past
-    // a small maxLinesPerFile cutoff, so the eventual conflict hunk falls outside
-    // the scanned window.
     const filler = Array.from({ length: 20 }, (_, i) => `filler${i}`).join("\n");
     writeFileSync(join(dir, "shared.txt"), `${filler}\nmid\n`);
     gitCmd(dir, "add", "shared.txt");
@@ -157,7 +158,68 @@ describe("git_conflicts maxLinesPerFile truncation", () => {
 
     expect(parsed.files).toHaveLength(1);
     expect(parsed.files[0]?.truncated).toBe(true);
-    // The conflict markers land after line 5, so no hunk is captured within the window.
     expect(parsed.files[0]?.hunks).toBeUndefined();
+  });
+});
+
+describe("detectConflictState marker files", () => {
+  test("CHERRY_PICK_HEAD → cherry-pick", async () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-cp-");
+    writeFileSync(join(dir, ".git", "CHERRY_PICK_HEAD"), "abc\n");
+    expect(await detectConflictState(dir)).toBe("cherry-pick");
+  });
+
+  test("REVERT_HEAD → revert", async () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-rv-");
+    writeFileSync(join(dir, ".git", "REVERT_HEAD"), "abc\n");
+    expect(await detectConflictState(dir)).toBe("revert");
+  });
+
+  test("rebase-merge dir → rebase", async () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-rb-");
+    mkdirSync(join(dir, ".git", "rebase-merge"), { recursive: true });
+    expect(await detectConflictState(dir)).toBe("rebase");
+  });
+
+  test("rebase-apply dir → rebase", async () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-ra-");
+    mkdirSync(join(dir, ".git", "rebase-apply"), { recursive: true });
+    expect(await detectConflictState(dir)).toBe("rebase");
+  });
+});
+
+describe("parseConflictHunks", () => {
+  test("diff3 markers populate base", () => {
+    const text = [
+      "<<<<<<< HEAD",
+      "ours-line",
+      "||||||| merged common ancestors",
+      "base-line",
+      "=======",
+      "theirs-line",
+      ">>>>>>> feature",
+      "",
+    ].join("\n");
+    const { hunks, truncated } = parseConflictHunks(text, 200);
+    expect(truncated).toBe(false);
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0]?.ours).toBe("ours-line");
+    expect(hunks[0]?.base).toBe("base-line");
+    expect(hunks[0]?.theirs).toBe("theirs-line");
+  });
+
+  test("incomplete open hunk at EOF sets truncated without emitting half-formed hunk", () => {
+    const text = ["<<<<<<< HEAD", "ours-only", "=======", "theirs-no-close"].join("\n");
+    const { hunks, truncated } = parseConflictHunks(text, 200);
+    expect(truncated).toBe(true);
+    expect(hunks).toHaveLength(0);
+  });
+});
+
+describe("readConflictFile path confinement", () => {
+  test("path escaping the repo returns path_escapes_repo on the file entry", () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-escape-");
+    const result = readConflictFile(dir, "../../etc/passwd", 200);
+    expect(result).toEqual({ path: "../../etc/passwd", error: "path_escapes_repo" });
   });
 });

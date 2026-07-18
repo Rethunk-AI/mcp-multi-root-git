@@ -38,7 +38,7 @@ async function runGitShow(opts: {
   path?: string;
   paths?: string[];
   stat?: boolean;
-}): Promise<ShowJson | { error: string }> {
+}): Promise<ShowJson | { error: string; detail?: string }> {
   const { top, ref, path, paths, stat } = opts;
 
   // Merge single path + paths array into a unified list (deduped, order preserved).
@@ -65,6 +65,7 @@ async function runGitShow(opts: {
   if (!r.ok) {
     return {
       error: ERROR_CODES.GIT_SHOW_FAILED,
+      detail: (r.stderr || r.stdout).trim(),
     };
   }
 

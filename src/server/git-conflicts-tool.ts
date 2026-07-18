@@ -5,6 +5,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { conflictPaths } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
@@ -28,6 +29,7 @@ interface ConflictHunk {
 
 interface ConflictFileJson {
   path: string;
+  error?: string;
   hunks?: ConflictHunk[];
   truncated?: boolean;
 }
@@ -51,7 +53,7 @@ async function resolveGitDir(gitTop: string): Promise<string | null> {
 }
 
 /** Detect the in-progress operation, if any, via marker files/dirs under the git dir. */
-async function detectConflictState(gitTop: string): Promise<ConflictState | undefined> {
+export async function detectConflictState(gitTop: string): Promise<ConflictState | undefined> {
   const gitDir = await resolveGitDir(gitTop);
   if (!gitDir) return undefined;
   if (existsSync(join(gitDir, "MERGE_HEAD"))) return "merge";
@@ -90,15 +92,16 @@ interface HunkInProgress {
  * Parse `<<<<<<<`/`|||||||`/`=======`/`>>>>>>>` conflict markers out of file text.
  * Only the first `maxLinesPerFile` lines are scanned; when the file is longer,
  * `truncated: true` is reported and any hunk still open at the cutoff is dropped
- * rather than emitted half-formed.
+ * rather than emitted half-formed. An incomplete hunk at EOF (corrupt/missing
+ * closing marker within the scan window) also sets `truncated: true`.
  */
-function parseConflictHunks(
+export function parseConflictHunks(
   text: string,
   maxLinesPerFile: number,
 ): { hunks: ConflictHunk[]; truncated: boolean } {
   const allLines = text.split("\n");
-  const truncated = allLines.length > maxLinesPerFile;
-  const lines = truncated ? allLines.slice(0, maxLinesPerFile) : allLines;
+  const truncatedByCap = allLines.length > maxLinesPerFile;
+  const lines = truncatedByCap ? allLines.slice(0, maxLinesPerFile) : allLines;
 
   const hunks: ConflictHunk[] = [];
   let state: "outside" | "ours" | "base" | "theirs" = "outside";
@@ -148,6 +151,9 @@ function parseConflictHunks(
     else if (state === "theirs") cur.theirsLines.push(line);
   }
 
+  // Incomplete open hunk at EOF (or at the line-cap) → flag truncated so callers
+  // know markers were present but not fully parsed.
+  const truncated = truncatedByCap || cur !== null;
   return { hunks, truncated };
 }
 
@@ -164,14 +170,14 @@ function isLikelyBinary(buf: Buffer): boolean {
 // Per-file resolution
 // ---------------------------------------------------------------------------
 
-function readConflictFile(
+export function readConflictFile(
   gitTop: string,
   relPath: string,
   maxLinesPerFile: number,
 ): ConflictFileJson {
   const resolved = resolvePathForRepo(relPath, gitTop);
   if (!assertRelativePathUnderTop(relPath, resolved, gitTop)) {
-    return { path: relPath };
+    return { path: relPath, error: ERROR_CODES.PATH_ESCAPES_REPO };
   }
 
   let buf: Buffer;
@@ -208,6 +214,7 @@ function renderConflictsMarkdown(result: ConflictsJson): string {
 
   for (const f of result.files) {
     lines.push(`## ${f.path}`);
+    if (f.error) lines.push(`_error: ${f.error}_`);
     if (f.truncated) lines.push("_(truncated)_");
     if (!f.hunks || f.hunks.length === 0) {
       lines.push("_(no parsed hunks — unreadable, binary, or no markers found)_", "");

@@ -86,7 +86,7 @@ describe("git_show_tool", () => {
     expect(result).toContain("not_a_git_repository");
   });
 
-  test("git show invalid ref returns error", async () => {
+  test("git show invalid ref returns error with detail", async () => {
     const repo = makeRepo();
     addCommit(repo, "file.txt", "content\n", "feat: add file");
 
@@ -94,9 +94,13 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "invalid-ref-xyz",
+      format: "json",
     });
 
-    expect(result).toContain("git_show_failed");
+    const parsed = JSON.parse(result) as { error: string; detail?: string };
+    expect(parsed.error).toBe("git_show_failed");
+    expect(typeof parsed.detail).toBe("string");
+    expect(parsed.detail!.length).toBeGreaterThan(0);
   });
 
   test("git show rejects leading-dash ref injection", async () => {
