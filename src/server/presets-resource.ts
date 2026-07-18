@@ -14,39 +14,58 @@ export function registerPresetsResource(server: FastMCP): void {
     name: "git-mcp-presets",
     mimeType: "application/json",
     async load() {
-      const pre = requireGitAndRoots(server, {}, undefined);
+      const pre = requireGitAndRoots(server, { root: "*" }, undefined);
       if (!pre.ok) {
         return { text: jsonRespond(pre.error) };
       }
-      const ws = pre.roots[0];
-      if (!ws) {
+      if (pre.roots.length === 0) {
         return { text: jsonRespond({ error: ERROR_CODES.NO_WORKSPACE_ROOT }) };
       }
-      const top = gitTopLevel(ws);
-      if (!top) {
-        return { text: jsonRespond({ error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws }) };
-      }
-      const loaded = loadPresetsFromGitTop(top);
-      if (!loaded.ok) {
-        if (loaded.reason === "missing") {
+
+      const roots = pre.roots.map((ws) => {
+        const top = gitTopLevel(ws);
+        const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
+        if (!top) {
           return {
-            text: jsonRespond({
-              presetFile: join(top, PRESET_FILE_PATH),
-              fileExists: false,
-              presets: {},
-            }),
+            workspaceRoot: ws,
+            gitTop: null,
+            presetFile,
+            fileExists: false,
+            presets: {},
+            error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws },
           };
         }
-        return { text: jsonRespond(presetLoadErrorPayload(top, loaded)) };
-      }
-      return {
-        text: jsonRespond({
-          presetFile: join(top, PRESET_FILE_PATH),
+        const loaded = loadPresetsFromGitTop(top);
+        if (!loaded.ok) {
+          if (loaded.reason === "missing") {
+            return {
+              workspaceRoot: ws,
+              gitTop: top,
+              presetFile,
+              fileExists: false,
+              presets: {},
+            };
+          }
+          return {
+            workspaceRoot: ws,
+            gitTop: top,
+            presetFile,
+            fileExists: true,
+            presets: {},
+            error: presetLoadErrorPayload(top, loaded),
+          };
+        }
+        return {
+          workspaceRoot: ws,
+          gitTop: top,
+          presetFile,
           fileExists: true,
           ...spreadDefined("presetSchemaVersion", loaded.schemaVersion),
           presets: loaded.data,
-        }),
-      };
+        };
+      });
+
+      return { text: jsonRespond({ roots }) };
     },
   });
 }

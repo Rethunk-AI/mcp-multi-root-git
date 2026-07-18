@@ -17,10 +17,10 @@ type CapturedResource = { load: () => Promise<{ text: string }> };
  * given repo is via the fake server's MCP session file roots — build a
  * minimal fake server here that captures the registered resource instead.
  */
-function makeFakeServerWithRoot(root: string): FastMCP {
+function makeFakeServerWithRoots(roots: string[]): FastMCP {
   let captured: CapturedResource | undefined;
   const server = {
-    sessions: [{ roots: [{ uri: `file://${root}` }] }],
+    sessions: [{ roots: roots.map((root) => ({ uri: `file://${root}` })) }],
     addResource(resource: CapturedResource) {
       captured = resource;
     },
@@ -29,8 +29,9 @@ function makeFakeServerWithRoot(root: string): FastMCP {
   return server;
 }
 
-async function loadResource(root: string): Promise<Record<string, unknown>> {
-  const server = makeFakeServerWithRoot(root);
+async function loadResource(roots: string | string[]): Promise<Record<string, unknown>> {
+  const rootList = Array.isArray(roots) ? roots : [roots];
+  const server = makeFakeServerWithRoots(rootList);
   registerPresetsResource(server);
   const captured = (server as unknown as { __captured: () => CapturedResource }).__captured();
   if (!captured) throw new Error("registerPresetsResource did not register a resource");
@@ -60,15 +61,22 @@ function makeRepoWithPresets(): string {
   return dir;
 }
 
+function firstRoot(parsed: Record<string, unknown>): Record<string, unknown> {
+  const roots = parsed.roots as Record<string, unknown>[] | undefined;
+  if (!roots?.[0]) throw new Error("expected roots[0]");
+  return roots[0];
+}
+
 describe("rethunk-git://presets resource", () => {
   test("loads presets from a valid preset file", async () => {
     const dir = makeRepoWithPresets();
 
     const parsed = await loadResource(dir);
+    const row = firstRoot(parsed);
 
-    expect(parsed.fileExists).toBe(true);
-    expect(parsed.presetSchemaVersion).toBe("1");
-    expect(parsed.presets).toEqual({ default: { nestedRoots: ["packages/a", "packages/b"] } });
+    expect(row.fileExists).toBe(true);
+    expect(row.presetSchemaVersion).toBe("1");
+    expect(row.presets).toEqual({ default: { nestedRoots: ["packages/a", "packages/b"] } });
   });
 
   test("reports invalid preset file (bad JSON)", async () => {
@@ -81,9 +89,37 @@ describe("rethunk-git://presets resource", () => {
     writeFileSync(join(presetDir, "git-mcp-presets.json"), "{ not valid json");
 
     const parsed = await loadResource(dir);
+    const row = firstRoot(parsed);
 
-    expect(parsed.error).toBe("preset_file_invalid");
-    expect(parsed.kind).toBe("invalid_json");
+    expect(row.error).toEqual(
+      expect.objectContaining({
+        error: "preset_file_invalid",
+        kind: "invalid_json",
+      }),
+    );
+  });
+
+  test("reports schema error for invalid preset file content", async () => {
+    const dir = mkTmpDir("mcp-git-presets-resource-schema-");
+    gitCmd(dir, "init", "-b", "main");
+    writeTestGitConfig(dir);
+
+    const presetDir = join(dir, ".rethunk");
+    mkdirSync(presetDir);
+    writeFileSync(
+      join(presetDir, "git-mcp-presets.json"),
+      JSON.stringify({ schemaVersion: "2", presets: { p: { nestedRoots: ["a"] } } }),
+    );
+
+    const parsed = await loadResource(dir);
+    const row = firstRoot(parsed);
+
+    expect(row.error).toEqual(
+      expect.objectContaining({
+        error: "preset_file_invalid",
+        kind: "schema",
+      }),
+    );
   });
 
   test("reports fileExists: false when no preset file is present", async () => {
@@ -92,8 +128,37 @@ describe("rethunk-git://presets resource", () => {
     writeTestGitConfig(dir);
 
     const parsed = await loadResource(dir);
+    const row = firstRoot(parsed);
 
-    expect(parsed.fileExists).toBe(false);
-    expect(parsed.presets).toEqual({});
+    expect(row.fileExists).toBe(false);
+    expect(row.presets).toEqual({});
+  });
+
+  test("reports NOT_A_GIT_REPOSITORY when MCP root is outside a repo", async () => {
+    const dir = mkTmpDir("mcp-git-presets-resource-nogit-");
+
+    const parsed = await loadResource(dir);
+    const row = firstRoot(parsed);
+
+    expect(row.error).toEqual(
+      expect.objectContaining({
+        error: "not_a_git_repository",
+        path: dir,
+      }),
+    );
+  });
+
+  test("fans out across every MCP root", async () => {
+    const repoA = makeRepoWithPresets();
+    const repoB = mkTmpDir("mcp-git-presets-resource-b-");
+    gitCmd(repoB, "init", "-b", "main");
+    writeTestGitConfig(repoB);
+
+    const parsed = await loadResource([repoA, repoB]);
+    const roots = parsed.roots as Record<string, unknown>[];
+
+    expect(roots).toHaveLength(2);
+    expect(roots[0]?.fileExists).toBe(true);
+    expect(roots[1]?.fileExists).toBe(false);
   });
 });
