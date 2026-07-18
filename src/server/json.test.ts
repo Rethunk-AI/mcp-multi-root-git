@@ -3,8 +3,18 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { jsonRespond, readMcpServerVersion, spreadDefined, spreadWhen } from "./json.js";
+
+describe("MCP_JSON_FORMAT_VERSION", () => {
+  test('server.ts exports "5" and embeds it in FastMCP instructions', () => {
+    const src = readFileSync(join(import.meta.dir, "..", "server.ts"), "utf8");
+    expect(src).toMatch(/export const MCP_JSON_FORMAT_VERSION = "5"/);
+    expect(src).toContain("JSON payload contract: format version ${MCP_JSON_FORMAT_VERSION}");
+  });
+});
 
 describe("readMcpServerVersion", () => {
   test("returns a valid major.minor.patch string satisfying the FastMCP version type", () => {

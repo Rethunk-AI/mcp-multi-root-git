@@ -13,10 +13,17 @@ export const WorkspacePickSchema = z.object({
   format: FormatSchema,
 });
 
-/** Fan-out tools: one polymorphic routing param plus output format. */
+/**
+ * Fan-out tools: one polymorphic routing param plus output format.
+ *
+ * Array length is intentionally uncapped here so `resolveRootPathList` can
+ * return the structured `{ error: root_list_too_many, max, count }` JSON
+ * payload. Zod `.max(MAX_ROOT_PATHS)` would reject with `too_big` before execute.
+ * The `"*"` sentinel is a plain string (no redundant `z.literal("*")`).
+ */
 export const RootPickSchema = z.object({
   root: z
-    .union([z.string(), z.array(z.string()).max(MAX_ROOT_PATHS), z.literal("*")])
+    .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Repo path, array of paths, or "*" for all MCP roots.'),
   format: FormatSchema,

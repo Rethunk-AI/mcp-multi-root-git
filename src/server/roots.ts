@@ -160,7 +160,18 @@ export function requireGitAndRoots(
   const trimmed = root?.trim();
   if (trimmed === "*") {
     const fileRoots = listFileRoots(server);
-    return fileRoots.length === 0 ? defaultRoots(fileRoots) : { ok: true, roots: fileRoots };
+    if (fileRoots.length === 0) return defaultRoots(fileRoots);
+    if (fileRoots.length > MAX_ROOT_PATHS) {
+      return {
+        ok: false,
+        error: {
+          error: ERROR_CODES.ROOT_LIST_TOO_MANY,
+          max: MAX_ROOT_PATHS,
+          count: fileRoots.length,
+        },
+      };
+    }
+    return { ok: true, roots: fileRoots };
   }
   if (trimmed) {
     return { ok: true, roots: [resolve(trimmed)] };

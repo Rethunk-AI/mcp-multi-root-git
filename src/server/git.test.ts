@@ -7,19 +7,28 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { cpus } from "node:os";
 import { join } from "node:path";
 
 import {
   asyncPool,
   fetchAheadBehind,
+  GIT_SUBPROCESS_MAX_BUFFER_BYTES,
+  GIT_SUBPROCESS_PARALLELISM,
   GIT_SUBPROCESS_TIMEOUT_MS,
+  gateGit,
   gitRevParseGitDir,
   gitRevParseHead,
   gitStatusShortBranchAsync,
   gitStatusSnapshotAsync,
+  gitTopLevel,
   hasGitMetadata,
   isSafeGitUpstreamToken,
   parseGitSubmodulePaths,
+  resetGitPathStateForTests,
+  resolveGitSubprocessMaxBufferBytes,
+  resolveGitSubprocessParallelism,
+  resolveGitSubprocessTimeoutMs,
   spawnGitAsync,
 } from "./git.js";
 import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
@@ -275,7 +284,77 @@ describe("fetchAheadBehind", () => {
 });
 
 // ---------------------------------------------------------------------------
-// spawnGitAsync — timeout + AbortSignal
+// gateGit / gitTopLevel / parallelism env defaults
+// ---------------------------------------------------------------------------
+
+describe("gateGit", () => {
+  test("returns ok when git is on PATH", () => {
+    resetGitPathStateForTests();
+    expect(gateGit()).toEqual({ ok: true });
+    // Cached path still ok
+    expect(gateGit()).toEqual({ ok: true });
+  });
+});
+
+describe("gitTopLevel", () => {
+  test("returns toplevel for a git repo", () => {
+    const dir = makeRepo();
+    expect(gitTopLevel(dir)).toBe(dir);
+  });
+
+  test("returns null for a non-git directory", () => {
+    const dir = mkTmpDir("mcp-nongit-toplevel-");
+    expect(gitTopLevel(dir)).toBeNull();
+  });
+});
+
+describe("resolveGitSubprocessParallelism", () => {
+  test("defaults to 4 when env unset", () => {
+    expect(resolveGitSubprocessParallelism(undefined, 8)).toBe(4);
+  });
+
+  test("clamps env value to 2×CPU", () => {
+    expect(resolveGitSubprocessParallelism("100", 4)).toBe(8);
+  });
+
+  test("accepts valid env within clamp", () => {
+    expect(resolveGitSubprocessParallelism("3", 8)).toBe(3);
+  });
+
+  test("ignores invalid env and returns default 4", () => {
+    expect(resolveGitSubprocessParallelism("0", 8)).toBe(4);
+    expect(resolveGitSubprocessParallelism("nope", 8)).toBe(4);
+  });
+
+  test("module constant is a positive integer within clamp", () => {
+    expect(GIT_SUBPROCESS_PARALLELISM).toBeGreaterThanOrEqual(1);
+    expect(GIT_SUBPROCESS_PARALLELISM).toBeLessThanOrEqual(cpus().length * 2 || 4);
+  });
+});
+
+describe("resolveGitSubprocessTimeoutMs", () => {
+  test("defaults to 120000", () => {
+    expect(resolveGitSubprocessTimeoutMs(undefined)).toBe(120_000);
+  });
+
+  test("0 disables timeout", () => {
+    expect(resolveGitSubprocessTimeoutMs("0")).toBe(0);
+  });
+});
+
+describe("resolveGitSubprocessMaxBufferBytes", () => {
+  test("defaults to 16 MiB", () => {
+    expect(resolveGitSubprocessMaxBufferBytes(undefined)).toBe(16 * 1024 * 1024);
+    expect(GIT_SUBPROCESS_MAX_BUFFER_BYTES).toBe(16 * 1024 * 1024);
+  });
+
+  test("accepts env override ≥1024", () => {
+    expect(resolveGitSubprocessMaxBufferBytes("4096")).toBe(4096);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spawnGitAsync — timeout + AbortSignal + buffer bound
 // ---------------------------------------------------------------------------
 
 describe("spawnGitAsync", () => {
@@ -298,46 +377,50 @@ describe("spawnGitAsync", () => {
     const dir = makeRepo();
     const controller = new AbortController();
     controller.abort();
-    const result = await spawnGitAsync(dir, ["--version"], { signal: controller.signal });
+    const result = await spawnGitAsync(dir, ["--version"], {
+      signal: controller.signal,
+      sigkillAfterMs: 50,
+    });
     expect(result.ok).toBe(false);
     expect(result.aborted).toBe(true);
     expect(result.timedOut).toBeFalsy();
   });
 
-  test("tiny timeoutMs kills a long-running git command and resolves timedOut:true", async () => {
+  test("timeoutMs kills a hanging cat-file --batch and resolves timedOut:true", async () => {
     const dir = makeRepo();
-    // git log with --no-pager on a repo that has commits is fast, but we can
-    // force a hang by running `git credential-cache` which blocks on stdin in
-    // some environments. Instead use a shell-free approach: spawn with a 1 ms
-    // timeout against a command that reliably takes >1 ms (git log --all with
-    // lots of format options). We use git log on the real repo root to ensure
-    // there are commits, plus a tiny timeoutMs so it fires immediately.
-    // If git somehow finishes in <1 ms, the result will be ok:true and
-    // timedOut will be undefined — so we assert the either/or.
-    const result = await spawnGitAsync(dir, ["log", "--all", "--format=%H%n%an%n%ae%n%s%n%b"], {
-      timeoutMs: 1,
+    // holdStdin keeps stdin open so `git cat-file --batch` waits for input —
+    // deterministic hang without racing a fast command against a 1ms timer.
+    const result = await spawnGitAsync(dir, ["cat-file", "--batch"], {
+      timeoutMs: 80,
+      holdStdin: true,
+      sigkillAfterMs: 50,
     });
-    // Either the process was killed (timedOut:true, ok:false) or it finished
-    // fast enough that the 1 ms timer raced and the process won (ok:true).
-    if (result.timedOut) {
-      expect(result.ok).toBe(false);
-      expect(result.stderr).toContain("git timed out after 1ms");
-    } else {
-      // Completed before the timer fired — that's fine; timedOut must be falsy.
-      expect(result.timedOut).toBeFalsy();
-    }
+    expect(result.ok).toBe(false);
+    expect(result.timedOut).toBe(true);
+    expect(result.stderr).toContain("git timed out after 80ms");
+  });
+
+  test("maxBufferBytes overflow settles truncated:true", async () => {
+    const dir = makeRepo();
+    // Produce more than a few bytes of stdout; cap at 8 bytes.
+    const result = await spawnGitAsync(dir, ["--version"], {
+      maxBufferBytes: 8,
+      sigkillAfterMs: 50,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.truncated).toBe(true);
+    expect(result.stderr).toContain("git output exceeded 8 bytes");
   });
 
   test("abort mid-flight via AbortController resolves ok:false with aborted:true", async () => {
     const dir = makeRepo();
     const controller = new AbortController();
-    // Abort after a short delay so the child process has started
-    const promise = spawnGitAsync(dir, ["log", "--all", "--format=%H"], {
+    const promise = spawnGitAsync(dir, ["cat-file", "--batch"], {
       timeoutMs: 5000,
       signal: controller.signal,
+      holdStdin: true,
+      sigkillAfterMs: 50,
     });
-    // Abort synchronously before awaiting — the child is spawned but the
-    // abort happens before it can finish in most environments.
     controller.abort();
     const result = await promise;
     expect(result.ok).toBe(false);
