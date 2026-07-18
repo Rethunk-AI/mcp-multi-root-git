@@ -19,8 +19,8 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_grep` | `rethunk-git_git_grep` | Read-only content search (`git grep -n`) across one or more roots. `pattern` always passed via `-e` (safe for leading-dash patterns; basic regex, not literal text). `ref?` searches the tree at that commit instead of the working tree. `filesOnly?` lists matching paths only. Args: `pattern`, `ref?`, `paths?`, `ignoreCase?`, `filesOnly?`, `maxMatches?`, plus `root` + `format`. **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Args: `workspaceRoot`, `format`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`. **Read-only.** |
-| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus diff (or `--stat` diffstat), or file content at `path` for that ref. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_conflicts` | `rethunk-git_git_conflicts` | Inspect unresolved merge conflicts after `git_merge`/`git_cherry_pick` reports them. Detects the in-progress operation (`merge`/`cherry-pick`/`revert`/`rebase`, via `MERGE_HEAD`/`CHERRY_PICK_HEAD`/`REVERT_HEAD`/`rebase-merge`/`rebase-apply` markers under the git dir) and, per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` markers into ours/theirs (and base, for diff3-style) hunks with line numbers and branch labels. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus patch (or `--stat` diffstat). Optional `path`/`paths` filter the patch to those paths (`git show <ref> -- <path>`), not a raw blob checkout. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot` + `format`. **Read-only.** |
+| `git_conflicts` | `rethunk-git_git_conflicts` | Inspect an in-progress conflicted merge/cherry-pick/revert/rebase in the working tree (markers under the git dir). Per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` into ours/theirs (and base, for diff3-style) hunks. **Note:** `git_merge` and `git_cherry_pick` always attempt `--abort` before returning a conflict report, so a successful abort leaves a clean tree — call this tool for conflicts still in progress (manual ops, failed abort, or other tools), not as a follow-up to those tools' conflict payloads. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_remote` | `rethunk-git_git_remote` | List configured remotes (`git remote -v`). Returns name, fetchUrl, and pushUrl (omitted when identical to fetchUrl). `workspaceRoot` + `format` only. **Read-only.** |
 | `git_describe` | `rethunk-git_git_describe` | Describe a commit relative to the nearest reachable tag (`git describe --long`). Returns the raw describe string plus parsed tag, distance (commits since tag), and short SHA. Args: `ref?`, `tags?`, `match?`, `abbrev?`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). `workspaceRoot` + `format`. **Read-only.** |
@@ -29,16 +29,16 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_branch_list` | `rethunk-git_git_branch_list` | List local branches (sha, current marker, upstream); optional `includeRemotes` adds remote-tracking branches. Args: `includeRemotes?`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_reflog` | `rethunk-git_git_reflog` | Show the reflog for a ref (default `HEAD`) — recent HEAD movements with selector, SHA, and message. Args: `ref?`, `maxEntries?`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus `workspaceRoot` + `format`. **Mutating — refs only.** |
+| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
-| `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus `workspaceRoot` + `format`. **Mutating.** |
-| `git_branch` | `rethunk-git_git_branch` | Create, delete, or rename a local branch. `action: "create"` bases a new branch on `from` (default `HEAD`); `action: "delete"` removes `name` (`force: true` for `-D` on an unmerged branch); `action: "rename"` renames `name` to `newName`. Refuses protected branch names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*) in any role — as source, target, or rename endpoint. Args: `action`, `name`, `from?`, `newName?`, `force?`, plus `workspaceRoot` + `format`. **Mutating.** |
-| `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus `workspaceRoot` + `format`. **Mutating.** |
-| `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees. Args: `path`, `force?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
+| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?` + `workspaceRoot` + `format`. **Mutating.** |
 | `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_revert` | `rethunk-git_git_revert` | Create new commit(s) that undo the changes introduced by one or more source commits (`git revert`), applied in listed order. Never rewrites history — safe on shared/pushed branches, unlike `git_reset_soft`. Refuses on dirty tree; on conflict aborts and leaves the tree clean. Args: `sources`, `noCommit?`, `mainline?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
-| `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
-| `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. Refuses on dirty tree; stops on first conflict with structured path report. Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/release\*/hotfix\*). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
-| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict, aborting cleanly. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?` + `workspaceRoot` + `format`. **Mutating.** |
+| `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_branch` | `rethunk-git_git_branch` | Create, delete, or rename a local branch. `action: "create"` bases a new branch on `from` (default `HEAD`); `action: "delete"` removes `name` (`force: true` for `-D` on an unmerged branch); `action: "rename"` renames `name` to `newName`. Refuses protected branch names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix) in any role — as source, target, or rename endpoint. Args: `action`, `name`, `from?`, `newName?`, `force?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus `workspaceRoot` + `format`. **Mutating.** |
+| `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Optional `force: true` for dirty trees. Args: `path`, `force?`, plus `workspaceRoot` + `format`. **Mutating.** |
 | `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo. Args: `index?`, `pop?`, plus `workspaceRoot` + `format`. **Mutating.** |
 | `git_stash_push` | `rethunk-git_git_stash_push` | Stash working-tree changes (`git stash push`). Optional `message`, `includeUntracked` (-u), `keepIndex` (--keep-index), `paths` to scope. Args: `message?`, `includeUntracked?`, `paths?`, `keepIndex?`, plus `workspaceRoot` + `format`. **Mutating.** |
 
@@ -90,13 +90,13 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with an array `root` or `preset`. |
+| `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with an array `root`. May be combined with `preset` when `presetMerge: true` (merged) or when `presetMerge` is false (inline list replaces the preset's `nestedRoots`). |
 | `preset` | string | — | Preset name from `.rethunk/git-mcp-presets.json`. Loads `nestedRoots` from the preset's entry. Cannot combine with an array `root`. |
 | `presetMerge` | boolean | `false` | When `true`, merge inline `nestedRoots` with preset roots instead of replacing. |
 | `remote` | string | — | Fixed remote for ahead/behind tracking. Must be paired with `branch`. |
 | `branch` | string | — | Fixed branch for ahead/behind tracking. Must be paired with `remote`. When both are absent the tool uses each repo's `@{u}` upstream. |
 | `maxRoots` | int | `64` | Max nested roots to process (1–256). Roots beyond the limit are omitted; `nestedRootsTruncated: true` and `nestedRootsOmittedCount` are set on the group. |
-| `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. | Array form cannot combine with `nestedRoots` or `preset`.
+| `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. Array form cannot combine with `nestedRoots` or `preset`. |
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
 ### `git_inventory` — JSON shape (`format: "json"`)
@@ -104,7 +104,7 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 ```json
 {
   "inventories": [{
-    "workspace_root": "/abs/path",
+    "workspaceRoot": "/abs/path",
     "entries": [{
       "label": ".",
       "path": "/abs/path",
@@ -122,7 +122,7 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 }
 ```
 
-`nestedRootsTruncated` / `nestedRootsOmittedCount` present only when `maxRoots` cut the list. `upstream` object present only when `remote`+`branch` were supplied (fixed mode). `presetSchemaVersion` present only when a preset was loaded. See *Field omission* for `entries[*]` optional fields.
+`nestedRootsTruncated` / `nestedRootsOmittedCount` present only when `maxRoots` cut the list. `upstream` object present only when `remote`+`branch` were supplied (fixed mode). `presetSchemaVersion` present only when a preset was loaded. See [Field omission](#field-omission-consumer-contract-v2) for `entries[*]` optional fields.
 
 ### `git_inventory` — error codes
 
@@ -132,13 +132,11 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 | `remote_branch_mismatch` | Only one of `remote` / `branch` was provided; supply both or neither. |
 | `invalid_remote_or_branch` | `remote` or `branch` contains characters outside the safe token set. |
 | `root_list_nested_or_preset_conflict` | `root` array combined with `nestedRoots` or `preset`. |
-| `root_list_preset_conflict` | `root` array combined with a `preset` argument. |
 | `invalid_root_path` | A `root` array entry is empty or not a git-recognized directory. |
 | `root_list_too_many` | More than 256 entries in the `root` array. |
 | `root_list_empty` | The `root` array resolved to zero git toplevels. |
 | `preset_not_found` | Named preset does not exist in the preset file. |
-| `invalid_json` | Preset file contains invalid JSON. |
-| `invalid_schema` | Preset file fails schema validation. |
+| `preset_file_invalid` | Preset file failed to load. Discriminator `kind`: `"invalid_json"` (parse failure; may include `message`) or `"schema"` (Zod validation failure; may include `issues`). Always includes `presetFile`. |
 
 Skip entries (individual repos that could not be inventoried) appear inline in `entries[*]` with `skipReason` rather than as top-level errors.
 
@@ -159,7 +157,7 @@ Skip entries (individual repos that could not be inventoried) appear inline in `
 ```json
 {
   "parity": [{
-    "workspace_root": "/abs/path",
+    "workspaceRoot": "/abs/path",
     "status": "MISMATCH",
     "pairs": [
       {
@@ -195,8 +193,7 @@ Skip entries (individual repos that could not be inventoried) appear inline in `
 | `root_list_too_many` | More than 256 entries in the `root` array. |
 | `root_list_empty` | The `root` array resolved to zero git toplevels. |
 | `preset_not_found` | Named preset does not exist in the preset file. |
-| `invalid_json` | Preset file contains invalid JSON. |
-| `invalid_schema` | Preset file fails schema validation. |
+| `preset_file_invalid` | Preset file failed to load. Discriminator `kind`: `"invalid_json"` or `"schema"` (see `git_inventory`). |
 
 Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, not as top-level error codes.
 
@@ -239,8 +236,7 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 |------|---------|
 | `git_not_found` | `git` binary not on `PATH`. |
 | `not_a_git_repository` | Root is not inside a git repository (reported inline in the `roots[*].error` field, not top-level). |
-| `invalid_json` | Preset file is not valid JSON (inline in `roots[*].error`). |
-| `invalid_schema` | Preset file fails schema validation (inline in `roots[*].error`). |
+| `preset_file_invalid` | Preset file failed to load (inline in `roots[*].error`). Discriminator `kind`: `"invalid_json"` or `"schema"`. |
 | `invalid_root_path` | A `root` array entry is empty or not a git-recognized directory. |
 | `root_list_too_many` | More than 256 entries in the `root` array. |
 | `root_list_empty` | The `root` array resolved to zero git toplevels. |
@@ -259,11 +255,11 @@ The package also ships **`tool-parameters.schema.json`**, generated from the reg
 
 ### Field omission (consumer contract, v2+)
 
-To keep responses compact, **optional fields are omitted when they would be empty, `null`, or `false`** — they are not emitted as `null`. Consumers must test for *presence*, not compare to `null`.
+To keep responses compact, **optional fields are usually omitted when they would be empty, `null`, or `false`**. Consumers must test for *presence*, not compare to `null`, except where a tool documents an intentional `null` (documented exceptions: `list_presets` emits `gitTop: null` when the workspace is not inside a git repo; `git_worktree_list` emits `branch`/`head` as `null` for detached or incomplete porcelain entries).
 
 **`git_inventory` → `inventories[*]`**
 
-- Always present: `workspace_root`, `entries`.
+- Always present: `workspaceRoot`, `entries`.
 - Omitted when not applicable: `presetSchemaVersion`, `nestedRootsTruncated`, `nestedRootsOmittedCount`, and the whole `upstream` object (emitted only when a fixed `remote`/`branch` pair was supplied; in `auto` mode it is absent).
 
 **`git_inventory` → `entries[*]` (`InventoryEntryJson`)**
@@ -274,7 +270,7 @@ To keep responses compact, **optional fields are omitted when they would be empt
 
 **Errors** (any tool)
 
-- Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). It is retained only where it carries parse output (the `invalid_json` preset branch).
+- Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`, `kind`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). For preset load failures the wire code is always `preset_file_invalid` with discriminator `kind` (`"invalid_json"` or `"schema"`); `message` is retained on the `invalid_json` kind (parse output) and `issues` on the `schema` kind.
 
 **When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*. The constant lives in `src/server.ts` and is surfaced via the server `instructions` field (discoverable from the MCP `initialize` response).
 
@@ -289,7 +285,7 @@ To keep responses compact, **optional fields are omitted when they would be empt
 | `maxCommits` | int | `50` | Max commits per root. Hard cap: `500`. |
 | `branch` | string | `HEAD` | Ref/branch to log from. |
 | `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
-| `format` | `"markdown"` \| `"json"` \| `"oneline"` | `"markdown"` | Output format. `oneline` returns `<sha7> <subject>` per line with no headers (single root) or `### repo (branch)` separators per group (multi-root). Lowest-token option for post-commit verification. |
+| `format` | `"markdown"` \| `"json"` \| `"oneline"` | `"markdown"` | Output format. `oneline` returns the first 7 characters of each commit SHA plus the subject (`<abbrev> <subject>`) per line with no headers (single root) or `### repo (branch)` separators per group (multi-root). Display shorthand only — the JSON field remains full `sha` (v3 removed the old `sha7` field). Lowest-token option for post-commit verification. |
 
 ### `git_log` — JSON shape (`format: "json"`)
 
@@ -329,7 +325,6 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `invalid_paths` | One of the `paths` entries contains shell metacharacters and was rejected. |
 | `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
-| `root_list_preset_conflict` | `root` array was combined with a `preset` argument (root resolution). |
 | `invalid_root_path` | A `root` array entry is empty, not inside a git worktree, or not a directory git recognizes. |
 | `root_list_too_many` | More than 256 entries in the `root` array. |
 | `root_list_empty` | The `root` array produced zero git toplevels after resolution. |
@@ -377,6 +372,7 @@ One `results` entry per resolved root. `matches[]` is present unless `filesOnly:
 
 | Code | Meaning |
 |------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
 | `not_a_git_repository` | A resolved root is not inside a git repository. |
 | `unsafe_ref_token` | `ref` failed `isSafeGitAncestorRef` validation. |
 | `path_escapes_repo` | A `paths` entry resolves outside that root's git toplevel. |
@@ -489,7 +485,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
-| `path` | string | Optional single path. When provided, the response shows that path's content at `ref` instead of the full commit diff. |
+| `path` | string | Optional single path. When provided, filters the shown patch/stat to that path (`git show <ref> -- <path>`), not a raw blob (`ref:path`) checkout. |
 | `stat` | boolean | When `true`, runs `git show --stat` — commit message plus per-file diffstat, no full patch (`statOutput` in JSON). |
 | `paths` | string[] | Filter the shown patch/stat to these repo-relative paths; unioned with `path`. Each confined to the repo. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
@@ -755,7 +751,7 @@ One `groups` entry per **contiguous run of lines last touched by the same commit
 }
 ```
 
-`upstream` is omitted when a branch has no upstream. `remotes` is present only when `includeRemotes: true`.
+`upstream` is omitted when a branch has no upstream. `remotes` is omitted when empty — including when `includeRemotes: true` but no remote-tracking refs exist.
 
 ### `git_branch_list` — error codes
 
@@ -886,7 +882,7 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 | `into` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
 | `strategy` | `"auto"` \| `"ff-only"` \| `"rebase"` \| `"merge"` | Default `"auto"`: cascade **fast-forward → rebase → merge-commit** per source. `"ff-only"` fails on divergence. `"rebase"` rebases source onto destination and fast-forwards; no merge-commit fallback. `"merge"` always creates a merge commit (`--no-ff`). |
 | `message` | string | Merge commit message, used only when a merge commit is created. Defaults to `Merge branch '<source>' into <into>`. |
-| `deleteMergedBranches` | boolean | Default `false`. After **all** sources land cleanly, delete each source branch locally (`git branch -d`). **Protected names always skipped** (main, master, dev, develop, stable, trunk, prod, production, `release/*`, `release-*`, `hotfix/*`, `hotfix-*`). Never touches remote refs. |
+| `deleteMergedBranches` | boolean | Default `false`. After **all** sources land cleanly, delete each source branch locally (`git branch -d`). **Protected names always skipped** (main, master, dev, develop, stable, trunk, prod, production, head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` — pattern requires a separator and non-empty suffix; bare `release`/`hotfix` are not protected). Never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree currently checked out on a source branch (`git worktree remove`). Protected tails always skipped. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
@@ -1124,7 +1120,6 @@ For deletions, `type` is `"deleted"` and `sha` is an empty string.
 |------|---------|
 | `unsafe_ref_token` | `ref` contains characters outside the ancestor-safe token set. |
 | `working_tree_dirty` | Working tree has uncommitted/unstaged changes; clean up before resetting. |
-| `status_failed` | `git status` failed unexpectedly. |
 | `reset_failed` | `git reset --soft` failed (e.g. ref does not exist). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
@@ -1192,9 +1187,13 @@ Conflict / other `git revert` failures do **not** use the `error` field — see 
 }
 ```
 
-`output` is omitted when git produced no stdout/stderr text.
+Success/failure is reported via the `applied` boolean (not a top-level `error` code for apply/pop failures). `output` is omitted when git produced no stdout/stderr text. `popped` mirrors the requested `pop` flag (whether pop was attempted), not whether the stash entry was removed.
+
+On failure (`applied: false`): the working tree may be left conflicted; inspect `output` and/or call `git_conflicts`. With `pop: true`, a conflicted pop retains the stash entry (git does not drop it until the apply succeeds).
 
 ### `git_stash_apply` — error codes
+
+Prelude failures only — apply/pop outcomes use `applied` as above:
 
 | Code | Meaning |
 |------|---------|
@@ -1241,13 +1240,26 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 
 ---
 
+### `git_worktree_list` — parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `workspaceRoot`, `format` | — | — | Standard single-repo pick + output format. |
+
 ### `git_worktree_list` — JSON shape (`format: "json"`)
 
 ```json
 { "worktrees": [{ "path": "/abs/path", "branch": "feature/x", "head": "a1b2c3d…" }] }
 ```
 
-`branch` is `null` for detached-HEAD worktrees.
+`branch` and/or `head` may be `null` (detached HEAD or incomplete porcelain). This is an intentional `null` exception to the general field-omission rule.
+
+### `git_worktree_list` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `git_not_found` | `git` binary not on `PATH`. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ### `git_worktree_add` — parameters
 
@@ -1281,6 +1293,12 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 | `force` | boolean | Default `false`. Pass `--force` to allow removal with uncommitted changes. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
+### `git_worktree_remove` — JSON shape (`format: "json"`)
+
+```json
+{ "ok": true, "path": "/abs/worktree" }
+```
+
 ### `git_worktree_remove` — error codes
 
 | Code | Meaning |
@@ -1305,6 +1323,16 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 | URI | Purpose |
 |-----|---------|
 | `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors). |
+
+Error payloads from this resource may include:
+
+| Code | Meaning |
+|------|---------|
+| `no_workspace_root` | No MCP workspace root could be resolved for the session. |
+| `not_a_git_repository` | The resolved path is not inside a git repository. |
+| `preset_file_invalid` | Preset file failed to load (`kind`: `"invalid_json"` or `"schema"`). |
+
+When the file is missing, the resource returns `fileExists: false` with an empty `presets` object (not an error).
 
 ## Root resolution
 
