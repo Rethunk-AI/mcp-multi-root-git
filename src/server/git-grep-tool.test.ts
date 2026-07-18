@@ -175,4 +175,79 @@ describe("git_grep_tool", () => {
     expect(result).toContain("foo.txt:1");
     expect(result).toContain("needle here");
   });
+
+  test("ignoreCase: true matches mixed-case content", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "foo.txt", "NeedleHere\n", "feat: add foo");
+
+    const tool = captureTool(registerGitGrepTool);
+    const caseSensitive = JSON.parse(
+      await tool({ root: repo, pattern: "needlehere", format: "json" }),
+    ) as { results: Array<{ matches?: unknown[] }> };
+    expect(caseSensitive.results[0]?.matches).toEqual([]);
+
+    const caseInsensitive = JSON.parse(
+      await tool({ root: repo, pattern: "needlehere", ignoreCase: true, format: "json" }),
+    ) as { results: Array<{ matches?: Array<{ text: string }> }> };
+    expect(caseInsensitive.results[0]?.matches?.length).toBe(1);
+    expect(caseInsensitive.results[0]?.matches?.[0]?.text).toBe("NeedleHere");
+  });
+
+  test("multi-root fan-out returns one results entry per root", async () => {
+    const a = makeRepo();
+    const b = makeRepo();
+    addCommit(a, "a.txt", "needle-a\n", "feat: a");
+    addCommit(b, "b.txt", "needle-b\n", "feat: b");
+
+    const tool = captureTool(registerGitGrepTool);
+    const parsed = JSON.parse(await tool({ root: [a, b], pattern: "needle", format: "json" })) as {
+      results: Array<{ matches?: unknown[] }>;
+    };
+    expect(parsed.results).toHaveLength(2);
+    expect(parsed.results.every((r) => (r.matches?.length ?? 0) >= 1)).toBe(true);
+  });
+
+  test("pickaxe S: returns commits that introduced/removed the term", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "foo.txt", "alpha\n", "feat: alpha");
+    addCommit(repo, "foo.txt", "alpha\nUNIQUE_PICKAXE_TERM\n", "feat: add pickaxe term");
+    addCommit(repo, "foo.txt", "alpha\n", "feat: remove pickaxe term");
+
+    const tool = captureTool(registerGitGrepTool);
+    const parsed = JSON.parse(
+      await tool({
+        root: repo,
+        pickaxe: { mode: "S", term: "UNIQUE_PICKAXE_TERM" },
+        format: "json",
+      }),
+    ) as {
+      results: Array<{ commits?: Array<{ sha: string; subject: string }>; matches?: unknown }>;
+    };
+
+    const group = parsed.results[0];
+    expect(group?.matches).toBeUndefined();
+    expect(group?.commits?.length).toBeGreaterThanOrEqual(2);
+    const subjects = (group?.commits ?? []).map((c) => c.subject);
+    expect(subjects).toContain("feat: add pickaxe term");
+    expect(subjects).toContain("feat: remove pickaxe term");
+  });
+
+  test("pickaxe without pattern succeeds; neither pattern nor pickaxe fails", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "foo.txt", "x\n", "feat: x");
+
+    const tool = captureTool(registerGitGrepTool);
+    const ok = JSON.parse(
+      await tool({
+        root: repo,
+        pickaxe: { mode: "S", term: "x" },
+        format: "json",
+      }),
+    ) as { results?: unknown[]; error?: string };
+    expect(ok.error).toBeUndefined();
+    expect(ok.results).toBeDefined();
+
+    const bad = JSON.parse(await tool({ root: repo, format: "json" })) as { error: string };
+    expect(bad.error).toBe("pattern_or_pickaxe_required");
+  });
 });

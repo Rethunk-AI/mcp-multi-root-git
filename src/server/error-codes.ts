@@ -73,6 +73,8 @@ export const ERROR_CODES = {
 
   // Grep
   GIT_GREP_FAILED: "git_grep_failed",
+  /** `git_grep` requires `pattern` and/or `pickaxe` — neither was supplied. */
+  PATTERN_OR_PICKAXE_REQUIRED: "pattern_or_pickaxe_required",
 
   // Show
   GIT_SHOW_FAILED: "git_show_failed",
