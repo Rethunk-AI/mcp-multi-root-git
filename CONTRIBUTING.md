@@ -5,7 +5,7 @@ Rethunk AI internal project. External PRs are not expected, but the process is d
 ## Prerequisites
 
 - **Node.js ≥ 22** — see [docs/install.md](docs/install.md) *Prerequisites* for version notes.
-- **Bun ≥ 1.3.13** (`packageManager` in `package.json`) — only needed to build and test from source.
+- **Bun ≥ 1.3.14** (`packageManager` in `package.json`) — only needed to build and test from source.
 - **Git ≥ 2.28**.
 
 ## Development setup
@@ -34,7 +34,7 @@ bun run setup-hooks    # one-time per clone: wire .githooks/
 | Hook | Runs |
 |------|------|
 | pre-commit | `bun run lint` |
-| pre-push | frozen install + build + lint + test (mirrors CI) |
+| pre-push | `bun install --frozen-lockfile` + `bun run ci` (schema checks, lint, typecheck, coverage gate, build — same core gates as CI) |
 
 Set `SKIP_GIT_HOOKS=1` to bypass.
 
@@ -42,10 +42,13 @@ Set `SKIP_GIT_HOOKS=1` to bypass.
 
 ```
 type(scope): imperative summary ≤72 chars
+type(scope)!: breaking change summary ≤72 chars
 
 Body explains WHY this change exists — motivation, context, constraints.
 Not a file list. Not a summary of what the diff already shows.
 ```
+
+Append `!` after the type/scope (before the colon) for breaking changes — e.g. `fix(batch-commit)!: …`.
 
 | Type | When |
 |------|------|
@@ -57,6 +60,8 @@ Not a file list. Not a summary of what the diff already shows.
 | `chore` | Maintenance, deps, tooling |
 | `ci` | CI/CD config |
 | `build` | Build system changes |
+| `style` | Formatting, whitespace, lint-only style (no logic change) |
+| `perf` | Performance improvement |
 
 One logical unit per commit. Max ~7 files. Split by theme, not by file count.
 
@@ -77,13 +82,16 @@ Match the CI steps locally before opening a PR.
 
 ## Pull request checklist
 
-- [ ] `bun run build` passes.
-- [ ] `bun run lint` passes (no Biome errors).
+- [ ] `bun run ci` passes (or run each gate below).
 - [ ] `bun run schema:tools:check` passes.
-- [ ] `bun run schema:individual` refreshed published per-tool schema files when the parameter surface changed.
-- [ ] `bun run test` passes.
+- [ ] `bun run schema:individual:check` passes (regenerate with `bun run schema:individual` when the parameter surface changed).
+- [ ] `bun run lint` passes (no Biome errors).
+- [ ] `bun run typecheck` passes.
+- [ ] `bun run test:coverage` + `bun run coverage:check .coverage-ci.txt 80` pass (or `tee` output to another path).
+- [ ] `bun run build` passes.
 - [ ] Any new tool has a corresponding `*.test.ts` file.
 - [ ] `docs/mcp-tools.md` updated if the public tool surface changed.
+- [ ] `README.md` updated if the public tool surface is mentioned there.
 - [ ] `CHANGELOG.md` entry added under `[Unreleased]`.
 
 ## Adding a git tool
@@ -92,9 +100,10 @@ Match the CI steps locally before opening a PR.
 2. Register it in `src/server/tools.ts` inside `registerRethunkGitTools`.
 3. Add a test file `src/server/<tool-name>-tool.test.ts`.
 4. Run `bun run schema:tools && bun run schema:individual` so the shipped schema snapshots stay in sync.
-5. Update [docs/mcp-tools.md](docs/mcp-tools.md) (tool ID, parameters, JSON shape, error codes).
-6. Follow contract-change rules in [AGENTS.md](AGENTS.md) — bump JSON format version if the output shape changes incompatibly.
-7. **Path confinement:** if the tool accepts file paths, use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and add tests for escaping attempts.
+5. Add any new wire error codes to [`src/server/error-codes.ts`](src/server/error-codes.ts) and document them in [docs/mcp-tools.md](docs/mcp-tools.md) (tool ID, parameters, JSON shape, error codes).
+6. Update [docs/mcp-tools.md](docs/mcp-tools.md) and [README.md](README.md) when the public tool surface changes (README only when the tool is mentioned there).
+7. Follow contract-change rules in [AGENTS.md](AGENTS.md) — bump JSON format version if the output shape changes incompatibly.
+8. **Path confinement:** if the tool accepts file paths, use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and add tests for escaping attempts.
 
 ## Code style
 
