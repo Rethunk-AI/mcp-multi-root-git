@@ -8,21 +8,24 @@ import { ERROR_CODES } from "./error-codes.js";
 /**
  * Schema for `.rethunk/git-mcp-presets.json` at the workspace root.
  * Each named entry defines roots for `git_inventory` and/or pairs for `git_parity`.
+ * Must stay aligned with `git-mcp-presets.schema.json`.
  */
-const PresetEntrySchema = z.object({
-  nestedRoots: z.array(z.string()).optional(),
-  parityPairs: z
-    .array(
-      z.object({
-        left: z.string(),
-        right: z.string(),
-        label: z.string().optional(),
-      }),
-    )
-    .optional(),
-  /** When multiple MCP file roots exist, prefer one whose path basename or suffix matches this hint. */
-  workspaceRootHint: z.string().optional(),
-});
+const ParityPairSchema = z
+  .object({
+    left: z.string(),
+    right: z.string(),
+    label: z.string().optional(),
+  })
+  .strict();
+
+const PresetEntrySchema = z
+  .object({
+    nestedRoots: z.array(z.string()).optional(),
+    parityPairs: z.array(ParityPairSchema).optional(),
+    /** When multiple MCP file roots exist, prefer one whose path basename or suffix matches this hint. */
+    workspaceRootHint: z.string().optional(),
+  })
+  .strict();
 
 const PresetFileSchema = z.record(z.string(), PresetEntrySchema);
 
@@ -30,6 +33,10 @@ type PresetEntry = z.infer<typeof PresetEntrySchema>;
 type PresetFile = z.infer<typeof PresetFileSchema>;
 
 export const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
+
+const PRESET_ENTRY_FIELD_NAMES = new Set(["nestedRoots", "parityPairs", "workspaceRootHint"]);
+const WRAPPED_META_KEYS = new Set(["$schema", "schemaVersion", "presets"]);
+const PRESET_SCHEMA_VERSION = "1";
 
 type PresetLoadFail =
   | { ok: false; reason: "missing" }
@@ -39,6 +46,38 @@ type PresetLoadFail =
 type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
 
 type PresetLoadResult = PresetLoadOk | PresetLoadFail;
+
+function looksLikePresetEntryObject(obj: Record<string, unknown>): boolean {
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return true;
+  return keys.every((k) => PRESET_ENTRY_FIELD_NAMES.has(k));
+}
+
+function isWrappedLayout(o: Record<string, unknown>): boolean {
+  if (!("presets" in o)) return false;
+  const inner = o.presets;
+  if (inner === null || typeof inner !== "object" || Array.isArray(inner)) {
+    return false;
+  }
+  const innerObj = inner as Record<string, unknown>;
+
+  // Non-empty inner with only PresetEntry field names → legacy preset named "presets".
+  if (looksLikePresetEntryObject(innerObj) && Object.keys(innerObj).length > 0) {
+    return false;
+  }
+
+  // Empty inner: wrapped when top level has only metadata + presets.
+  if (Object.keys(innerObj).length === 0) {
+    const topKeys = Object.keys(o);
+    return topKeys.every((k) => WRAPPED_META_KEYS.has(k));
+  }
+
+  return true;
+}
+
+function schemaIssue(message: string, path: (string | number)[] = []): z.ZodIssue {
+  return { code: "custom", path, message };
+}
 
 /**
  * Supports:
@@ -50,12 +89,12 @@ function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: st
     throw new Error("invalid_root");
   }
   const o = raw as Record<string, unknown>;
-  if (
-    "presets" in o &&
-    o.presets !== null &&
-    typeof o.presets === "object" &&
-    !Array.isArray(o.presets)
-  ) {
+  if (isWrappedLayout(o)) {
+    for (const key of Object.keys(o)) {
+      if (!WRAPPED_META_KEYS.has(key)) {
+        throw new Error("wrapped_extra_keys");
+      }
+    }
     const sv = o.schemaVersion;
     return {
       mapRaw: o.presets,
@@ -90,11 +129,39 @@ export function loadPresetsFromGitTop(gitTop: string): PresetLoadResult {
     const s = splitPresetFileRaw(raw);
     mapRaw = s.mapRaw;
     schemaVersion = s.schemaVersion;
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === "wrapped_extra_keys") {
+      return {
+        ok: false,
+        reason: "schema",
+        issues: [
+          schemaIssue("Wrapped preset files allow only $schema, schemaVersion, and presets"),
+        ],
+      };
+    }
     return {
       ok: false,
       reason: "invalid_json",
       message: "Preset file root must be a JSON object",
+    };
+  }
+  if (schemaVersion !== undefined && schemaVersion !== PRESET_SCHEMA_VERSION) {
+    return {
+      ok: false,
+      reason: "schema",
+      issues: [schemaIssue(`schemaVersion must be "${PRESET_SCHEMA_VERSION}"`, ["schemaVersion"])],
+    };
+  }
+  if (
+    mapRaw === null ||
+    typeof mapRaw !== "object" ||
+    Array.isArray(mapRaw) ||
+    Object.keys(mapRaw as object).length === 0
+  ) {
+    return {
+      ok: false,
+      reason: "schema",
+      issues: [schemaIssue("Preset file must contain at least one preset")],
     };
   }
   const parsed = PresetFileSchema.safeParse(mapRaw);
@@ -187,7 +254,16 @@ function mergePairs<T extends { left: string; right: string; label?: string }>(
   const a = preset ?? [];
   const b = inline ?? [];
   if (a.length === 0 && b.length === 0) return undefined;
-  return [...a, ...b];
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const pair of [...a, ...b]) {
+    const key = `${pair.left}\0${pair.right}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(pair);
+    }
+  }
+  return out;
 }
 
 export type ParityPair = { left: string; right: string; label?: string };

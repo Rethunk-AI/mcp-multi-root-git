@@ -112,6 +112,44 @@ describe("loadPresetsFromGitTop — schema errors", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
   });
+
+  test("returns schema error for unknown preset entry keys", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { p: { nestedRoots: ["a"], orphan: true } });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
+  });
+
+  test("returns schema error when schemaVersion is not 1", () => {
+    const dir = makeDir();
+    writePresetJson(dir, {
+      schemaVersion: "2",
+      presets: { p: { nestedRoots: ["a"] } },
+    });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
+  });
+
+  test("returns schema error for empty preset map", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { schemaVersion: "1", presets: {} });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
+  });
+
+  test("returns schema error when wrapped layout has extra top-level keys", () => {
+    const dir = makeDir();
+    writePresetJson(dir, {
+      presets: { a: { nestedRoots: ["x"] } },
+      orphan: { nestedRoots: ["y"] },
+    });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -147,16 +185,16 @@ describe("loadPresetsFromGitTop — valid flat format", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadPresetsFromGitTop — wrapped format", () => {
-  test("loads wrapped format with presets key", () => {
+  test("loads wrapped format with presets key and schemaVersion 1", () => {
     const dir = makeDir();
     writePresetJson(dir, {
-      schemaVersion: "2",
+      schemaVersion: "1",
       presets: { myPreset: { nestedRoots: ["packages/c"] } },
     });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.schemaVersion).toBe("2");
+      expect(result.schemaVersion).toBe("1");
       expect(result.data.myPreset?.nestedRoots).toEqual(["packages/c"]);
     }
   });
@@ -169,6 +207,16 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.schemaVersion).toBeUndefined();
+  });
+
+  test("legacy flat map supports a preset literally named presets", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { presets: { nestedRoots: ["packages/a"] } });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.presets?.nestedRoots).toEqual(["packages/a"]);
+    }
   });
 });
 
@@ -280,12 +328,12 @@ describe("applyPresetNestedRoots", () => {
   test("exposes schemaVersion from a wrapped preset", () => {
     const dir = makeDir();
     writePresetJson(dir, {
-      schemaVersion: "3",
+      schemaVersion: "1",
       presets: { p: { nestedRoots: ["a"] } },
     });
     const result = applyPresetNestedRoots(dir, "p", false, undefined);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.presetSchemaVersion).toBe("3");
+    if (result.ok) expect(result.presetSchemaVersion).toBe("1");
   });
 });
 
@@ -330,11 +378,56 @@ describe("applyPresetParityPairs", () => {
     if (result.ok) expect(result.pairs).toHaveLength(2);
   });
 
+  test("deduplicates identical pairs when presetMerge=true", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { p: { parityPairs: [{ left: "a", right: "b", label: "from preset" }] } });
+    const result = applyPresetParityPairs(dir, "p", true, [
+      { left: "a", right: "b", label: "inline" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.pairs).toHaveLength(1);
+      expect(result.pairs?.[0]?.label).toBe("from preset");
+    }
+  });
+
   test("returns error when preset file has invalid JSON", () => {
     const dir = makeDir();
     mkdirSync(join(dir, ".rethunk"), { recursive: true });
     writeFileSync(join(dir, PRESET_FILE_PATH), "bad json", "utf8");
     const result = applyPresetParityPairs(dir, "p", false, undefined);
     expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Zod ↔ git-mcp-presets.schema.json alignment gate
+// ---------------------------------------------------------------------------
+
+describe("preset schema alignment gate", () => {
+  test("rejects schemaVersion values other than 1", () => {
+    for (const version of ["2", "3", "0"]) {
+      const dir = makeDir();
+      writePresetJson(dir, { schemaVersion: version, presets: { p: { nestedRoots: ["a"] } } });
+      const result = loadPresetsFromGitTop(dir);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe("schema");
+    }
+  });
+
+  test("rejects unknown preset entry fields (strict Zod)", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { p: { nestedRoots: ["a"], extraField: 1 } });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
+  });
+
+  test("rejects empty legacy map after stripping metadata", () => {
+    const dir = makeDir();
+    writePresetJson(dir, { schemaVersion: "1", $schema: "https://example.com/schema.json" });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("schema");
   });
 });
