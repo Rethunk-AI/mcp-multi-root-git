@@ -17,6 +17,7 @@
  *   // result is string (markdown) or JSON-parseable string
  */
 
+import { afterEach } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,13 +52,20 @@ const STUB_CONTEXT: AnyRecord = {
 
 // ---------------------------------------------------------------------------
 // Tmp-dir lifecycle — prevents accumulating thousands of leaked test dirs.
-// Each test file must register the hook itself:
-//   afterEach(cleanupTmpPaths);
-// Module-scope afterEach(...) would only register once (first-importer wins)
-// because the module is cached across test files in the same bun test run.
+// Each test file that calls mkTmpDir / makeRepo / trackTmpPath must register
+// cleanup once at module scope:
+//   registerTmpCleanup();
+// (equivalent to afterEach(cleanupTmpPaths) but documents the contract.)
+// Module-scope afterEach(...) in this file would only register once
+// (first-importer wins) because the module is cached across test files.
 // ---------------------------------------------------------------------------
 
 const tmpPaths: string[] = [];
+
+/** Register afterEach cleanup for dirs created via mkTmpDir / makeRepo. Call once per test file. */
+export function registerTmpCleanup(): void {
+  afterEach(cleanupTmpPaths);
+}
 
 export function mkTmpDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
