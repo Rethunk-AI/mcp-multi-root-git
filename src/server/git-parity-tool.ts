@@ -61,15 +61,21 @@ export function registerGitParityTool(server: FastMCP): void {
             results.push({
               workspaceRoot: workspaceRoot,
               status: "MISMATCH",
-              pairs: [
-                { label: "—", leftPath: "", rightPath: "", match: false, error: errDesc },
-              ],
+              pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: errDesc }],
             });
           } else {
             mdParts.push(
-              ["# Git HEAD parity", "", `status: MISMATCH`, "", `## — — error`, "```text", errDesc, "```", ""].join(
-                "\n",
-              ),
+              [
+                "# Git HEAD parity",
+                "",
+                `status: MISMATCH`,
+                "",
+                `## — — error`,
+                "```text",
+                errDesc,
+                "```",
+                "",
+              ].join("\n"),
             );
           }
           continue;

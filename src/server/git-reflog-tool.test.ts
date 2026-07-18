@@ -125,7 +125,7 @@ describe("git_reflog_tool", () => {
     const parsed = JSON.parse(result) as { error: string; detail?: string };
     expect(parsed.error).toBe("reflog_failed");
     expect(typeof parsed.detail).toBe("string");
-    expect(parsed.detail!.length).toBeGreaterThan(0);
+    expect(parsed.detail?.length).toBeGreaterThan(0);
   });
 
   test("returns branch-scoped reflog entries when ref is a branch name", async () => {

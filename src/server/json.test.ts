@@ -12,7 +12,7 @@ describe("MCP_JSON_FORMAT_VERSION", () => {
   test('server.ts exports "5" and embeds it in FastMCP instructions', () => {
     const src = readFileSync(join(import.meta.dir, "..", "server.ts"), "utf8");
     expect(src).toMatch(/export const MCP_JSON_FORMAT_VERSION = "5"/);
-    expect(src).toContain("JSON payload contract: format version ${MCP_JSON_FORMAT_VERSION}");
+    expect(src).toMatch(/JSON payload contract: format version \$\{MCP_JSON_FORMAT_VERSION\}/);
   });
 });
 

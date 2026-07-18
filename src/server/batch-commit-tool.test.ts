@@ -566,7 +566,9 @@ describe("batch_commit line-range staging", () => {
     gitCmd(dir, "commit", "-m", "chore: base");
 
     // Modify both regions; stage only the first hunk via lines.
-    const modified = base.replace("const a = 1", "const a = 100").replace("const z = 0", "const z = 99");
+    const modified = base
+      .replace("const a = 1", "const a = 100")
+      .replace("const z = 0", "const z = 99");
     writeFileSync(join(dir, "code.ts"), modified);
 
     const run = captureTool(registerBatchCommitTool);
