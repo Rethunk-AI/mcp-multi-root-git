@@ -37,7 +37,7 @@ describe("tool parameter schemas", () => {
     // Live tools.ts registrar path is the source of truth for capture.
     expect(captureKeys).toEqual(registeredNames);
     // Category arrays must classify every registered tool (and no extras).
-    expect([...ALL_PARAMETER_SCHEMA_TOOLS].sort()).toEqual([...registeredNames].sort());
+    expect([...ALL_PARAMETER_SCHEMA_TOOLS].sort() as string[]).toEqual([...registeredNames].sort());
 
     for (const [name, schema] of Object.entries(schemas)) {
       expect(name.length).toBeGreaterThan(0);

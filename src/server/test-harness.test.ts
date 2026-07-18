@@ -53,6 +53,7 @@ describe("captureToolDefinitions", () => {
     expect(() => {
       captureToolDefinitions((server) => {
         server.addResource?.({
+          name: "presets",
           uri: "rethunk-git://presets",
           load: async () => ({ text: "{}" }),
         });
