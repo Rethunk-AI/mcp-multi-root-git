@@ -204,4 +204,51 @@ describe("git_parity", () => {
     expect(parsed.error).toBe("invalid_root_path");
     expect(parsed.path).toBe(plain);
   });
+
+  test("string non-git root: pairs.error is plain description, not nested JSON", async () => {
+    const plain = mkTmpDir("parity-nongit-str-");
+    const run = captureTool(registerGitParityTool);
+
+    const text = await run({
+      format: "json",
+      root: plain,
+      pairs: [{ left: "left", right: "right" }],
+    });
+    const parsed = JSON.parse(text) as {
+      parity: Array<{ pairs: Array<{ error?: string }> }>;
+    };
+    const err = parsed.parity[0]?.pairs[0]?.error;
+    expect(err).toBeTruthy();
+    expect(err).toContain("not a git repository");
+    expect(err).not.toMatch(/^\{/);
+    expect(() => JSON.parse(err as string)).toThrow();
+  });
+
+  test("preset parityPairs loads from .rethunk/git-mcp-presets.json", async () => {
+    const w = makeParityWorkspace("parity-preset-");
+    mkdirSync(join(w.root, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(w.root, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({
+        schemaVersion: "1",
+        presets: {
+          p: { parityPairs: [{ left: "left", right: "right", label: "from preset" }] },
+        },
+      }),
+    );
+
+    const run = captureTool(registerGitParityTool);
+    const text = await run({ root: w.root, format: "json", preset: "p" });
+    const parsed = JSON.parse(text) as {
+      parity: Array<{
+        status: string;
+        presetSchemaVersion?: string;
+        pairs: Array<{ label: string; match: boolean }>;
+      }>;
+    };
+    expect(parsed.parity[0]?.presetSchemaVersion).toBe("1");
+    expect(parsed.parity[0]?.status).toBe("OK");
+    expect(parsed.parity[0]?.pairs[0]?.label).toBe("from preset");
+    expect(parsed.parity[0]?.pairs[0]?.match).toBe(true);
+  });
 });

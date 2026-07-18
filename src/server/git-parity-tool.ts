@@ -56,16 +56,21 @@ export function registerGitParityTool(server: FastMCP): void {
       for (const workspaceRoot of pre.roots) {
         const top = gitTopLevel(workspaceRoot);
         if (!top) {
-          const errPayload = { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: workspaceRoot };
-          const err = jsonRespond(errPayload);
+          const errDesc = `not a git repository: ${workspaceRoot}`;
           if (args.format === "json") {
             results.push({
               workspaceRoot: workspaceRoot,
               status: "MISMATCH",
-              pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: err }],
+              pairs: [
+                { label: "—", leftPath: "", rightPath: "", match: false, error: errDesc },
+              ],
             });
           } else {
-            mdParts.push(err);
+            mdParts.push(
+              ["# Git HEAD parity", "", `status: MISMATCH`, "", `## — — error`, "```text", errDesc, "```", ""].join(
+                "\n",
+              ),
+            );
           }
           continue;
         }
