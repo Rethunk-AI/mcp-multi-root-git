@@ -4,9 +4,17 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+Additive JSON / behavior only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.
+
 ### Added
 
 - **`RETHUNK_GIT_TOOLS=*`** — bare `*` is now an all-tools sentinel (registers every tool) instead of an unrecognized name that emptied the allowlist.
+- **`git_grep` `pickaxe`** — optional `{ mode: "S"|"G", term }` history search (`git log -S`/`-G`) returning `commits[]` per root; `pattern` optional when pickaxe is set (`pattern_or_pickaxe_required` when neither is provided).
+- **`git_log` `follow`** — optional rename-aware history (`git log --follow`); requires exactly one `paths` entry else `invalid_paths`.
+- **`git_inventory` `compareRefs`** — optional `{ left, right }` ahead/behind between arbitrary local refs (independent of upstream); bad tokens → `unsafe_ref_token`.
+- **`git_diff` `maxBytes`** — optional UTF-8 byte cap on returned diff text (default `512000`, range 1024–10000000); oversized output sets `truncated: true`.
+- **Subprocess bounds** — `spawnGitAsync` stdout/stderr capped (default 16 MiB, `GIT_SUBPROCESS_MAX_BUFFER_BYTES`); overflow kills the child and returns `truncated: true`. Hung children escalate SIGTERM → SIGKILL after 2s. Sync helpers gain `GIT_SYNC_TIMEOUT_MS` (30s).
+- **`stash_apply_failed`** — registered in the central error-code registry and emitted on failed stash apply/pop.
 
 ### Changed
 
@@ -16,8 +24,14 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 - **Release / CI pack** — workflows use `npm pack --ignore-scripts` and `npm publish --ignore-scripts` so `prepublishOnly` does not re-run the full CI suite.
 - **Publish preflight** — coverage threshold checks delegate to `bun run coverage:check` instead of duplicating parser logic.
 - **Schema artifacts** — capture now drives `registerRethunkGitTools` (same path as the live server) instead of a parallel `register*` list, so published parameter schemas cannot silently omit a newly added tool; `schema:individual` / `--check` hard-fails on missing capture schemas and rejects orphan `schemas/*.json` files left after renames/removals.
-- **Docs** — align `docs/mcp-tools.md` with wire contracts: `workspaceRoot` (not `workspace_root`), `preset_file_invalid` + `kind`, stash apply/pop conflict semantics, worktree list/remove gaps, protected-branch list including `head` and separator patterns, field-omission null exceptions, and related error-table cleanups (`MCP_JSON_FORMAT_VERSION` unchanged).
+- **`root: "*"` fan-out** — capped at `MAX_ROOT_PATHS` (256); oversize sessions return `{ error: root_list_too_many, max, count }` like explicit root arrays. `RootPickSchema` no longer Zod-`.max`s the array (execute-path structured error instead of FastMCP `too_big`).
+- **Docs** — align `docs/mcp-tools.md` with wire contracts: fan-out feature params (`pickaxe` / `follow` / `compareRefs`), `git_diff` `maxBytes`, merge/cherry-pick abort-failure codes, stash apply `conflictPaths` + `destructiveHint`, worktree path argv safety, `batch_commit` index isolation, and related error-table cleanups (`MCP_JSON_FORMAT_VERSION` unchanged).
 - **`SECURITY.md`** — refresh threat model to the full 30-tool surface (read + mutate), including previously omitted mutators; disclose trusted-operator `workspaceRoot` / explicit `root` paths (no MCP-session whitelist this release); document shipped controls (realpath confinement, protected-branch enforcement, no force-push, argv-array spawn + ref validators); correct aspirational claims; add `RETHUNK_GIT_TOOLS` hardening, read-tool content-exfil risk, and soft-reset vs revert rewrite matrix.
+- **`git_stash_apply`** — on failure emits `error: stash_apply_failed` plus optional `conflictPaths`; sets `destructiveHint: true` (pop can delete a stash entry).
+- **`git_merge` / `git_cherry_pick`** — abort helpers surface `--abort` failure (`merge_abort_failed` / `rebase_abort_failed` / `cherry_pick_abort_failed`) instead of claiming a cleaned tree when abort itself failed. `git_cherry_pick` hard-caps expanded picks at 100 (`cherry_pick_too_many_commits`). `git_merge` `auto`/`rebase` rewrite the **source** branch tip when rebasing (documented; behavior unchanged). `deleteMergedWorktrees` skips protected **source branch names**.
+- **`git_diff_summary`** — `totalFiles` / `totalAdditions` / `totalDeletions` count the post-filter set; `excludedFiles` includes exclude-pattern hits and `fileFilter` drops; `truncatedFiles` is the `maxFiles` omit count.
+- **`git_show`** — `git_show_failed` includes `detail` (stderr/stdout trim).
+- **`git_tag`** — tag names use `isSafeGitRefToken`; create `ref` uses `isSafeGitCommitIsh`; tool description is create/delete only.
 
 ### Fixed
 
@@ -25,6 +39,12 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 - **`isSafeGitAncestorRef`** — now delegates to `isSafeGitCommitIsh`, rejecting `..` ranges, `.lock` suffixes, `//`, trailing `/`/`.`, mid-name `~`/`^`, and leading `+` (previously accepted by a looser charset-only check).
 - **`isSafeGitRefToken`** — rejects leading `+` (git force-update refspec); closes force-push/fetch via `branch=+name` when callers use this validator.
 - **`listWorktrees`** — returns `{ ok:false, detail }` on git failure instead of an empty array.
+- **`batch_commit` index isolation** — unrelated pre-staged paths are temporarily unstaged around an index-based `git commit` (avoids pathspec/`--only`, which would squash hunk staging); mid-entry `stage_failed` unstages that entry's paths; dryRun restores the pre-call index via `write-tree`/`read-tree`; rejects `.` / repo-root / directory pathspecs (`invalid_paths`); line-range staging uses `git diff --` / `--no-index` for untracked and rejects `from > to` (`invalid_line_range`).
+- **`git_log` path confinement** — each `paths` entry gated with `resolvePathForRepo` / `assertRelativePathUnderTop`; escaping paths yield `path_escapes_repo` per root.
+- **`git_parity` / `git_inventory` non-git wording** — `pairs[*].error` and inventory `skipReason` use plain description strings (no nested minified JSON).
+- **`git_diff` / `git_diff_summary` / `git_conflicts`** — honor docs precedence (`base` over `staged`; ignore `head` without `base`); emit bare `unsafe_range_token`; fix rename numstat counts; report `path_escapes_repo` on escaped conflict paths; flag incomplete conflict markers as `truncated`.
+- **`git_push` / `git_fetch`** — reject leading `+` force-update refspecs on branch args.
+- **`git_worktree_add` / `git_worktree_remove`** — reject leading-dash and NUL paths; pass path after `--`; trim `branch`/`baseRef` before spawn; sibling worktrees outside toplevel remain allowed.
 
 ## [3.2.0] — 2026-07-10
 
