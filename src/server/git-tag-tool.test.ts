@@ -6,6 +6,8 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { registerGitTagTool } from "./git-tag-tool.js";
 import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-harness.js";
@@ -97,5 +99,78 @@ describe("git_tag execute handler", () => {
     const parsed = JSON.parse(text) as { error: string; tag: string };
 
     expect(parsed).toEqual({ error: "unsafe_tag_token", tag: "v1.0.0;rm" });
+  });
+
+  test("rejects .lock tag names that upstream-token previously allowed", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "main.lock",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "unsafe_tag_token", tag: "main.lock" });
+  });
+
+  test("rejects unsafe ref tokens", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "v-unsafe-ref",
+      ref: "bad;ref",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "unsafe_ref_token", ref: "bad;ref" });
+  });
+
+  test("tag_create_failed on duplicate tag (no -f overwrite)", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    gitCmd(repo, "tag", "v-dup");
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "v-dup",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string; detail: string };
+    expect(parsed.error).toBe("tag_create_failed");
+    expect(parsed.detail.length).toBeGreaterThan(0);
+  });
+
+  test("tag_delete_failed for a missing tag", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "v-missing-delete",
+      delete: true,
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { error: string; detail: string };
+    expect(parsed.error).toBe("tag_delete_failed");
+    expect(parsed.detail.length).toBeGreaterThan(0);
+  });
+
+  test("creates a tag at HEAD~1 via commit-ish ref", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    writeFileSync(join(repo, "second.txt"), "second\n");
+    gitCmd(repo, "add", "second.txt");
+    gitCmd(repo, "commit", "-m", "chore: second");
+    const parentSha = gitCmd(repo, "rev-parse", "HEAD~1").trim();
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "v-parent",
+      ref: "HEAD~1",
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { tag: string; type: string; sha: string };
+    expect(parsed).toEqual({ tag: "v-parent", type: "lightweight", sha: parentSha });
   });
 });

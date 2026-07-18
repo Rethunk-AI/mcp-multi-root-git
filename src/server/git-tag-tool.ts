@@ -2,7 +2,8 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { spawnGitAsync } from "./git.js";
+import { isSafeGitCommitIsh, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -55,7 +56,7 @@ export function registerGitTagTool(server: FastMCP): void {
   server.addTool({
     name: "git_tag",
     description:
-      "Create, delete, or inspect git tags. Create annotated tags (with message) or lightweight tags (ref only). " +
+      "Create or delete git tags. Create annotated tags (with message) or lightweight tags (ref only). " +
       "Returns tag name, type, and SHA.",
     annotations: {
       readOnlyHint: false,
@@ -89,8 +90,8 @@ export function registerGitTagTool(server: FastMCP): void {
         return jsonRespond({ error: ERROR_CODES.EMPTY_TAG_NAME });
       }
 
-      // Validate tag name: no shell metacharacters
-      if (!isSafeGitUpstreamToken(tag)) {
+      // Validate tag name with ref-token rules (rejects .lock, //, etc.).
+      if (!isSafeGitRefToken(tag)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_TAG_TOKEN, tag });
       }
 
@@ -115,9 +116,9 @@ export function registerGitTagTool(server: FastMCP): void {
         return `Deleted tag: ${tag}`;
       }
 
-      // Determine the ref to tag (default HEAD)
+      // Determine the ref to tag (default HEAD). Commit-ish allows HEAD~1 / main^2.
       const ref = (args.ref ?? "HEAD").trim();
-      if (!isSafeGitUpstreamToken(ref)) {
+      if (!isSafeGitCommitIsh(ref)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref });
       }
 
