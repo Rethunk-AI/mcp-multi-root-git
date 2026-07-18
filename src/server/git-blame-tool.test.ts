@@ -174,4 +174,37 @@ describe("git_blame_tool", () => {
     const parsed = JSON.parse(result) as { error: string };
     expect(parsed.error).toBe("unsafe_ref_token");
   });
+
+  test("only startLine set returns invalid_line_range", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "hello.txt", "a\nb\n", "feat: add hello");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      path: "hello.txt",
+      startLine: 1,
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toBe("invalid_line_range");
+  });
+
+  test("startLine > endLine returns invalid_line_range", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "hello.txt", "a\nb\n", "feat: add hello");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      path: "hello.txt",
+      startLine: 3,
+      endLine: 1,
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toBe("invalid_line_range");
+  });
 });
