@@ -45,15 +45,8 @@ async function runGitReflog(opts: {
 }): Promise<ReflogJson | { error: string; detail?: string }> {
   const { top, ref, maxEntries } = opts;
 
-  // %h = short sha, %H = full sha, %gd = selector (HEAD@{0}), %gs = reflog subject
-  const reflogArgs = [
-    "reflog",
-    "show",
-    ref,
-    "--format=%h%x00%H%x00%gd%x00%gs",
-    `-n`,
-    String(maxEntries),
-  ];
+  // %H = full sha, %gd = selector (HEAD@{0}), %gs = reflog subject
+  const reflogArgs = ["reflog", "show", ref, "--format=%H%x00%gd%x00%gs", `-n`, String(maxEntries)];
 
   const r = await spawnGitAsync(top, reflogArgs);
   if (!r.ok) {
@@ -69,9 +62,9 @@ async function runGitReflog(opts: {
   for (const line of lines) {
     if (!line.trim()) continue;
     const parts = line.split("\x00");
-    // Expect 4 fields: shaShort, shaFull, selector, message
-    if (parts.length < 4) continue;
-    const [, shaFull, selector, message] = parts;
+    // Expect 3 fields: shaFull, selector, message
+    if (parts.length < 3) continue;
+    const [shaFull, selector, message] = parts;
     if (!shaFull) continue;
 
     entries.push({
@@ -90,7 +83,7 @@ async function runGitReflog(opts: {
 
 function renderReflogMarkdown(result: ReflogJson): string {
   const lines: string[] = [];
-  lines.push(`## Reflog (${result.ref})`);
+  lines.push(`# git reflog (${result.ref})`);
   lines.push("");
 
   if (result.entries.length === 0) {

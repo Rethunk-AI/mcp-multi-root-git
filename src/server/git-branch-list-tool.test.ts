@@ -63,6 +63,35 @@ describe("git_branch_list_tool", () => {
     expect(parsed.remotes).toBeUndefined();
   });
 
+  test("reports upstream tracking for a branch with origin/main", async () => {
+    const { work } = makeRepoWithUpstream();
+
+    const tool = captureTool(registerGitBranchListTool);
+    const result = await tool({ workspaceRoot: work, format: "json" });
+    const parsed = JSON.parse(result) as {
+      branches: Array<{ name: string; upstream?: string; current: boolean }>;
+    };
+
+    const main = parsed.branches.find((b) => b.name === "main");
+    expect(main?.upstream).toBe("origin/main");
+    expect(main?.current).toBe(true);
+  });
+
+  test("detached HEAD yields no current:true branch", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+    const headSha = gitCmd(repo, "rev-parse", "HEAD").trim();
+    gitCmd(repo, "checkout", "--detach", headSha);
+
+    const tool = captureTool(registerGitBranchListTool);
+    const result = await tool({ workspaceRoot: repo, format: "json" });
+    const parsed = JSON.parse(result) as {
+      branches: Array<{ current: boolean }>;
+    };
+
+    expect(parsed.branches.some((b) => b.current)).toBe(false);
+  });
+
   test("includeRemotes true: remote-tracking branches populated after push", async () => {
     const { work } = makeRepoWithUpstream();
 
@@ -108,6 +137,7 @@ describe("git_branch_list_tool", () => {
     const tool = captureTool(registerGitBranchListTool);
     const result = await tool({ workspaceRoot: repo, format: "markdown" });
 
+    expect(result).toContain("# git branch list");
     expect(result).toContain("## Branches");
     expect(result).toContain("* **main**");
     // Non-current branch should not have the * prefix

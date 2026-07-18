@@ -107,7 +107,48 @@ describe("git_reflog_tool", () => {
       format: "markdown",
     });
 
-    expect(result).toContain("## Reflog (HEAD)");
+    expect(result).toContain("# git reflog (HEAD)");
     expect(result).toContain("HEAD@{0}");
+  });
+
+  test("returns reflog_failed for an unknown ref", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+
+    const tool = captureTool(registerGitReflogTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "no-such-branch-xyz",
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as { error: string; detail?: string };
+    expect(parsed.error).toBe("reflog_failed");
+    expect(typeof parsed.detail).toBe("string");
+    expect(parsed.detail!.length).toBeGreaterThan(0);
+  });
+
+  test("returns branch-scoped reflog entries when ref is a branch name", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "file.txt", "content\n", "feat: add file");
+    gitCmd(repo, "checkout", "-b", "feature");
+    addCommit(repo, "feature.txt", "feature\n", "feat: on feature");
+
+    const tool = captureTool(registerGitReflogTool);
+    const result = await tool({
+      workspaceRoot: repo,
+      ref: "feature",
+      format: "json",
+    });
+
+    const parsed = JSON.parse(result) as {
+      ref: string;
+      entries: Array<{ selector: string; message: string }>;
+    };
+
+    expect(parsed.ref).toBe("feature");
+    expect(parsed.entries.length).toBeGreaterThanOrEqual(1);
+    expect(parsed.entries[0]?.selector).toMatch(/^feature@\{\d+\}$/);
+    expect(parsed.entries[0]?.message.length).toBeGreaterThan(0);
   });
 });

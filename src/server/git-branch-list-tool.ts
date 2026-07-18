@@ -111,7 +111,7 @@ async function runBranchList(opts: {
 // ---------------------------------------------------------------------------
 
 function renderBranchListMarkdown(result: BranchListJson): string {
-  const lines: string[] = ["## Branches", ""];
+  const lines: string[] = ["# git branch list", "", "## Branches", ""];
 
   if (result.branches.length === 0) {
     lines.push("_(none)_");
