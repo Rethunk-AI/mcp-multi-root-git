@@ -53,24 +53,6 @@ With **multiple MCP file roots**, the server picks a root whose git toplevel def
 
 If you installed from **GitHub Packages**, use **`./node_modules/@rethunk-ai/mcp-multi-root-git/git-mcp-presets.schema.json`** in **`$schema`** instead (see [docs/install.md](docs/install.md#github-packages)).
 
-## Tool parameter schema artifact
-
-The package ships **`tool-parameters.schema.json`**, a generated JSON Schema snapshot of every registered tool's parameter schema, plus the published **`schemas/`** directory with **`schemas/index.json`** and one per-tool JSON Schema file. Maintainers regenerate them with:
-
-```bash
-bun run schema:tools
-bun run schema:individual
-```
-
-CI and `prepublishOnly` use:
-
-```bash
-bun run schema:tools:check
-bun run schema:individual:check
-```
-
-These artifacts are for inspection, drift checks, code generation, and clients that want offline schema snapshots. Runtime MCP schema discovery remains the source of truth for connected clients.
-
 **Layouts:**
 
 1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }`.
@@ -91,6 +73,12 @@ Invalid JSON returns **`invalid_json`**; schema violations return **`invalid_sch
 ```
 
 Relative preset paths must stay inside the git toplevel; escapes are rejected.
+
+## Tool parameter schema artifact
+
+The package ships **`tool-parameters.schema.json`**, a generated JSON Schema snapshot of every registered tool's parameter schema, plus the published **`schemas/`** directory with **`schemas/index.json`** and one per-tool JSON Schema file. These artifacts are for inspection, drift checks, code generation, and clients that want offline schema snapshots. Runtime MCP schema discovery remains the source of truth for connected clients.
+
+Maintainers regenerate and verify them as part of [CONTRIBUTING.md](CONTRIBUTING.md) development setup.
 
 ## Sibling clone batches
 
@@ -125,23 +113,15 @@ Multi-repo routing is read-only by design. Mutating tools such as **`batch_commi
 
 ## Prerequisites
 
-- **Git** on `PATH` (`git --version`). Missing git → all tools return `git_not_found`.
-- **Node.js ≥ 22** (for `npx`) or **Bun** (for `bunx`). See `engines` in `package.json`.
-- No other runtime dependencies; the server is a self-contained MCP stdio process.
+Git, Node.js, and Bun version requirements: **[docs/install.md](docs/install.md#prerequisites)**.
 
 ## Running the server
 
-The server is a **stdio** MCP process — your MCP client starts it. You do not run it directly. Quick start:
+The server is a **stdio** MCP process — your MCP client starts it. You do not run it directly.
 
-```bash
-# npmjs (public, may lag tags)
-npx -y @rethunk/mcp-multi-root-git
+Install, per-client MCP wiring, and environment variables (`RETHUNK_GIT_TOOLS`, `GIT_SUBPROCESS_PARALLELISM`, `GIT_SUBPROCESS_TIMEOUT_MS`): **[docs/install.md](docs/install.md)** — see [Environment variables](docs/install.md#environment-variables).
 
-# GitHub Packages (CI-aligned, every tag)
-npx -y @rethunk-ai/mcp-multi-root-git   # requires ~/.npmrc with @rethunk-ai registry token
-```
-
-Add the server to your MCP client config under a stable name (e.g. `rethunk-git`). Full per-client config (Cursor, VS Code, Claude Desktop, Zed): **[docs/install.md](docs/install.md)**.
+Add the server to your MCP client config under a stable name (e.g. `rethunk-git`).
 
 ## Common operations
 
@@ -179,10 +159,6 @@ Call tools by their registered id (prefix depends on client config name):
 | Manage worktrees | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` |
 
 Full parameter tables and JSON shapes: **[docs/mcp-tools.md](docs/mcp-tools.md)**.
-
-## `git_not_found`
-
-If **`git`** is missing or not runnable, tools and the presets resource respond with **`git_not_found`**. Ensure `git` is on `PATH` in the environment that launches the MCP server.
 
 ## Installation
 
