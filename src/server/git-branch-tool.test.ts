@@ -148,4 +148,75 @@ describe("git_branch execute handler", () => {
     expect(forceResult).toEqual({ action: "delete", branch: "unmerged", sha: unmergedSha });
     expect(gitCmd(repo, "branch", "--list", "unmerged").trim()).toBe("");
   });
+
+  test("force:true still refuses protected branch delete (name=main)", async () => {
+    const repo = makeRepoWithSeed("mcp-git-branch-test-");
+    const run = captureTool(registerGitBranchTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      action: "delete",
+      name: "main",
+      force: true,
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "protected_branch", branch: "main" });
+  });
+
+  test("rejects unsafe from token on create", async () => {
+    const repo = makeRepoWithSeed("mcp-git-branch-test-");
+    const run = captureTool(registerGitBranchTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      action: "create",
+      name: "feature/from-bad",
+      from: "HEAD;rm",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "unsafe_ref_token", ref: "HEAD;rm" });
+  });
+
+  test("ref_not_found when create from is missing", async () => {
+    const repo = makeRepoWithSeed("mcp-git-branch-test-");
+    const run = captureTool(registerGitBranchTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      action: "create",
+      name: "feature/missing-from",
+      from: "no-such-ref",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "ref_not_found", ref: "no-such-ref" });
+  });
+
+  test("missing_new_name on rename without newName", async () => {
+    const repo = makeRepoWithSeed("mcp-git-branch-test-");
+    gitCmd(repo, "branch", "to-rename");
+    const run = captureTool(registerGitBranchTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      action: "rename",
+      name: "to-rename",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "missing_new_name" });
+  });
+
+  test("rejects unsafe newName on rename", async () => {
+    const repo = makeRepoWithSeed("mcp-git-branch-test-");
+    gitCmd(repo, "branch", "to-rename-2");
+    const run = captureTool(registerGitBranchTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      action: "rename",
+      name: "to-rename-2",
+      newName: "bad;name",
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "unsafe_ref_token", ref: "bad;name" });
+  });
 });

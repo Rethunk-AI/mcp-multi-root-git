@@ -198,3 +198,78 @@ describe("git_revert guardrails", () => {
     expect(parsed.error).toBe("unsafe_ref_token");
   });
 });
+
+describe("git_revert multi-source and mainline", () => {
+  test("reverts multiple sources in order and returns reverted[]", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "a.txt"), "a1\n");
+    gitCmd(dir, "add", "a.txt");
+    gitCmd(dir, "commit", "-m", "feat: a1");
+    const shaA = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    writeFileSync(join(dir, "b.txt"), "b1\n");
+    gitCmd(dir, "add", "b.txt");
+    gitCmd(dir, "commit", "-m", "feat: b1");
+    const shaB = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    const run = captureTool(registerGitRevertTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [shaB, shaA],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      reverted: Array<{ source: string; sha: string }>;
+    };
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.reverted).toHaveLength(2);
+    expect(parsed.reverted[0]?.source).toBe(shaB);
+    expect(parsed.reverted[1]?.source).toBe(shaA);
+    expect(parsed.reverted[0]?.sha).not.toBe(parsed.reverted[1]?.sha);
+    // Both added files should be gone after reverting the commits that introduced them.
+    expect(gitCmd(dir, "ls-files", "a.txt").trim()).toBe("");
+    expect(gitCmd(dir, "ls-files", "b.txt").trim()).toBe("");
+  });
+
+  test("mainline selects parent when reverting a merge commit", async () => {
+    const dir = makeRepo();
+    // Linear base → side branch → merge into main.
+    writeFileSync(join(dir, "base.txt"), "base\n");
+    gitCmd(dir, "add", "base.txt");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    gitCmd(dir, "checkout", "-b", "side");
+    writeFileSync(join(dir, "side.txt"), "side\n");
+    gitCmd(dir, "add", "side.txt");
+    gitCmd(dir, "commit", "-m", "feat: side");
+
+    gitCmd(dir, "checkout", "main");
+    writeFileSync(join(dir, "main-only.txt"), "main\n");
+    gitCmd(dir, "add", "main-only.txt");
+    gitCmd(dir, "commit", "-m", "feat: main-only");
+
+    gitCmd(dir, "merge", "--no-ff", "-m", "merge: side", "side");
+    const mergeSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    expect(gitCmd(dir, "cat-file", "-p", mergeSha)).toContain("parent");
+
+    const run = captureTool(registerGitRevertTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [mergeSha],
+      mainline: 1,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      reverted: Array<{ source: string; sha: string }>;
+    };
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.reverted).toHaveLength(1);
+    expect(parsed.reverted[0]?.source).toBe(mergeSha);
+    // Reverting merge with -m 1 undoes the side-branch contribution.
+    expect(gitCmd(dir, "ls-files", "side.txt").trim()).toBe("");
+  });
+});
