@@ -15,8 +15,8 @@ IDEs injecting this as context: do not re-link from rules.
 
 | File | Symbols |
 |------|---------|
-| [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `readMcpServerVersion()`; `registerRethunkGitTools` |
-| [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `spreadWhen`, `spreadDefined` |
+| [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `MCP_JSON_FORMAT_VERSION`; `registerRethunkGitTools` |
+| [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `readMcpServerVersion()`, `spreadWhen`, `spreadDefined` |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync` (optional `{ timeoutMs, signal }`), `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `GIT_SUBPROCESS_TIMEOUT_MS`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
 | [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots` (fan-out `root` resolution: string / string[] / `"*"`), `requireSingleRepo` (`workspaceRoot`), `resolveRootPathList`, `RootPickArgs` — shared tool preludes; session root resolution |
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
@@ -53,6 +53,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/git-revert-tool.ts`](src/server/git-revert-tool.ts) | `git_revert` — inverse-commit revert; mutating, non-history-rewriting |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
 | [`src/server/tool-parameter-schemas.ts`](src/server/tool-parameter-schemas.ts) | `buildToolParameterSchemaDocument`, `captureToolParameterSchemas`; backs `tool-parameters.schema.json` and published `schemas/*.json` snapshots |
+| [`src/server/coverage.ts`](src/server/coverage.ts) | `parseAllFilesLineCoverage` — parses bun test coverage output for `coverage:check` CI gate |
 | [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop` |
 
 ## Changing contracts
@@ -80,7 +81,7 @@ Rules for LLMs operating in or against this repository.
 
 **`batch_commit` atomic staging — single call per logical change** — Do NOT attempt incremental staging across multiple `batch_commit` calls. Each call is self-contained: it stages all files in all entries, commits them sequentially, and the moment the call completes, all commits have landed. Include all related files (for all related commit entries) in a single `batch_commit` call. A call cannot be resumed or extended by a later call — each is an independent transaction. If entry N fails, entries before N remain committed; entries after N are skipped (not rolled back).
 
-**Protected branches are enforced by the server** — do not attempt `git_worktree_add` or `git_branch` (create/delete/rename, in any role) with a branch name matching `main`, `master`, `dev`, `develop`, `stable`, `trunk`, `prod`, `production`, `release*`, or `hotfix*`. The server rejects such calls.
+**Protected branches are enforced by the server** — do not attempt `git_worktree_add` or `git_branch` (create/delete/rename, in any role) with a branch name in the protected set: exact matches `main`, `master`, `dev`, `develop`, `stable`, `trunk`, `prod`, `production`, `head`; or names matching `^(release|hotfix)[-/].+$` (e.g. `release/1.0`, `hotfix-123` — bare `release`/`hotfix` alone are not protected). The server rejects such calls.
 
 **Never force-push** — `git_push` has no force-push mode by design. `git_merge` with `strategy: "ff-only"` will fail cleanly rather than force.
 
