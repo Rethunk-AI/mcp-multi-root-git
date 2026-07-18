@@ -1,5 +1,7 @@
 # TODO / Feature requests — rethunk-git MCP
 
+Informal backlog (not `specs/active`). Promote items to a spec slug via [`@rethunk/citadel-sdd`](https://github.com/Rethunk-AI/citadel-sdd) when ready for formal lifecycle tracking — see [specs/README.md](specs/README.md).
+
 Feature asks driven by real pain points from agent sessions. Each item lists the motivating scenario and the expected tool shape.
 
 ## Medium value — deepen current tools
