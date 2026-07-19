@@ -504,13 +504,16 @@ describe("git_cherry_pick guardrails", () => {
 
   test("too many expanded commits returns cherry_pick_too_many_commits", async () => {
     const dir = makeRepo();
-    gitCmd(dir, "checkout", "-b", "feature/many");
+    // Build the over-cap chain with commit-tree plumbing: porcelain `git commit`
+    // in a tight loop intermittently failed with "could not parse HEAD" on CI
+    // runners (#16). commit-tree never reads HEAD or the index, and the cap
+    // check only counts commits, so same-tree (empty) commits suffice.
+    const tree = gitCmd(dir, "rev-parse", "HEAD^{tree}").trim();
+    let tip = gitCmd(dir, "rev-parse", "HEAD").trim();
     for (let i = 0; i < MAX_CHERRY_PICK_COMMITS + 1; i++) {
-      writeFileSync(join(dir, `f${i}.txt`), `${i}\n`);
-      gitCmd(dir, "add", `f${i}.txt`);
-      gitCmd(dir, "commit", "-m", `feat: ${i}`);
+      tip = gitCmd(dir, "commit-tree", tree, "-p", tip, "-m", `feat: ${i}`).trim();
     }
-    gitCmd(dir, "checkout", "main");
+    gitCmd(dir, "update-ref", "refs/heads/feature/many", tip);
 
     const run = captureTool(registerGitCherryPickTool);
     const text = await run({
