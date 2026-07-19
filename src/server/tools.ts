@@ -4,7 +4,10 @@ import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitBlameTool } from "./git-blame-tool.js";
 import { registerGitBranchListTool } from "./git-branch-list-tool.js";
 import { registerGitBranchTool } from "./git-branch-tool.js";
-import { registerGitCherryPickTool } from "./git-cherry-pick-tool.js";
+import {
+  registerGitCherryPickContinueTool,
+  registerGitCherryPickTool,
+} from "./git-cherry-pick-tool.js";
 import { registerGitConflictsTool } from "./git-conflicts-tool.js";
 import { registerGitDescribeTool } from "./git-describe-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
@@ -37,7 +40,7 @@ import { registerListPresetsTool } from "./list-presets-tool.js";
 import { registerPresetsResource } from "./presets-resource.js";
 
 /**
- * Ordered registry of all 30 MCP tools. Registration order is preserved for
+ * Ordered registry of all 31 MCP tools. Registration order is preserved for
  * both full and filtered (RETHUNK_GIT_TOOLS) subsets.
  */
 const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] = [
@@ -65,6 +68,7 @@ const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] =
   { name: "git_push", register: registerGitPushTool },
   { name: "git_merge", register: registerGitMergeTool },
   { name: "git_cherry_pick", register: registerGitCherryPickTool },
+  { name: "git_cherry_pick_continue", register: registerGitCherryPickContinueTool },
   { name: "git_reset_soft", register: registerGitResetSoftTool },
   { name: "git_revert", register: registerGitRevertTool },
   { name: "git_tag", register: registerGitTagTool },

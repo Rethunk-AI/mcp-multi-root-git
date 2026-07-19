@@ -44,6 +44,15 @@
       "default": false,
       "description": "false (default): delete branch when every commit is content-equivalent on destination (patch-id, normal cherry-pick outcome). true: require strict ref ancestry (`git branch -d` semantics — will refuse after cherry-pick due to SHA mismatch).",
       "type": "boolean"
+    },
+    "onConflict": {
+      "default": "abort",
+      "description": "`abort` (default): on conflict, run `cherry-pick --abort` and roll back the whole range (unchanged behavior). `pause`: on conflict, leave the conflict and native cherry-pick sequencer state in place — commits already applied stay applied — so it can be resolved and resumed via `git_cherry_pick_continue`.",
+      "type": "string",
+      "enum": [
+        "abort",
+        "pause"
+      ]
     }
   },
   "required": [
@@ -51,7 +60,8 @@
     "sources",
     "deleteMergedBranches",
     "deleteMergedWorktrees",
-    "strictMergedRefEquality"
+    "strictMergedRefEquality",
+    "onConflict"
   ],
   "additionalProperties": false
 }

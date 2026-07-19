@@ -115,6 +115,11 @@
       "description": "Parameter schema for the 'git_cherry_pick' MCP tool."
     },
     {
+      "name": "git_cherry_pick_continue",
+      "file": "git_cherry_pick_continue.json",
+      "description": "Parameter schema for the 'git_cherry_pick_continue' MCP tool."
+    },
+    {
       "name": "git_reset_soft",
       "file": "git_reset_soft.json",
       "description": "Parameter schema for the 'git_reset_soft' MCP tool."

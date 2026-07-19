@@ -12,7 +12,7 @@ import { registerRethunkGitTools, selectToolRegistrars } from "./tools.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** All 30 canonical tool names, in registration order, verified from source. */
+/** All 31 canonical tool names, in registration order, verified from source. */
 const ALL_TOOL_NAMES = [
   // Read-only
   "git_status",
@@ -38,6 +38,7 @@ const ALL_TOOL_NAMES = [
   "git_push",
   "git_merge",
   "git_cherry_pick",
+  "git_cherry_pick_continue",
   "git_reset_soft",
   "git_revert",
   "git_tag",
@@ -188,14 +189,14 @@ describe("selectToolRegistrars", () => {
 // ---------------------------------------------------------------------------
 
 describe("registerRethunkGitTools", () => {
-  test("unset RETHUNK_GIT_TOOLS → all 30 tools registered in canonical order", () => {
+  test("unset RETHUNK_GIT_TOOLS → all 31 tools registered in canonical order", () => {
     withEnv(undefined, () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);
     });
   });
 
-  test('RETHUNK_GIT_TOOLS="*" → all 30 tools registered', () => {
+  test('RETHUNK_GIT_TOOLS="*" → all 31 tools registered', () => {
     withEnv("*", () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);

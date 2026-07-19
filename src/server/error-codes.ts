@@ -120,7 +120,11 @@ export const ERROR_CODES = {
   // Cherry-pick
   CHECKOUT_FAILED: "checkout_failed",
   CHERRY_PICK_ABORT_FAILED: "cherry_pick_abort_failed",
+  CHERRY_PICK_CONTINUE_FAILED: "cherry_pick_continue_failed",
+  CHERRY_PICK_IN_PROGRESS: "cherry_pick_in_progress",
   CHERRY_PICK_TOO_MANY_COMMITS: "cherry_pick_too_many_commits",
+  CHERRY_PICK_UNRESOLVED_PATHS: "cherry_pick_unresolved_paths",
+  NO_CHERRY_PICK_IN_PROGRESS: "no_cherry_pick_in_progress",
   RANGE_RESOLUTION_FAILED: "range_resolution_failed",
 
   // Reset

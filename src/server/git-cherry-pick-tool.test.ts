@@ -4,12 +4,13 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   abortCherryPick,
   MAX_CHERRY_PICK_COMMITS,
+  registerGitCherryPickContinueTool,
   registerGitCherryPickTool,
 } from "./git-cherry-pick-tool.js";
 import {
@@ -268,6 +269,8 @@ describe("git_cherry_pick conflicts", () => {
     // Repo state is clean (cherry-pick aborted).
     const status = gitCmd(dir, "status", "--porcelain").trim();
     expect(status).toBe("");
+    // Default onConflict ("abort") never emits the pause marker (v5 contract: omit-when-false).
+    expect(text).not.toContain('"paused"');
   });
 });
 
@@ -558,5 +561,312 @@ describe("git_cherry_pick guardrails", () => {
     expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
     expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
     gitCmd(dir, "cherry-pick", "--abort");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onConflict: "pause" + git_cherry_pick_continue
+// ---------------------------------------------------------------------------
+
+describe("git_cherry_pick onConflict: pause", () => {
+  test("leaves the conflict and sequencer state in place instead of aborting", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/a");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    const conflictSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/a"],
+      onConflict: "pause",
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      applied: number;
+      conflict?: { stage: string; paused?: boolean; commit?: string; paths: string[] };
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.applied).toBe(0);
+    expect(parsed.conflict?.paused).toBe(true);
+    expect(parsed.conflict?.commit).toBe(conflictSha);
+    expect(parsed.conflict?.paths).toContain("shared.txt");
+
+    // Sequencer state left in place (not aborted): CHERRY_PICK_HEAD still set, tree still dirty.
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
+    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+
+    gitCmd(dir, "cherry-pick", "--abort");
+  });
+
+  test("markdown format reports the paused state and points at git_cherry_pick_continue", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/g");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({ workspaceRoot: dir, sources: ["feature/g"], onConflict: "pause" });
+
+    expect(text).toContain("paused on conflict");
+    expect(text).toContain("git_cherry_pick_continue");
+
+    gitCmd(dir, "cherry-pick", "--abort");
+  });
+
+  test("a second git_cherry_pick call while paused returns cherry_pick_in_progress", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/f");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const run = captureTool(registerGitCherryPickTool);
+    const pauseText = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/f"],
+      onConflict: "pause",
+    });
+    const paused = JSON.parse(pauseText) as { conflict?: { commit?: string } };
+
+    const secondText = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/f"],
+    });
+    const second = JSON.parse(secondText) as { error: string; commit?: string };
+    expect(second.error).toBe("cherry_pick_in_progress");
+    expect(second.commit).toBe(paused.conflict?.commit);
+
+    gitCmd(dir, "cherry-pick", "--abort");
+  });
+});
+
+describe("git_cherry_pick_continue", () => {
+  test("with nothing in progress returns no_cherry_pick_in_progress", async () => {
+    const dir = makeRepo();
+    const run = captureTool(registerGitCherryPickContinueTool);
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("no_cherry_pick_in_progress");
+  });
+
+  test("with unresolved paths returns an informative error", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/c");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const runPick = captureTool(registerGitCherryPickTool);
+    await runPick({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/c"],
+      onConflict: "pause",
+    });
+
+    const runContinue = captureTool(registerGitCherryPickContinueTool);
+    const text = await runContinue({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as { error: string; paths: string[] };
+    expect(parsed.error).toBe("cherry_pick_unresolved_paths");
+    expect(parsed.paths).toContain("shared.txt");
+
+    gitCmd(dir, "cherry-pick", "--abort");
+  });
+
+  test("continue after resolving the conflict completes remaining picks", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/b");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    writeFileSync(join(dir, "other.txt"), "new\n");
+    gitCmd(dir, "add", "other.txt");
+    gitCmd(dir, "commit", "-m", "feat: other");
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const runPick = captureTool(registerGitCherryPickTool);
+    const pauseText = await runPick({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/b"],
+      onConflict: "pause",
+    });
+    const paused = JSON.parse(pauseText) as { ok: boolean; conflict?: { paused?: boolean } };
+    expect(paused.ok).toBe(false);
+    expect(paused.conflict?.paused).toBe(true);
+
+    // Resolve the conflict and stage it.
+    writeFileSync(join(dir, "shared.txt"), "resolved\n");
+    gitCmd(dir, "add", "shared.txt");
+
+    const runContinue = captureTool(registerGitCherryPickContinueTool);
+    const continueText = await runContinue({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(continueText) as { ok: boolean; action: string; applied: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.action).toBe("continue");
+    // Resolved commit + the clean second pick both land via the resumed sequencer.
+    expect(parsed.applied).toBe(2);
+
+    // `git rev-parse --verify --quiet` exits non-zero (execFileSync throw) once the sequencer
+    // state is gone, so check for absence via the marker file instead.
+    expect(existsSync(join(dir, ".git", "CHERRY_PICK_HEAD"))).toBe(false);
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+    expect(readFileSync(join(dir, "shared.txt"), "utf8")).toBe("resolved\n");
+    expect(existsSync(join(dir, "other.txt"))).toBe(true);
+  });
+
+  test("a later commit conflicting mid-continue is reported resumably", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    writeFileSync(join(dir, "other.txt"), "common2\n");
+    gitCmd(dir, "add", "other.txt");
+    gitCmd(dir, "commit", "-m", "chore: base2");
+
+    gitCmd(dir, "checkout", "-b", "feature/d");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    const shaAlpha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    writeFileSync(join(dir, "other.txt"), "alpha2\n");
+    gitCmd(dir, "add", "other.txt");
+    gitCmd(dir, "commit", "-m", "feat: other-alpha");
+    const shaOtherAlpha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+    writeFileSync(join(dir, "other.txt"), "beta2\n");
+    gitCmd(dir, "add", "other.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta2");
+
+    const runPick = captureTool(registerGitCherryPickTool);
+    const pauseText = await runPick({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/d"],
+      onConflict: "pause",
+    });
+    const paused = JSON.parse(pauseText) as { conflict?: { commit?: string } };
+    expect(paused.conflict?.commit).toBe(shaAlpha);
+
+    // Resolve the first conflict.
+    writeFileSync(join(dir, "shared.txt"), "resolved1\n");
+    gitCmd(dir, "add", "shared.txt");
+
+    const runContinue = captureTool(registerGitCherryPickContinueTool);
+    const secondText = await runContinue({ workspaceRoot: dir, format: "json" });
+    const second = JSON.parse(secondText) as {
+      ok: boolean;
+      applied: number;
+      conflict?: { paused?: boolean; commit?: string; paths: string[] };
+    };
+    // The sequencer committed feat: alpha, then hit a second conflict on feat: other-alpha.
+    expect(second.ok).toBe(false);
+    expect(second.applied).toBe(1);
+    expect(second.conflict?.paused).toBe(true);
+    expect(second.conflict?.commit).toBe(shaOtherAlpha);
+    expect(second.conflict?.paths).toContain("other.txt");
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
+
+    // Resolve the second conflict and finish the loop.
+    writeFileSync(join(dir, "other.txt"), "resolved2\n");
+    gitCmd(dir, "add", "other.txt");
+
+    const finalText = await runContinue({ workspaceRoot: dir, format: "json" });
+    const final = JSON.parse(finalText) as { ok: boolean; applied: number };
+    expect(final.ok).toBe(true);
+    expect(final.applied).toBe(1);
+    expect(existsSync(join(dir, ".git", "CHERRY_PICK_HEAD"))).toBe(false);
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
+  });
+
+  test("action: abort restores HEAD to the pre-cherry-pick commit", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.txt"), "common\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: shared");
+
+    gitCmd(dir, "checkout", "-b", "feature/e");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    gitCmd(dir, "checkout", "main");
+
+    writeFileSync(join(dir, "shared.txt"), "beta\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+    const preHead = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    const runPick = captureTool(registerGitCherryPickTool);
+    await runPick({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/e"],
+      onConflict: "pause",
+    });
+
+    const runContinue = captureTool(registerGitCherryPickContinueTool);
+    const text = await runContinue({ workspaceRoot: dir, format: "json", action: "abort" });
+    const parsed = JSON.parse(text) as { ok: boolean; action: string; headSha?: string };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.action).toBe("abort");
+    expect(parsed.headSha).toBe(preHead);
+
+    expect(gitCmd(dir, "rev-parse", "HEAD").trim()).toBe(preHead);
+    expect(existsSync(join(dir, ".git", "CHERRY_PICK_HEAD"))).toBe(false);
+    expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
   });
 });

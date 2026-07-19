@@ -43,6 +43,7 @@ export const MUTATING_TOOLS = [
   "git_push",
   "git_merge",
   "git_cherry_pick",
+  "git_cherry_pick_continue",
   "git_reset_soft",
   "git_revert",
   "git_tag",
