@@ -55,7 +55,8 @@ When reporting a vulnerability, please include:
 | `batch_commit` | Stages listed paths / hunks and creates commits; optional push-after |
 | `git_push` | Pushes current branch; **never** force-pushes |
 | `git_merge` | Merges sources into a destination; optional cleanup skips protected names |
-| `git_cherry_pick` | Applies commits onto a destination; same protected-name cleanup rules |
+| `git_cherry_pick` | Applies commits onto a destination; same protected-name cleanup rules; `onConflict: "pause"` leaves conflict + sequencer state in place instead of aborting; refuses a second call while one is already in progress |
+| `git_cherry_pick_continue` | Resumes (`--continue`) or rolls back (`--abort`) a cherry-pick left in progress; stateless, reads `CHERRY_PICK_HEAD` live |
 | `git_reset_soft` | Moves branch tip (`--soft`); history rewrite of the tip (objects kept in index) |
 | `git_revert` | New inverse commit(s); **does not** rewrite history |
 | `git_tag` | Create / delete tags |
@@ -131,7 +132,7 @@ Read-only tools can surface secrets already present in tracked history or the wo
 
 ### Deployment hardening: `RETHUNK_GIT_TOOLS`
 
-Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 30 tools register. Details: [docs/install.md](docs/install.md).
+Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 31 tools register. Details: [docs/install.md](docs/install.md).
 
 ## Security Practices (operator)
 

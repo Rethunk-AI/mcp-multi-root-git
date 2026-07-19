@@ -4,6 +4,12 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Added
+
+- **`git_cherry_pick` `onConflict`** — `"abort"` (default, unchanged) or `"pause"`: on conflict, leave the conflict and native cherry-pick sequencer state in place instead of rolling back the whole range (`conflict.paused: true`, applied-so-far count derived from the HEAD advance). Closes the abort-only gap that previously forced a shell fallback to resolve conflicts on a multi-commit cherry-pick range.
+- **`git_cherry_pick` guard** — a second `git_cherry_pick` call while one is already in progress (e.g. left paused) now returns a structured `cherry_pick_in_progress` error (with the conflicting `commit`) instead of the generic `working_tree_dirty`.
+- **`git_cherry_pick_continue`** — new tool to resume (`action: "continue"`, default) or roll back (`action: "abort"`) a cherry-pick left in progress. Stateless: probes `CHERRY_PICK_HEAD` live off `.git` rather than depending on the pausing call. `continue` requires no remaining unmerged paths (`cherry_pick_unresolved_paths` otherwise), then runs `git -c core.editor=true cherry-pick --continue`; if a later pick in the same range then conflicts, the response reports it the same shape as a paused `git_cherry_pick` call so the tool can be called again to walk the rest of the range. `abort` reuses `git_cherry_pick`'s hardened abort helper/reporting (`cherry_pick_abort_failed` on abort failure). Errors `no_cherry_pick_in_progress` when nothing is in progress.
+
 ## [3.3.0] — 2026-07-18
 
 Feature and hardening release: deepen fan-out reads (pickaxe / follow / compareRefs), tighten path and ref safety, isolate `batch_commit` staging, and align CI/release with the local `ci` script. Additive JSON / behavior only — `MCP_JSON_FORMAT_VERSION` stays at `"5"`.

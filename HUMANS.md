@@ -154,6 +154,7 @@ Call tools by their registered id (prefix depends on client config name):
 | Create, delete, or rename branches | `git_branch` |
 | Merge branches | `git_merge` |
 | Cherry-pick commits | `git_cherry_pick` |
+| Resume/abort a paused cherry-pick | `git_cherry_pick_continue` |
 | Revert commits | `git_revert` |
 | Soft-reset HEAD | `git_reset_soft` |
 | Manage worktrees | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` |

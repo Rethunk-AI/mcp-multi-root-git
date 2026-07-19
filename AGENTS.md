@@ -48,7 +48,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/batch-commit-tool.ts`](src/server/batch-commit-tool.ts) | `batch_commit` — sequential multi-commit; mutating; exports `PushReport`, `runPushAfter` |
 | [`src/server/git-push-tool.ts`](src/server/git-push-tool.ts) | `git_push` — standalone push with optional upstream tracking |
 | [`src/server/git-merge-tool.ts`](src/server/git-merge-tool.ts) | `git_merge` — mutating |
-| [`src/server/git-cherry-pick-tool.ts`](src/server/git-cherry-pick-tool.ts) | `git_cherry_pick` — mutating |
+| [`src/server/git-cherry-pick-tool.ts`](src/server/git-cherry-pick-tool.ts) | `git_cherry_pick` (`onConflict?: "abort"\|"pause"`), `git_cherry_pick_continue` (`action?: "continue"\|"abort"`, resumes/aborts a paused cherry-pick) — both mutating |
 | [`src/server/git-reset-soft-tool.ts`](src/server/git-reset-soft-tool.ts) | `git_reset_soft` — soft-reset; mutating |
 | [`src/server/git-revert-tool.ts`](src/server/git-revert-tool.ts) | `git_revert` — inverse-commit revert; mutating, non-history-rewriting |
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |

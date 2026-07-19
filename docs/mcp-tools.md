@@ -32,7 +32,8 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. **`auto`/`rebase` rewrite the source branch tip in place** when rebasing (new SHAs on the source ref), then fast-forward the destination — not destination-only. Refuses on dirty tree; stops on first conflict and attempts `--abort` (abort failure surfaces `rebase_abort_failed` / `merge_abort_failed`). Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
-| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Hard-caps expanded/deduped picks at **100** commits per call (`cherry_pick_too_many_commits`). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; stops on first conflict and attempts `--abort` (abort failure → `cherry_pick_abort_failed`). Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?` + `workspaceRoot` + `format`. **Mutating.** |
+| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Hard-caps expanded/deduped picks at **100** commits per call (`cherry_pick_too_many_commits`). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; refuses when a cherry-pick is already in progress (`cherry_pick_in_progress`). Stops on first conflict: `onConflict: "abort"` (default) attempts `--abort` (abort failure → `cherry_pick_abort_failed`); `onConflict: "pause"` leaves the conflict and native sequencer state in place (`conflict.paused: true`) for `git_cherry_pick_continue`. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped, and only run on full success); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?`, `onConflict?` + `workspaceRoot` + `format`. **Mutating.** |
+| `git_cherry_pick_continue` | `rethunk-git_git_cherry_pick_continue` | Resume or abort a cherry-pick left in progress (by `git_cherry_pick`'s `onConflict: "pause"` or any other means — reads `CHERRY_PICK_HEAD` live off `.git`, stateless). `action: "continue"` (default) requires no remaining unmerged paths (`cherry_pick_unresolved_paths` otherwise), then runs `git -c core.editor=true cherry-pick --continue`; if a later pick then conflicts, reports it the same shape as a paused `git_cherry_pick` call (`conflict.paused: true`) so this tool can be called again. `action: "abort"` rolls back via `git cherry-pick --abort` (same abort helper/reporting as `git_cherry_pick`). Errors `no_cherry_pick_in_progress` when nothing is in progress. Args: `action?` + `workspaceRoot` + `format`. **Mutating.** |
 | `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_revert` | `rethunk-git_git_revert` | Create new commit(s) that undo the changes introduced by one or more source commits (`git revert`), applied in listed order. Never rewrites history — safe on shared/pushed branches, unlike `git_reset_soft`. Refuses on dirty tree; on conflict aborts and leaves the tree clean. Args: `sources`, `noCommit?`, `mainline?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_tag` | `rethunk-git_git_tag` | Create/delete annotated or lightweight tags for one repo. Args: `tag`, `message?`, `ref?`, `delete?`, plus `workspaceRoot` + `format`. **Mutating.** |
@@ -987,6 +988,7 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 | `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally. Deletion uses **patch-id equivalence** by default — correct for cherry-pick workflows where SHA differs but diff is identical. Protected names always skipped; never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped. |
 | `strictMergedRefEquality` | boolean | Default `false`. When `true`, branch deletion uses strict SHA-reachability (`git branch -d` ancestry semantics) instead of patch-id equivalence. Use when you need git's exact ancestry guarantee rather than content equivalence. |
+| `onConflict` | `"abort"` \| `"pause"` | Default `"abort"`: on conflict, run `cherry-pick --abort` and roll back the whole range (unchanged behavior). `"pause"`: on conflict, leave the conflict and native cherry-pick sequencer state in place — commits already applied stay applied — so it can be resolved and resumed via `git_cherry_pick_continue` (below). |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
 ### `git_cherry_pick` — JSON shape (`format: "json"`)
@@ -1027,7 +1029,26 @@ On conflict, the response has `ok: false` and a top-level `conflict` object:
 }
 ```
 
-The tool attempts `git cherry-pick --abort`. On abort success the tree is clean. On abort failure: top-level `error: cherry_pick_abort_failed`, and `conflict.abortFailed: true` (+ optional `abortDetail`); `CHERRY_PICK_HEAD` may remain.
+With the default `onConflict: "abort"`, the tool attempts `git cherry-pick --abort`. On abort success the tree is clean. On abort failure: top-level `error: cherry_pick_abort_failed`, and `conflict.abortFailed: true` (+ optional `abortDetail`); `CHERRY_PICK_HEAD` may remain.
+
+With `onConflict: "pause"`, the tool does **not** abort — `conflict.paused: true` is added and `CHERRY_PICK_HEAD`/the sequencer are left in place. `applied` reflects commits from the same range that landed before the conflicting one (cheaply derived via `rev-list --count`, not rolled back). Resolve the conflict and call `git_cherry_pick_continue` to resume, or abort it explicitly with the same tool (`action: "abort"`):
+
+```json
+{
+  "ok": false,
+  "onto": "main",
+  "picked": 3,
+  "applied": 1,
+  "results": [ ... ],
+  "conflict": {
+    "stage": "cherry-pick",
+    "paused": true,
+    "commit": "abcdef1",
+    "paths": ["src/foo.ts"],
+    "detail": "…git stderr…"
+  }
+}
+```
 
 ### `git_cherry_pick` — error codes
 
@@ -1036,12 +1057,67 @@ The tool attempts `git cherry-pick --abort`. On abort success the tree is clean.
 | `unsafe_ref_token` | A source or `onto` contains characters outside the argv-safe subset. |
 | `onto_detached_head` | HEAD is detached and no `onto` was given. |
 | `working_tree_dirty` | Uncommitted changes present. Commit, stash, or discard before cherry-picking. |
+| `cherry_pick_in_progress` | A cherry-pick is already in progress (`CHERRY_PICK_HEAD` set, e.g. left paused by a prior call). Response includes `commit`. Resolve via `git_cherry_pick_continue` first. |
 | `checkout_failed` | Could not switch to `onto`. |
 | `destination_not_found` | `onto` does not resolve to a commit. |
 | `source_not_found` | A source spec resolves to neither a branch, a range, nor a commit. |
 | `range_resolution_failed` | `git rev-list` failed to expand a range spec. |
 | `cherry_pick_too_many_commits` | Expanded/deduped pick list exceeds the hard cap of 100. Response includes `picked` + `max`. |
-| `cherry_pick_abort_failed` | `git cherry-pick --abort` failed after a conflict; tree may still be mid-cherry-pick. |
+| `cherry_pick_abort_failed` | `git cherry-pick --abort` failed after a conflict (`onConflict: "abort"`, the default); tree may still be mid-cherry-pick. |
+| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
+
+---
+
+### `git_cherry_pick_continue` — parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `action` | `"continue"` \| `"abort"` | Default `"continue"`. `"continue"`: precheck no unmerged paths remain, then resume the native sequencer (`git -c core.editor=true cherry-pick --continue`). `"abort"`: roll back to the pre-cherry-pick HEAD (`git cherry-pick --abort`, same helper `git_cherry_pick` uses). |
+| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
+
+This tool is **stateless** — it probes `CHERRY_PICK_HEAD` live off `.git` on every call rather than depending on the pausing `git_cherry_pick` call, so it works for a cherry-pick left in progress by any means.
+
+### `git_cherry_pick_continue` — JSON shape (`format: "json"`)
+
+Success:
+
+```json
+{ "ok": true, "action": "continue", "applied": 2, "headSha": "a1b2c3d…" }
+```
+
+`applied` counts commits added to HEAD since the call started (the resolved pick plus any further picks the sequencer completed on its own).
+
+If resuming lands on another conflict later in the same range, the response mirrors a paused `git_cherry_pick` call so the loop is resumable — call this tool again after resolving:
+
+```json
+{
+  "ok": false,
+  "action": "continue",
+  "applied": 1,
+  "conflict": {
+    "stage": "cherry-pick",
+    "paused": true,
+    "commit": "def4567",
+    "paths": ["src/bar.ts"],
+    "detail": "…git stderr…"
+  }
+}
+```
+
+`action: "abort"` success:
+
+```json
+{ "ok": true, "action": "abort", "headSha": "a1b2c3d…" }
+```
+
+### `git_cherry_pick_continue` — error codes
+
+| Code | Meaning |
+|------|---------|
+| `no_cherry_pick_in_progress` | `CHERRY_PICK_HEAD` is not set — nothing to continue or abort. |
+| `cherry_pick_unresolved_paths` | `action: "continue"` called while conflicted paths are still unmerged. Response includes `paths`. Stage resolutions first. |
+| `cherry_pick_continue_failed` | `git cherry-pick --continue` failed for a reason other than a new conflict (e.g. the resolved pick would produce an empty commit). Response includes `detail`. |
+| `cherry_pick_abort_failed` | `git cherry-pick --abort` failed (`action: "abort"`); tree may still be mid-cherry-pick. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
@@ -1372,7 +1448,7 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 |----------|---------|-------|
 | `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`, multi-root `git_grep`). |
 | `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in ms; on expiry the child is killed (SIGTERM) and the call resolves as failed. Set `0` (or negative) to disable (unbounded). |
-| `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 30 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
+| `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 31 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
 
 ## Resource
 
