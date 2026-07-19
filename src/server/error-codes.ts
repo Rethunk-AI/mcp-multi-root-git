@@ -52,9 +52,6 @@ export const ERROR_CODES = {
   PROTECTED_BRANCH: "protected_branch",
   WORKING_TREE_DIRTY: "working_tree_dirty",
 
-  // Branch list
-  BRANCH_LIST_FAILED: "branch_list_failed",
-
   // Branch create/delete/rename
   BRANCH_CREATE_FAILED: "branch_create_failed",
   BRANCH_DELETE_FAILED: "branch_delete_failed",
@@ -71,35 +68,18 @@ export const ERROR_CODES = {
   // Log
   GIT_LOG_FAILED: "git_log_failed",
 
-  // Grep
+  // Grep (pickaxe)
   GIT_GREP_FAILED: "git_grep_failed",
-  /** `git_grep` requires `pattern` and/or `pickaxe` — neither was supplied. */
-  PATTERN_OR_PICKAXE_REQUIRED: "pattern_or_pickaxe_required",
 
   // Show
   GIT_SHOW_FAILED: "git_show_failed",
 
-  // Remote
-  REMOTE_LIST_FAILED: "remote_list_failed",
-
-  // Describe
-  DESCRIBE_FAILED: "describe_failed",
-  NO_TAG_FOUND: "no_tag_found",
-  UNSAFE_MATCH_PATTERN: "unsafe_match_pattern",
-
   // Blame
   GIT_BLAME_FAILED: "git_blame_failed",
 
-  // Reflog
-  REFLOG_FAILED: "reflog_failed",
-
   // Stash
-  STASH_LIST_FAILED: "stash_list_failed",
   STASH_APPLY_FAILED: "stash_apply_failed",
   STASH_PUSH_FAILED: "stash_push_failed",
-
-  // Fetch
-  // (uses UNSAFE_REMOTE_TOKEN and UNSAFE_REF_TOKEN)
 
   // Push
   PUSH_DETACHED_HEAD: "push_detached_head",

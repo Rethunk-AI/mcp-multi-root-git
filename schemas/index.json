@@ -55,44 +55,9 @@
       "description": "Parameter schema for the 'git_conflicts' MCP tool."
     },
     {
-      "name": "git_remote",
-      "file": "git_remote.json",
-      "description": "Parameter schema for the 'git_remote' MCP tool."
-    },
-    {
-      "name": "git_describe",
-      "file": "git_describe.json",
-      "description": "Parameter schema for the 'git_describe' MCP tool."
-    },
-    {
-      "name": "git_worktree_list",
-      "file": "git_worktree_list.json",
-      "description": "Parameter schema for the 'git_worktree_list' MCP tool."
-    },
-    {
-      "name": "git_stash_list",
-      "file": "git_stash_list.json",
-      "description": "Parameter schema for the 'git_stash_list' MCP tool."
-    },
-    {
       "name": "git_blame",
       "file": "git_blame.json",
       "description": "Parameter schema for the 'git_blame' MCP tool."
-    },
-    {
-      "name": "git_branch_list",
-      "file": "git_branch_list.json",
-      "description": "Parameter schema for the 'git_branch_list' MCP tool."
-    },
-    {
-      "name": "git_reflog",
-      "file": "git_reflog.json",
-      "description": "Parameter schema for the 'git_reflog' MCP tool."
-    },
-    {
-      "name": "git_fetch",
-      "file": "git_fetch.json",
-      "description": "Parameter schema for the 'git_fetch' MCP tool."
     },
     {
       "name": "batch_commit",

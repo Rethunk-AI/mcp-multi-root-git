@@ -22,12 +22,6 @@ const DEFAULT_MAX_MATCHES = 200;
 // Types
 // ---------------------------------------------------------------------------
 
-interface GrepMatch {
-  file: string;
-  line: number;
-  text: string;
-}
-
 interface PickaxeCommit {
   sha: string;
   subject: string;
@@ -36,8 +30,6 @@ interface PickaxeCommit {
 interface GrepRootJson {
   root: string;
   repo: string;
-  matches?: GrepMatch[];
-  files?: string[];
   commits?: PickaxeCommit[];
   truncated?: boolean;
   error?: string;
@@ -47,87 +39,6 @@ interface GrepRootJson {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * `git grep` prefixes each output line with `<ref>:` when a tree-ish is given
- * (e.g. `main:src/foo.ts:3:some text`). `isSafeGitAncestorRef` forbids `:` in
- * ref tokens, so a plain prefix strip is safe and unambiguous.
- */
-function stripRefPrefix(line: string, ref: string | undefined): string {
-  if (!ref) return line;
-  const prefix = `${ref}:`;
-  return line.startsWith(prefix) ? line.slice(prefix.length) : line;
-}
-
-/**
- * Parse a `git grep -n` content line: `<file>:<line>:<text>`. File paths may
- * themselves contain digits or colons, so match non-greedily up to the first
- * `:<digits>:` boundary — the earliest such split is always the line-number field.
- */
-function parseMatchLine(line: string): GrepMatch | undefined {
-  const m = /^(.*?):(\d+):(.*)$/.exec(line);
-  if (!m) return undefined;
-  const file = m[1] ?? "";
-  if (!file) return undefined;
-  return { file, line: Number.parseInt(m[2] ?? "0", 10), text: m[3] ?? "" };
-}
-
-interface RunGrepOpts {
-  top: string;
-  pattern: string;
-  ref?: string;
-  paths: string[];
-  ignoreCase: boolean;
-  filesOnly: boolean;
-  maxMatches: number;
-}
-
-type RunGrepResult =
-  | { matches: GrepMatch[]; truncated: boolean }
-  | { files: string[]; truncated: boolean }
-  | { error: string; detail: string };
-
-/** Run `git grep` for a single repo root and return structured, truncation-capped results. */
-async function runGitGrep(opts: RunGrepOpts): Promise<RunGrepResult> {
-  const { top, pattern, ref, paths, ignoreCase, filesOnly, maxMatches } = opts;
-
-  const args: string[] = ["grep", "-n"];
-  if (ignoreCase) args.push("-i");
-  if (filesOnly) args.push("-l");
-  args.push("-e", pattern);
-  if (ref) args.push(ref);
-  if (paths.length > 0) args.push("--", ...paths);
-
-  const r = await spawnGitAsync(top, args);
-
-  if (!r.ok) {
-    const stdoutTrimmed = r.stdout.trim();
-    const stderrTrimmed = r.stderr.trim();
-    // `git grep` exits 1 (not 0) when the pattern simply isn't found — that's
-    // success with an empty result set, not a failure. A real failure (bad
-    // pattern, unknown ref, etc.) always writes to stderr.
-    if (stdoutTrimmed === "" && stderrTrimmed === "") {
-      return filesOnly ? { files: [], truncated: false } : { matches: [], truncated: false };
-    }
-    return { error: ERROR_CODES.GIT_GREP_FAILED, detail: stderrTrimmed || stdoutTrimmed };
-  }
-
-  const rawLines = r.stdout.split("\n").filter((l) => l.length > 0);
-
-  if (filesOnly) {
-    const files = rawLines.map((l) => stripRefPrefix(l, ref)).filter((f) => f.length > 0);
-    const truncated = files.length > maxMatches;
-    return { files: truncated ? files.slice(0, maxMatches) : files, truncated };
-  }
-
-  const matches: GrepMatch[] = [];
-  for (const line of rawLines) {
-    const parsed = parseMatchLine(stripRefPrefix(line, ref));
-    if (parsed) matches.push(parsed);
-  }
-  const truncated = matches.length > maxMatches;
-  return { matches: truncated ? matches.slice(0, maxMatches) : matches, truncated };
-}
 
 interface RunPickaxeOpts {
   top: string;
@@ -197,26 +108,12 @@ function renderGrepMarkdown(group: GrepRootJson): string {
     return lines.join("\n");
   }
 
-  if (group.commits) {
-    if (group.commits.length === 0) {
-      lines.push("_(no pickaxe hits)_");
-    } else {
-      for (const c of group.commits) {
-        lines.push(`- \`${c.sha.slice(0, 7)}\`  ${c.subject}`);
-      }
-    }
-  } else if (group.files) {
-    if (group.files.length === 0) {
-      lines.push("_(no matching files)_");
-    } else {
-      for (const f of group.files) lines.push(`- ${f}`);
-    }
+  const commits = group.commits ?? [];
+  if (commits.length === 0) {
+    lines.push("_(no pickaxe hits)_");
   } else {
-    const matches = group.matches ?? [];
-    if (matches.length === 0) {
-      lines.push("_(no matches)_");
-    } else {
-      for (const m of matches) lines.push(`- \`${m.file}:${m.line}\`  ${m.text}`);
+    for (const c of commits) {
+      lines.push(`- \`${c.sha.slice(0, 7)}\`  ${c.subject}`);
     }
   }
 
@@ -235,23 +132,15 @@ export function registerGitGrepTool(server: FastMCP): void {
   server.addTool({
     name: "git_grep",
     description:
-      "Read-only content search (`git grep -n`) across one or more roots, or pickaxe history search " +
-      'via `pickaxe: { mode: "S"|"G", term }`. `pattern` is always passed via `-e` in content mode ' +
-      "(leading-dash patterns are safe; basic git-grep regex, not literal text). " +
-      "Set `ref` to search the tree at that commit/branch (content) or limit history tip (pickaxe). " +
-      "`filesOnly: true` lists matching file paths instead of match lines (content mode only).",
+      "Pickaxe history search across one or more roots: which commits added or removed a term " +
+      '(`git log -S`) or changed lines matching a regex (`git log -G`), via `pickaxe: { mode: "S"|"G", term }`. ' +
+      "Returns `commits[]` (sha + subject) per root. Set `ref` to limit history to that tip. " +
+      "For working-tree content search use the client's native grep/rg tooling instead — " +
+      "content mode was removed in v6.",
     annotations: {
       readOnlyHint: true,
     },
     parameters: RootPickSchema.extend({
-      pattern: z
-        .string()
-        .min(1)
-        .max(500)
-        .optional()
-        .describe(
-          "Content-search pattern (basic regex), always passed as `-e <pattern>`. Required unless `pickaxe` is set.",
-        ),
       pickaxe: z
         .object({
           mode: z
@@ -259,28 +148,20 @@ export function registerGitGrepTool(server: FastMCP): void {
             .describe("`S` = pickaxe string (`git log -S`); `G` = pickaxe regex (`git log -G`)."),
           term: z.string().min(1).max(500).describe("Search term / regex for pickaxe history."),
         })
-        .optional()
-        .describe(
-          "When set, run pickaxe history search instead of content grep. Returns `commits[]` (sha + subject) per root.",
-        ),
+        .describe("Pickaxe history search. Returns `commits[]` (sha + subject) per root."),
       ref: z
         .string()
         .optional()
-        .describe(
-          "Commit/branch/tag: content mode searches that tree; pickaxe mode limits history to that tip. Must be a safe ref token.",
-        ),
+        .describe("Commit/branch/tag to use as the history tip. Must be a safe ref token."),
       paths: z
         .array(z.string())
         .optional()
-        .describe("Limit search to these paths (must resolve within the repo root)."),
-      ignoreCase: z.boolean().optional().default(false).describe("Case-insensitive match (`-i`)."),
-      filesOnly: z
+        .describe("Limit history to these paths (must resolve within the repo root)."),
+      ignoreCase: z
         .boolean()
         .optional()
         .default(false)
-        .describe(
-          "List matching file paths only (`-l`), omitting line/text detail. Content mode only.",
-        ),
+        .describe("Case-insensitive match (`-i`; affects `G` mode regexes)."),
       maxMatches: z
         .number()
         .int()
@@ -289,19 +170,14 @@ export function registerGitGrepTool(server: FastMCP): void {
         .optional()
         .default(DEFAULT_MAX_MATCHES)
         .describe(
-          `Max matches/files/commits per root (hard cap ${MAX_MATCHES_HARD_CAP}, default ${DEFAULT_MAX_MATCHES}).`,
+          `Max commits per root (hard cap ${MAX_MATCHES_HARD_CAP}, default ${DEFAULT_MAX_MATCHES}).`,
         ),
     }),
     execute: async (args) => {
       const pre = requireGitAndRoots(server, args, undefined);
       if (!pre.ok) return jsonRespond(pre.error);
 
-      const pickaxe = args.pickaxe as { mode: "S" | "G"; term: string } | undefined;
-      const pattern = (args.pattern as string | undefined)?.trim();
-
-      if (!pickaxe && !pattern) {
-        return jsonRespond({ error: ERROR_CODES.PATTERN_OR_PICKAXE_REQUIRED });
-      }
+      const pickaxe = args.pickaxe as { mode: "S" | "G"; term: string };
 
       if (args.ref !== undefined && !isSafeGitAncestorRef(args.ref as string)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
@@ -311,7 +187,6 @@ export function registerGitGrepTool(server: FastMCP): void {
       const rawPaths = Array.isArray(args.paths) ? (args.paths as string[]) : [];
 
       const ignoreCase = (args.ignoreCase as boolean | undefined) ?? false;
-      const filesOnly = (args.filesOnly as boolean | undefined) ?? false;
       const maxMatches = Math.min(
         (args.maxMatches as number | undefined) ?? DEFAULT_MAX_MATCHES,
         MAX_MATCHES_HARD_CAP,
@@ -346,47 +221,22 @@ export function registerGitGrepTool(server: FastMCP): void {
             }
           }
 
-          if (pickaxe) {
-            const result = await runPickaxe({
-              top,
-              mode: pickaxe.mode,
-              term: pickaxe.term,
-              ref,
-              paths: rawPaths,
-              ignoreCase,
-              maxMatches,
-            });
-            if ("error" in result) {
-              return { root: top, repo: basename(top), error: result.error, detail: result.detail };
-            }
-            return {
-              root: top,
-              repo: basename(top),
-              commits: result.commits,
-              ...spreadWhen(result.truncated, { truncated: true }),
-            };
-          }
-
-          const result = await runGitGrep({
+          const result = await runPickaxe({
             top,
-            pattern: pattern as string,
+            mode: pickaxe.mode,
+            term: pickaxe.term,
             ref,
             paths: rawPaths,
             ignoreCase,
-            filesOnly,
             maxMatches,
           });
-
           if ("error" in result) {
             return { root: top, repo: basename(top), error: result.error, detail: result.detail };
           }
-
           return {
             root: top,
             repo: basename(top),
-            ...("files" in result
-              ? { files: result.files }
-              : { matches: (result as { matches: GrepMatch[] }).matches }),
+            commits: result.commits,
             ...spreadWhen(result.truncated, { truncated: true }),
           };
         },

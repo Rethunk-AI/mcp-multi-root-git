@@ -9,9 +9,9 @@ import { join } from "node:path";
 import { jsonRespond, readMcpServerVersion, spreadDefined, spreadWhen } from "./json.js";
 
 describe("MCP_JSON_FORMAT_VERSION", () => {
-  test('server.ts exports "5" and embeds it in FastMCP instructions', () => {
+  test('server.ts exports "6" and embeds it in FastMCP instructions', () => {
     const src = readFileSync(join(import.meta.dir, "..", "server.ts"), "utf8");
-    expect(src).toMatch(/export const MCP_JSON_FORMAT_VERSION = "5"/);
+    expect(src).toMatch(/export const MCP_JSON_FORMAT_VERSION = "6"/);
     expect(src).toMatch(/JSON payload contract: format version \$\{MCP_JSON_FORMAT_VERSION\}/);
   });
 });
