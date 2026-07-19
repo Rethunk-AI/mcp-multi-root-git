@@ -94,8 +94,25 @@ Match the CI steps locally before opening a PR.
 - [ ] `README.md` updated if the public tool surface is mentioned there.
 - [ ] `CHANGELOG.md` entry added under `[Unreleased]`.
 
+## Tool inclusion criteria
+
+Every tool costs context in each connected client session (schema + description), so a tool must earn its slot. A tool belongs in this server only if it delivers at least one of:
+
+1. **Enforced policy on writes** — the tool makes a class of mistakes structurally impossible rather than relying on model discipline: protected-branch refusal, no force-push, dirty-tree preconditions, conflict abort/pause handling, index isolation in `batch_commit`. This value *rises* with agent autonomy; it is the primary reason the mutating surface exists.
+2. **Fan-out call compression** — one call replaces N per-repo invocations across workspace roots (`root: "*"` / arrays / presets). Multi-root status, inventory, parity, log, and pickaxe search qualify.
+3. **Large-output compression** — the raw git output is big enough that structured truncation/grouping/exclusion saves real tokens per call: `git_diff_summary` (lockfile/vendor exclusion, per-file caps), `git_blame` (run-length grouping), `git_log` `oneline`.
+
+A tool does **not** belong here when:
+
+- It wraps a **tiny-output command** (`git remote -v`, `git describe`, `git stash list`, `git reflog`, branch/worktree listing) — the raw Bash output is already ~50–200 tokens; the wrapper saves nothing per call while costing schema space in every session. Structured errors alone do not justify a slot.
+- It **duplicates harness-native tooling** the client already ships (working-tree content search vs. grep/rg).
+- Its only value is routing around **sandbox or permission-prompt friction** — modern harnesses run plain git read commands (and network ops) frictionlessly, so that value pillar no longer holds.
+
+v6 applied these criteria retroactively: `git_fetch`, `git_remote`, `git_describe`, `git_stash_list`, `git_reflog`, `git_branch_list`, and `git_worktree_list` were removed, and `git_grep` was reduced to its pickaxe mode (the only part without a native equivalent). Apply the same test to removals: when a harness change erodes a tool's pillar, cut the tool at the next major rather than letting the surface accrete.
+
 ## Adding a git tool
 
+0. Confirm the tool clears the [inclusion criteria](#tool-inclusion-criteria) above.
 1. Create `src/server/<tool-name>-tool.ts` exporting a `register<ToolName>Tool(server: FastMCP)` function.
 2. Register it in `src/server/tools.ts` inside `registerRethunkGitTools`.
 3. Add a test file `src/server/<tool-name>-tool.test.ts`.

@@ -134,20 +134,14 @@ Call tools by their registered id (prefix depends on client config name):
 | Compare HEAD between path pairs | `git_parity` |
 | List preset names | `list_presets` |
 | View commit log | `git_log` |
-| Search file contents across roots | `git_grep` |
+| Pickaxe history search (which commits changed a term) | `git_grep` |
 | View structured diff | `git_diff_summary` |
 | View raw diff text | `git_diff` |
 | Inspect commit content | `git_show` |
 | Blame lines in a file | `git_blame` |
-| List local/remote branches | `git_branch_list` |
-| Inspect the reflog | `git_reflog` |
-| List remotes | `git_remote` |
-| Describe HEAD relative to tags | `git_describe` |
 | Inspect unresolved merge conflicts | `git_conflicts` |
-| List stashes | `git_stash_list` |
 | Stash working-tree changes | `git_stash_push` |
 | Apply or pop a stash | `git_stash_apply` |
-| Fetch remote refs | `git_fetch` |
 | Create commits | `batch_commit` |
 | Push a branch | `git_push` |
 | Create or delete tags | `git_tag` |
@@ -157,7 +151,7 @@ Call tools by their registered id (prefix depends on client config name):
 | Resume/abort a paused cherry-pick | `git_cherry_pick_continue` |
 | Revert commits | `git_revert` |
 | Soft-reset HEAD | `git_reset_soft` |
-| Manage worktrees | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` |
+| Manage worktrees | `git_worktree_add` / `git_worktree_remove` |
 
 Full parameter tables and JSON shapes: **[docs/mcp-tools.md](docs/mcp-tools.md)**.
 

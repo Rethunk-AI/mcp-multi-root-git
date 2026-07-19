@@ -16,19 +16,12 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, `format`, plus `root`. **Read-only.** |
 | `list_presets` | `rethunk-git_list_presets` | List preset names/counts from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. `root` + `format` only. **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more roots. Returns commit history with author, date, subject, and shortstat. Optional `follow: true` follows renames (`git log --follow`; requires exactly one `paths` entry). Args: `since`, `paths`, `follow?`, `grep`, `author`, `maxCommits`, `branch`, plus `root` + `format` (`markdown`/`json`/`oneline`). **Read-only.** |
-| `git_grep` | `rethunk-git_git_grep` | Read-only content search (`git grep -n`) across one or more roots, or optional pickaxe history (`pickaxe: { mode: "S"\|"G", term }` → `git log -S`/`-G`, `commits[]` per root). Content mode: `pattern` via `-e`; `ref?` searches the tree at that commit; `filesOnly?` lists matching paths only. Args: `pattern?`, `pickaxe?`, `ref?`, `paths?`, `ignoreCase?`, `filesOnly?`, `maxMatches?`, plus `root` + `format`. **Read-only.** |
+| `git_grep` | `rethunk-git_git_grep` | Read-only pickaxe history search across one or more roots (`pickaxe: { mode: "S"\|"G", term }` → `git log -S`/`-G`, `commits[]` per root). `pickaxe` is required — content-mode working-tree search was removed in v6 (use the client's native grep/rg tooling). Args: `pickaxe`, `ref?`, `paths?`, `ignoreCase?`, `maxMatches?`, plus `root` + `format`. **Read-only.** |
 | `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Optional `maxBytes` caps returned UTF-8 bytes (`truncated: true` when cut). Args: `workspaceRoot`, `format`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`, `maxBytes?`. **Read-only.** |
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus patch (or `--stat` diffstat). Optional `path`/`paths` filter the patch to those paths (`git show <ref> -- <path>`), not a raw blob checkout. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_conflicts` | `rethunk-git_git_conflicts` | Inspect an in-progress conflicted merge/cherry-pick/revert/rebase in the working tree (markers under the git dir). Per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` into ours/theirs (and base, for diff3-style) hunks. **Note:** `git_merge` and `git_cherry_pick` always attempt `--abort` before returning a conflict report, so a successful abort leaves a clean tree — call this tool for conflicts still in progress (manual ops, failed abort, or other tools), not as a follow-up to those tools' conflict payloads. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_remote` | `rethunk-git_git_remote` | List configured remotes (`git remote -v`). Returns name, fetchUrl, and pushUrl (omitted when identical to fetchUrl). `workspaceRoot` + `format` only. **Read-only.** |
-| `git_describe` | `rethunk-git_git_describe` | Describe a commit relative to the nearest reachable tag (`git describe --long`). Returns the raw describe string plus parsed tag, distance (commits since tag), and short SHA. Args: `ref?`, `tags?`, `match?`, `abbrev?`, plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_worktree_list` | `rethunk-git_git_worktree_list` | List all worktrees (`git worktree list --porcelain`). `workspaceRoot` + `format`. **Read-only.** |
-| `git_stash_list` | `rethunk-git_git_stash_list` | List `git stash` entries for one repo. Args: `workspaceRoot` + `format`. **Read-only.** |
 | `git_blame` | `rethunk-git_git_blame` | File authorship grouped into contiguous same-commit line runs (SHA, author, date, summary once per run). Args: `path` (required), `ref?`, `startLine?`, `endLine?`, `maxLines?`, plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_branch_list` | `rethunk-git_git_branch_list` | List local branches (sha, current marker, upstream); optional `includeRemotes` adds remote-tracking branches. Args: `includeRemotes?`, plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_reflog` | `rethunk-git_git_reflog` | Show the reflog for a ref (default `HEAD`) — recent HEAD movements with selector, SHA, and message. Args: `ref?`, `maxEntries?`, plus `workspaceRoot` + `format`. **Read-only.** |
-| `git_fetch` | `rethunk-git_git_fetch` | Fetch from a remote without modifying the working tree. Updates refs only and reports updated/new refs, plus structured `updated`/`created`/`pruned` deltas on git ≥ 2.41. Args: `remote?`, `branch?`, `prune?`, `tags?`, plus `workspaceRoot` + `format`. **Mutating — refs only.** |
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. **`auto`/`rebase` rewrite the source branch tip in place** when rebasing (new SHAs on the source ref), then fast-forward the destination — not destination-only. Refuses on dirty tree; stops on first conflict and attempts `--abort` (abort failure surfaces `rebase_abort_failed` / `merge_abort_failed`). Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
@@ -254,7 +247,9 @@ Path-escape and `rev-parse` failures are reported inline in `pairs[*].error`, no
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"5"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"6"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+
+v6 changes from v5: the tool surface shrank to **24 tools** — `git_fetch`, `git_remote`, `git_describe`, `git_stash_list`, `git_reflog`, `git_branch_list`, and `git_worktree_list` were removed (thin wrappers over tiny-output git commands; see [CONTRIBUTING.md — Tool inclusion criteria](../CONTRIBUTING.md#tool-inclusion-criteria)); `git_grep` dropped content mode — `pickaxe` is now required, `pattern`/`filesOnly` are gone, and `results[*]` always carries `commits[]` (never `matches`/`files`); the `pattern_or_pickaxe_required` error code was removed.
 
 v5 changes from v4: `batch_commit` successful `results[*]` entries drop the echoed `message`/`files` (the caller already supplied both in the request); failing entries still carry `message`/`files` alongside `error`/`detail` for diagnosis.
 
@@ -264,7 +259,7 @@ The package also ships **`tool-parameters.schema.json`**, generated from the reg
 
 ### Field omission (consumer contract, v2+)
 
-To keep responses compact, **optional fields are usually omitted when they would be empty, `null`, or `false`**. Consumers must test for *presence*, not compare to `null`, except where a tool documents an intentional `null` (documented exceptions: `list_presets` emits `gitTop: null` when the workspace is not inside a git repo; `git_worktree_list` emits `branch`/`head` as `null` for detached or incomplete porcelain entries).
+To keep responses compact, **optional fields are usually omitted when they would be empty, `null`, or `false`**. Consumers must test for *presence*, not compare to `null`, except where a tool documents an intentional `null` (documented exception: `list_presets` emits `gitTop: null` when the workspace is not inside a git repo).
 
 **`git_inventory` → `inventories[*]`**
 
@@ -344,43 +339,17 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `pattern` | string | — | Search pattern, 1–500 chars. **Required unless `pickaxe` is set.** Always passed as `-e <pattern>` in content mode (leading-dash patterns are safe). Basic git-grep regex, not literal text. |
-| `pickaxe` | `{ mode: "S" \| "G", term: string }` | — | When set, runs pickaxe history (`git log -S` / `-G`) instead of content search. JSON results use `commits[]` of `{ sha, subject }` (not `matches`/`files`). `filesOnly` is ignored in pickaxe mode. |
-| `ref` | string | — | Content mode: commit/branch/tag to search the tree at (instead of the working tree). Pickaxe mode: history tip. Validated as a safe ref token (`isSafeGitAncestorRef`); rejects `--`-prefixed or otherwise unsafe tokens. |
-| `paths` | string[] | — | Limit search/history to these paths. Each must resolve within the repo root (`resolvePathForRepo` / `assertRelativePathUnderTop`); escaping paths are rejected per-root. |
-| `ignoreCase` | boolean | `false` | Case-insensitive match (`-i`). Content mode only. |
-| `filesOnly` | boolean | `false` | List matching file paths only (`-l`), omitting per-line detail. Content mode only (ignored when `pickaxe` is set). |
-| `maxMatches` | integer | `200` | Cap on matches, files (when `filesOnly`), or **commits** (pickaxe) per root. Hard cap `1000`. |
+| `pickaxe` | `{ mode: "S" \| "G", term: string }` | — | **Required.** Pickaxe history search (`git log -S` / `-G`): `S` finds commits that changed the occurrence count of `term`; `G` finds commits whose diff lines match the `term` regex. JSON results are `commits[]` of `{ sha, subject }` per root. |
+| `ref` | string | — | Commit/branch/tag to use as the history tip. Validated as a safe ref token (`isSafeGitAncestorRef`); rejects `--`-prefixed or otherwise unsafe tokens. |
+| `paths` | string[] | — | Limit history to these paths. Each must resolve within the repo root (`resolvePathForRepo` / `assertRelativePathUnderTop`); escaping paths are rejected per-root. |
+| `ignoreCase` | boolean | `false` | Case-insensitive match (`-i`; affects `G` mode regexes). |
+| `maxMatches` | integer | `200` | Cap on commits per root. Hard cap `1000`. |
 | `root` | string \| string[] \| `"*"` | — | Repo path, array of paths (max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | `"markdown"` | Output format. |
 
-Provide `pattern` and/or `pickaxe`. Omitting both returns top-level `pattern_or_pickaxe_required`.
+Content-mode working-tree search (`pattern`, `filesOnly`, ref-tree search) was **removed in v6** — it duplicated the native grep/rg tooling every MCP client already ships. Pickaxe history is the part with no native equivalent.
 
 ### `git_grep` — JSON shape (`format: "json"`)
-
-Content mode:
-
-```json
-{
-  "results": [
-    {
-      "root": "/abs/workspace",
-      "repo": "workspace",
-      "matches": [
-        { "file": "src/foo.ts", "line": 42, "text": "  const needle = 1;" }
-      ]
-    },
-    {
-      "root": "/abs/other-repo",
-      "repo": "other-repo",
-      "files": ["src/bar.ts", "README.md"],
-      "truncated": true
-    }
-  ]
-}
-```
-
-Pickaxe mode (`pickaxe` set) — per-root `commits[]` instead of `matches`/`files`:
 
 ```json
 {
@@ -397,7 +366,7 @@ Pickaxe mode (`pickaxe` set) — per-root `commits[]` instead of `matches`/`file
 }
 ```
 
-One `results` entry per resolved root. In content mode, `matches[]` is present unless `filesOnly: true`, in which case `files[]` (plain paths, no line/text) replaces it. In pickaxe mode, `commits[]` carries `{ sha, subject }` hits. `truncated: true` is present only when the per-root result count exceeded `maxMatches`. A root that fails to resolve or whose git invocation errors carries `error` (and optional `detail`) instead of `matches`/`files`/`commits`. A pattern with zero matches (or pickaxe with zero commits) is **not** an error — the corresponding array is simply empty.
+One `results` entry per resolved root, each carrying `commits[]` of `{ sha, subject }` hits. `truncated: true` is present only when the per-root commit count exceeded `maxMatches`. A root that fails to resolve or whose git invocation errors carries `error` (and optional `detail`) instead of `commits`. Zero pickaxe hits is **not** an error — `commits` is simply empty.
 
 ### `git_grep` — error codes
 
@@ -405,10 +374,9 @@ One `results` entry per resolved root. In content mode, `matches[]` is present u
 |------|---------|
 | `git_not_found` | `git` binary not on `PATH`. |
 | `not_a_git_repository` | A resolved root is not inside a git repository. |
-| `pattern_or_pickaxe_required` | Neither `pattern` nor `pickaxe` was provided. |
 | `unsafe_ref_token` | `ref` failed `isSafeGitAncestorRef` validation. |
 | `path_escapes_repo` | A `paths` entry resolves outside that root's git toplevel. |
-| `git_grep_failed` | `git grep` / pickaxe `git log` exited non-zero with non-empty stderr (bad pattern, unknown ref, etc.) — distinct from a clean "no matches" exit, which is success. |
+| `git_grep_failed` | Pickaxe `git log` exited non-zero (bad regex, unknown ref, etc.). |
 | `invalid_root_path` / `root_list_too_many` / `root_list_empty` | `root` array validation (shared fan-out behavior). |
 
 ---
@@ -592,131 +560,6 @@ Only the shared single-repo prelude errors apply — the tool itself never fails
 
 ---
 
-### `git_remote` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `workspaceRoot`, `format` | — | — | Standard single-repo pick + output format. |
-
-### `git_remote` — JSON shape (`format: "json"`)
-
-```json
-{
-  "remotes": [
-    { "name": "origin", "fetchUrl": "git@github.com:foo/bar.git" },
-    { "name": "upstream", "fetchUrl": "https://github.com/foo/bar.git", "pushUrl": "git@github.com:foo/bar.git" }
-  ]
-}
-```
-
-`pushUrl` is omitted whenever it is identical to `fetchUrl` (the common case). No remotes configured → `{ "remotes": [] }`.
-
-### `git_remote` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `remote_list_failed` | `git remote -v` exited non-zero unexpectedly. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
-### `git_describe` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `ref` | string | `HEAD` | Commit-ish to describe. Validated with the ancestor-ref token rules (allows `~`/`^`). |
-| `tags` | boolean | `true` | When true, passes `--tags` so lightweight (non-annotated) tags are also considered. |
-| `match` | string | — | Optional glob restricting candidate tags (passed as `--match`). Safe glob subset only (`[A-Za-z0-9_.*?/\[\]-]+`, no leading `-`). |
-| `abbrev` | integer | — | Number of hex digits for the abbreviated SHA (passed as `--abbrev=<n>`), 0–40. |
-| `workspaceRoot`, `format` | — | — | Standard single-repo pick + output format. |
-
-### `git_describe` — JSON shape (`format: "json"`)
-
-```json
-{
-  "describe": "v1.0.0-1-gabc1234",
-  "tag": "v1.0.0",
-  "distance": 1,
-  "sha": "abc1234"
-}
-```
-
-`distance` is commits since the tag; `sha` is the short SHA parsed from the `-g<sha>` suffix of `git describe --long`.
-
-### `git_describe` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
-| `unsafe_match_pattern` | `match` contains characters outside the safe glob subset, or starts with `-`. |
-| `no_tag_found` | No tag is reachable from `ref` (git reports "No names found" / "No tags can describe" / "No annotated tags can describe"). |
-| `describe_failed` | `git describe` failed for another reason (detail in `detail`), or its output could not be parsed. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
-### `git_stash_list` — parameters
-
-| Parameter | Type | Notes |
-|-----------|------|-------|
-| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
-
-### `git_stash_list` — JSON shape (`format: "json"`)
-
-```json
-{
-  "stashes": [
-    { "index": 0, "message": "WIP on main: abc1234 feat: add tool", "sha": "abc1234" }
-  ]
-}
-```
-
-### `git_stash_list` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `stash_list_failed` | `git stash list` failed unexpectedly. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
-### `git_fetch` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `remote` | string | `"origin"` | Remote to fetch from. |
-| `branch` | string | — | Optional branch/ref to fetch from that remote. |
-| `prune` | boolean | `false` | Pass `--prune` to remove deleted remote-tracking refs. |
-| `tags` | boolean | `false` | Pass `--tags` to also fetch all tags. |
-| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
-
-### `git_fetch` — JSON shape (`format: "json"`)
-
-```json
-{
-  "ok": true,
-  "remote": "origin",
-  "updatedRefs": ["abc1234..def5678  main       -> origin/main"],
-  "newRefs": ["[new tag]        v2.0.0     -> v2.0.0"],
-  "updated": [{ "ref": "refs/remotes/origin/main", "oldSha": "abc1234…", "newSha": "def5678…", "flag": " " }],
-  "created": [{ "ref": "refs/tags/v2.0.0", "newSha": "0a1b2c3…", "flag": "*" }],
-  "pruned": [{ "ref": "refs/remotes/origin/old" }],
-  "output": "From origin\n..."
-}
-```
-
-`updated` / `created` / `pruned` are structured ref deltas parsed from `git fetch --porcelain` (git ≥ 2.41), each omitted when empty. On older git the `--porcelain` option is detected as unsupported and the tool falls back to a plain fetch, omitting the structured arrays; the `updatedRefs` / `newRefs` string fields are always present for back-compat. Fetch failures are reported as `ok: false` with the captured git output in `output`.
-
-### `git_fetch` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `unsafe_remote_token` | `remote` contains characters outside the argv-safe subset. |
-| `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
 ### `git_blame` — parameters
 
 | Parameter | Type | Default | Notes |
@@ -763,65 +606,6 @@ One `groups` entry per **contiguous run of lines last touched by the same commit
 | `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
 | `invalid_line_range` | Only one of `startLine`/`endLine` was given, or `startLine > endLine`. |
 | `git_blame_failed` | `git blame` exited non-zero (unknown path/ref). `detail` carries stderr. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
-### `git_branch_list` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `includeRemotes` | boolean | `false` | Also list remote-tracking branches (`refs/remotes`); symbolic `origin/HEAD` is skipped. |
-| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
-
-### `git_branch_list` — JSON shape (`format: "json"`)
-
-```json
-{
-  "branches": [
-    { "name": "main", "sha": "a1b2c3d4…", "current": true, "upstream": "origin/main" },
-    { "name": "feature/x", "sha": "b2c3d4e5…", "current": false }
-  ],
-  "remotes": [{ "name": "origin/main", "sha": "a1b2c3d4…" }]
-}
-```
-
-`upstream` is omitted when a branch has no upstream. `remotes` is omitted when empty — including when `includeRemotes: true` but no remote-tracking refs exist.
-
-### `git_branch_list` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `branch_list_failed` | `git for-each-ref` exited non-zero. `detail` carries stderr. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
----
-
-### `git_reflog` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `ref` | string | `HEAD` | Ref whose reflog to show. Validated as a safe ref token. |
-| `maxEntries` | int | `30` | Max entries to return (1–200). |
-| `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
-
-### `git_reflog` — JSON shape (`format: "json"`)
-
-```json
-{
-  "ref": "HEAD",
-  "entries": [
-    { "sha": "a1b2c3d4…", "selector": "HEAD@{0}", "message": "commit: feat: add tool" }
-  ]
-}
-```
-
-### `git_reflog` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
-| `reflog_failed` | `git reflog show` exited non-zero. `detail` carries stderr. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ---
@@ -1370,27 +1154,6 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 
 ---
 
-### `git_worktree_list` — parameters
-
-| Parameter | Type | Default | Notes |
-|-----------|------|---------|-------|
-| `workspaceRoot`, `format` | — | — | Standard single-repo pick + output format. |
-
-### `git_worktree_list` — JSON shape (`format: "json"`)
-
-```json
-{ "worktrees": [{ "path": "/abs/path", "branch": "feature/x", "head": "a1b2c3d…" }] }
-```
-
-`branch` and/or `head` may be `null` (detached HEAD or incomplete porcelain). This is an intentional `null` exception to the general field-omission rule. On list failure the tool currently returns an empty `worktrees` array plus optional `detail` (remove already fails closed with `worktree_remove_failed`).
-
-### `git_worktree_list` — error codes
-
-| Code | Meaning |
-|------|---------|
-| `git_not_found` | `git` binary not on `PATH`. |
-| `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-
 ### `git_worktree_add` — parameters
 
 | Parameter | Type | Notes |
@@ -1448,7 +1211,7 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 |----------|---------|-------|
 | `GIT_SUBPROCESS_PARALLELISM` | CPU-based | Max concurrent git subprocesses for multi-root fan-out (`git_inventory`, `git_parity`, multi-root `git_log`, multi-root `git_grep`). |
 | `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in ms; on expiry the child is killed (SIGTERM) and the call resolves as failed. Set `0` (or negative) to disable (unbounded). |
-| `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 31 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
+| `RETHUNK_GIT_TOOLS` | _(unset — all)_ | Comma-separated allowlist of exact tool names. Unset or empty → all 24 tools registered. Non-empty → only the listed tools; unknown names warned to stderr. If every listed name is unknown, zero tools are registered (restriction honored literally). The presets resource is always available. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. |
 
 ## Resource
 
@@ -1473,7 +1236,7 @@ Every tool carries exactly **one** routing parameter:
 | Tools | Parameter | Accepts |
 |-------|-----------|---------|
 | Fan-out: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep` | `root` | string (one repo path) \| string[] (explicit repo list) \| `"*"` (every MCP root) |
-| All other 24 tools | `workspaceRoot` | string (one repo path) |
+| All other 18 tools | `workspaceRoot` | string (one repo path) |
 
 ### `root` forms (fan-out tools)
 

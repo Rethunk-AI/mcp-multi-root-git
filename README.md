@@ -10,7 +10,7 @@
 
 ---
 
-MCP **stdio** server exposing **git** tools to AI clients — status, multi-root inventory, parity checks, presets, logs, search, diffs, commits, push, merge, worktrees, and more. One server process spans every workspace root the client registers at `initialize`.
+MCP **stdio** server exposing **git** tools to AI clients — status, multi-root inventory, parity checks, presets, logs, pickaxe history search, diffs, commits, push, merge, worktrees, and more. One server process spans every workspace root the client registers at `initialize`.
 
 **Repository:** [github.com/Rethunk-AI/mcp-multi-root-git](https://github.com/Rethunk-AI/mcp-multi-root-git) · **npmjs (manual releases):** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git) · **GitHub Packages (CI on each tag):** [`@rethunk-ai/mcp-multi-root-git`](https://github.com/Rethunk-AI/mcp-multi-root-git/packages) — see [docs/install.md](docs/install.md) and [HUMANS.md#publishing](HUMANS.md#publishing).
 
@@ -27,7 +27,8 @@ Full install, prerequisites, and MCP client wiring: [HUMANS.md](HUMANS.md) and [
 - **Multi-root fan-out** — `git_status`, `git_inventory`, `git_parity`, `git_log`, and `git_grep` route across one repo, an explicit list, or every MCP root (`"*"`)
 - **Structured JSON** — minified tool payloads (format version 5); optional fields omitted when empty
 - **Presets** — `.rethunk/git-mcp-presets.json` at the git toplevel for nested roots and parity pairs
-- **Read and write git** — diffs, blame, conflicts, stash, fetch, `batch_commit`, push, merge, cherry-pick, revert, branches, tags, and worktrees (writes take a single `workspaceRoot`)
+- **Read and write git** — diffs, blame, conflicts, stash, `batch_commit`, push, merge, cherry-pick, revert, branches, tags, and worktrees (writes take a single `workspaceRoot`)
+- **Deliberately small surface** — 24 tools; every tool must clear the [inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria) (enforced policy on writes, fan-out call compression, or large-output compression)
 - **Published schemas** — `schemas/index.json` and per-tool JSON Schema files for offline validation
 
 ## Documentation

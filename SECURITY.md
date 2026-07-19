@@ -29,7 +29,7 @@ When reporting a vulnerability, please include:
 | `git_parity` | HEAD equality across path pairs |
 | `list_presets` | Preset file discovery |
 | `git_log` | Commit history / subjects / shortstat |
-| `git_grep` | Content search in trees or working copy |
+| `git_grep` | Pickaxe history search (commit SHAs + subjects) |
 
 **Single-repo read** (`workspaceRoot`):
 
@@ -39,19 +39,12 @@ When reporting a vulnerability, please include:
 | `git_diff` | Raw scoped diff text |
 | `git_show` | Commit message + diff, or **file content at a ref** |
 | `git_conflicts` | Conflict hunk text (ours/theirs/base) |
-| `git_remote` | Remote URLs |
-| `git_describe` | Nearest-tag description |
-| `git_worktree_list` | Worktree paths and refs |
-| `git_stash_list` | Stash entry metadata |
 | `git_blame` | Authorship + line content runs |
-| `git_branch_list` | Local / remote-tracking branch names |
-| `git_reflog` | Reflog selectors and messages |
 
 **Mutating** (`workspaceRoot` only — no multi-repo fan-out on writes):
 
 | Tool | Effect |
 |------|--------|
-| `git_fetch` | Updates remote-tracking refs (no working-tree checkout) |
 | `batch_commit` | Stages listed paths / hunks and creates commits; optional push-after |
 | `git_push` | Pushes current branch; **never** force-pushes |
 | `git_merge` | Merges sources into a destination; optional cleanup skips protected names |
@@ -66,7 +59,7 @@ When reporting a vulnerability, please include:
 | `git_stash_apply` | Apply or pop a stash entry |
 | `git_stash_push` | Creates a new stash (may clear working-tree changes) |
 
-There is **no** `git_pull` tool. Remote updates are via `git_fetch` (refs) and `git_push` (publish). Optional `batch_commit` `push: "after"` uses the same non-force push path.
+There is **no** `git_pull` (or `git_fetch`) tool — the server never touches remote refs except to publish via `git_push`. Optional `batch_commit` `push: "after"` uses the same non-force push path.
 
 ### Trust model: `workspaceRoot` and MCP roots
 
@@ -132,7 +125,7 @@ Read-only tools can surface secrets already present in tracked history or the wo
 
 ### Deployment hardening: `RETHUNK_GIT_TOOLS`
 
-Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 31 tools register. Details: [docs/install.md](docs/install.md).
+Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 24 tools register. Details: [docs/install.md](docs/install.md).
 
 ## Security Practices (operator)
 
