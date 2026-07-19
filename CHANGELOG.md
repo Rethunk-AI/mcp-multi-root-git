@@ -4,6 +4,10 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Changed
+
+- **`git_push` / `batch_commit` `push: "after"`** — successful pushes now condense git output to the state-bearing lines (destination, ref updates, new branch/tag, `remote:` banners, `-u` tracking notice) plus an omitted-line count; pre-push hook noise (test runs, package installs) no longer floods the tool result ([#17](https://github.com/Rethunk-AI/mcp-multi-root-git/issues/17)). Both streams are now merged before filtering, so ref-update lines on stderr survive a noisy hook stdout. Failure output is unchanged (full detail).
+
 ## [4.0.0] — 2026-07-18
 
 **Breaking release: the tool surface shrinks from 31 to 24.** Seven thin read wrappers are removed and `git_grep` is reduced to pickaxe-only; `MCP_JSON_FORMAT_VERSION` bumps to **`"6"`**. Rationale is codified in [CONTRIBUTING.md — Tool inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria): a tool must deliver enforced write policy, fan-out call compression, or large-output compression — wrappers over tiny-output git commands whose Bash equivalents are frictionless on modern harnesses no longer earn a schema slot.

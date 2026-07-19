@@ -5,6 +5,7 @@ import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
+import { condensePushOutput } from "./push-output.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -112,8 +113,8 @@ export function registerGitPushTool(server: FastMCP): void {
       ]);
       const upstream = upstreamProbe.ok ? upstreamProbe.stdout.trim() : `${remote}/${branch}`;
 
-      // Append git output (stdout/stderr) if non-empty
-      const gitOutput = (pushResult.stdout || pushResult.stderr).trim();
+      // Append condensed git output (ref updates + remote messages; hook noise dropped)
+      const gitOutput = condensePushOutput(pushResult.stdout, pushResult.stderr);
 
       if (args.format === "json") {
         return jsonRespond({

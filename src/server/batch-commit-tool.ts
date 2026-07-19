@@ -10,6 +10,7 @@ import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
+import { condensePushOutput } from "./push-output.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -326,7 +327,7 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
       detail: (pushResult.stderr || pushResult.stdout).trim(),
     };
   }
-  const gitOutput = (pushResult.stdout || pushResult.stderr).trim();
+  const gitOutput = condensePushOutput(pushResult.stdout, pushResult.stderr);
   return {
     ok: true,
     branch,
