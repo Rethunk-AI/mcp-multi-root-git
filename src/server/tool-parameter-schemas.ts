@@ -25,20 +25,13 @@ export const READ_ONLY_SINGLE_REPO_TOOLS = [
   "git_diff",
   "git_show",
   "git_conflicts",
-  "git_remote",
-  "git_describe",
-  "git_worktree_list",
-  "git_stash_list",
   "git_blame",
-  "git_branch_list",
-  "git_reflog",
 ] as const;
 
 /**
  * Mutating tools: `workspaceRoot` routing only.
  */
 export const MUTATING_TOOLS = [
-  "git_fetch",
   "batch_commit",
   "git_push",
   "git_merge",

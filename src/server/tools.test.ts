@@ -12,7 +12,7 @@ import { registerRethunkGitTools, selectToolRegistrars } from "./tools.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** All 31 canonical tool names, in registration order, verified from source. */
+/** All 24 canonical tool names, in registration order, verified from source. */
 const ALL_TOOL_NAMES = [
   // Read-only
   "git_status",
@@ -25,15 +25,8 @@ const ALL_TOOL_NAMES = [
   "git_diff",
   "git_show",
   "git_conflicts",
-  "git_remote",
-  "git_describe",
-  "git_worktree_list",
-  "git_stash_list",
   "git_blame",
-  "git_branch_list",
-  "git_reflog",
   // Mutating
-  "git_fetch",
   "batch_commit",
   "git_push",
   "git_merge",
@@ -142,7 +135,7 @@ describe("selectToolRegistrars", () => {
       "git_push,git_status,batch_commit,git_push",
       STUB_REGISTRARS,
     );
-    // canonical order: git_status (0) < batch_commit (18) < git_push (19)
+    // canonical order: git_status (0) < batch_commit (11) < git_push (12)
     expect(selected.map((r) => r.name)).toEqual(["git_status", "batch_commit", "git_push"]);
     expect(unknown).toEqual([]);
   });
@@ -189,14 +182,14 @@ describe("selectToolRegistrars", () => {
 // ---------------------------------------------------------------------------
 
 describe("registerRethunkGitTools", () => {
-  test("unset RETHUNK_GIT_TOOLS → all 31 tools registered in canonical order", () => {
+  test("unset RETHUNK_GIT_TOOLS → all 24 tools registered in canonical order", () => {
     withEnv(undefined, () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);
     });
   });
 
-  test('RETHUNK_GIT_TOOLS="*" → all 31 tools registered', () => {
+  test('RETHUNK_GIT_TOOLS="*" → all 24 tools registered', () => {
     withEnv("*", () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);

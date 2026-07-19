@@ -2,45 +2,32 @@ import type { FastMCP } from "fastmcp";
 
 import { registerBatchCommitTool } from "./batch-commit-tool.js";
 import { registerGitBlameTool } from "./git-blame-tool.js";
-import { registerGitBranchListTool } from "./git-branch-list-tool.js";
 import { registerGitBranchTool } from "./git-branch-tool.js";
 import {
   registerGitCherryPickContinueTool,
   registerGitCherryPickTool,
 } from "./git-cherry-pick-tool.js";
 import { registerGitConflictsTool } from "./git-conflicts-tool.js";
-import { registerGitDescribeTool } from "./git-describe-tool.js";
 import { registerGitDiffSummaryTool } from "./git-diff-summary-tool.js";
 import { registerGitDiffTool } from "./git-diff-tool.js";
-import { registerGitFetchTool } from "./git-fetch-tool.js";
 import { registerGitGrepTool } from "./git-grep-tool.js";
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
 import { registerGitLogTool } from "./git-log-tool.js";
 import { registerGitMergeTool } from "./git-merge-tool.js";
 import { registerGitParityTool } from "./git-parity-tool.js";
 import { registerGitPushTool } from "./git-push-tool.js";
-import { registerGitReflogTool } from "./git-reflog-tool.js";
-import { registerGitRemoteTool } from "./git-remote-tool.js";
 import { registerGitResetSoftTool } from "./git-reset-soft-tool.js";
 import { registerGitRevertTool } from "./git-revert-tool.js";
 import { registerGitShowTool } from "./git-show-tool.js";
-import {
-  registerGitStashApplyTool,
-  registerGitStashListTool,
-  registerGitStashPushTool,
-} from "./git-stash-tool.js";
+import { registerGitStashApplyTool, registerGitStashPushTool } from "./git-stash-tool.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
 import { registerGitTagTool } from "./git-tag-tool.js";
-import {
-  registerGitWorktreeAddTool,
-  registerGitWorktreeListTool,
-  registerGitWorktreeRemoveTool,
-} from "./git-worktree-tool.js";
+import { registerGitWorktreeAddTool, registerGitWorktreeRemoveTool } from "./git-worktree-tool.js";
 import { registerListPresetsTool } from "./list-presets-tool.js";
 import { registerPresetsResource } from "./presets-resource.js";
 
 /**
- * Ordered registry of all 31 MCP tools. Registration order is preserved for
+ * Ordered registry of all 24 MCP tools. Registration order is preserved for
  * both full and filtered (RETHUNK_GIT_TOOLS) subsets.
  */
 const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] = [
@@ -55,15 +42,8 @@ const TOOL_REGISTRARS: { name: string; register: (server: FastMCP) => void }[] =
   { name: "git_diff", register: registerGitDiffTool },
   { name: "git_show", register: registerGitShowTool },
   { name: "git_conflicts", register: registerGitConflictsTool },
-  { name: "git_remote", register: registerGitRemoteTool },
-  { name: "git_describe", register: registerGitDescribeTool },
-  { name: "git_worktree_list", register: registerGitWorktreeListTool },
-  { name: "git_stash_list", register: registerGitStashListTool },
   { name: "git_blame", register: registerGitBlameTool },
-  { name: "git_branch_list", register: registerGitBranchListTool },
-  { name: "git_reflog", register: registerGitReflogTool },
   // Mutating tools
-  { name: "git_fetch", register: registerGitFetchTool },
   { name: "batch_commit", register: registerBatchCommitTool },
   { name: "git_push", register: registerGitPushTool },
   { name: "git_merge", register: registerGitMergeTool },

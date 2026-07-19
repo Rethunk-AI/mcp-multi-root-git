@@ -44,55 +44,6 @@ function resolveWorktreePath(
 }
 
 // ---------------------------------------------------------------------------
-// git_worktree_list
-// ---------------------------------------------------------------------------
-
-export function registerGitWorktreeListTool(server: FastMCP): void {
-  server.addTool({
-    name: "git_worktree_list",
-    description: "List all git worktrees for the repository (`git worktree list --porcelain`).",
-    annotations: {
-      readOnlyHint: true,
-    },
-    parameters: WorkspacePickSchema,
-    execute: async (args) => {
-      const pre = requireSingleRepo(server, args);
-      if (!pre.ok) return jsonRespond(pre.error);
-      const { gitTop } = pre;
-
-      const listed = await listWorktrees(gitTop);
-      if (!listed.ok) {
-        // No dedicated WORKTREE_LIST_FAILED code yet (seam → J). Fail closed with
-        // empty list + detail rather than mislabeling as add/remove failure.
-        if (args.format === "json") {
-          return jsonRespond({
-            worktrees: [],
-            ...spreadDefined("detail", listed.detail || undefined),
-          });
-        }
-        return `# Worktrees\n_(failed to list)_`;
-      }
-      const trees = listed.worktrees;
-
-      if (args.format === "json") {
-        return jsonRespond({ worktrees: trees as unknown as Record<string, unknown>[] });
-      }
-
-      if (trees.length === 0) {
-        return "# Worktrees\n_(none)_";
-      }
-      const lines: string[] = ["# Worktrees", ""];
-      for (const t of trees) {
-        const branchPart = t.branch ?? "(detached)";
-        const headPart = t.head ? ` @ ${t.head.slice(0, 7)}` : "";
-        lines.push(`- \`${t.path}\`  ${branchPart}${headPart}`);
-      }
-      return lines.join("\n");
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
 // git_worktree_add
 // ---------------------------------------------------------------------------
 

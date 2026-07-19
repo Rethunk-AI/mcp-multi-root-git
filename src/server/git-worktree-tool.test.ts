@@ -1,16 +1,12 @@
 /**
- * Integration tests for git_worktree_list, git_worktree_add, git_worktree_remove.
+ * Integration tests for git_worktree_add and git_worktree_remove.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  registerGitWorktreeAddTool,
-  registerGitWorktreeListTool,
-  registerGitWorktreeRemoveTool,
-} from "./git-worktree-tool.js";
+import { registerGitWorktreeAddTool, registerGitWorktreeRemoveTool } from "./git-worktree-tool.js";
 import {
   captureTool,
   cleanupTmpPaths,
@@ -25,79 +21,6 @@ afterEach(cleanupTmpPaths);
 function makeRepo(): string {
   return makeRepoWithSeed("mcp-git-worktree-test-");
 }
-
-// ---------------------------------------------------------------------------
-// git_worktree_list
-// ---------------------------------------------------------------------------
-
-describe("git_worktree_list", () => {
-  test("lists the main worktree for a fresh repo (json)", async () => {
-    const dir = makeRepo();
-    const run = captureTool(registerGitWorktreeListTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
-    const parsed = JSON.parse(text) as {
-      worktrees: { path: string; branch: string | null; head: string | null }[];
-    };
-
-    expect(parsed.worktrees).toHaveLength(1);
-    expect(parsed.worktrees[0]?.branch).toContain("main");
-    expect(parsed.worktrees[0]?.head).toMatch(/^[0-9a-f]{40}$/);
-  });
-
-  test("markdown format includes the branch name", async () => {
-    const dir = makeRepo();
-    const run = captureTool(registerGitWorktreeListTool);
-    const text = await run({ workspaceRoot: dir });
-
-    expect(text).toContain("# Worktrees");
-    expect(text).toContain("main");
-  });
-
-  test("includes an added worktree in the list", async () => {
-    const dir = makeRepo();
-    const wtPath = trackTmpPath(join(dir, "../wt-for-list"));
-    gitCmd(dir, "worktree", "add", "-b", "feature/listed", wtPath);
-
-    const run = captureTool(registerGitWorktreeListTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
-    const parsed = JSON.parse(text) as {
-      worktrees: { path: string; branch: string | null; head: string | null }[];
-    };
-
-    expect(parsed.worktrees).toHaveLength(2);
-    const branches = parsed.worktrees.map((w) => w.branch);
-    expect(branches.some((b) => b?.includes("feature/listed"))).toBe(true);
-    for (const w of parsed.worktrees) {
-      expect(w.head).toMatch(/^[0-9a-f]{40}$/);
-    }
-  });
-
-  test("detached HEAD worktree reports branch:null and a head SHA", async () => {
-    const dir = makeRepo();
-    const wtPath = trackTmpPath(join(dir, "../wt-detached"));
-    gitCmd(dir, "worktree", "add", "--detach", wtPath);
-
-    const run = captureTool(registerGitWorktreeListTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
-    const parsed = JSON.parse(text) as {
-      worktrees: { path: string; branch: string | null; head: string | null }[];
-    };
-
-    const detached = parsed.worktrees.find((w) => w.path === wtPath);
-    expect(detached).toBeDefined();
-    expect(detached?.branch).toBeNull();
-    expect(detached?.head).toMatch(/^[0-9a-f]{40}$/);
-  });
-
-  test("returns not_a_git_repository for a plain directory", async () => {
-    const dir = mkTmpDir("mcp-nongit-");
-    const run = captureTool(registerGitWorktreeListTool);
-    const text = await run({ workspaceRoot: dir, format: "json" });
-    const parsed = JSON.parse(text) as { error: string };
-
-    expect(parsed.error).toBe("not_a_git_repository");
-  });
-});
 
 // ---------------------------------------------------------------------------
 // git_worktree_add
