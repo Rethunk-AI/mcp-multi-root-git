@@ -4,6 +4,23 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-07-18
+
+**Breaking release: the tool surface shrinks from 31 to 24.** Seven thin read wrappers are removed and `git_grep` is reduced to pickaxe-only; `MCP_JSON_FORMAT_VERSION` bumps to **`"6"`**. Rationale is codified in [CONTRIBUTING.md — Tool inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria): a tool must deliver enforced write policy, fan-out call compression, or large-output compression — wrappers over tiny-output git commands whose Bash equivalents are frictionless on modern harnesses no longer earn a schema slot.
+
+### Removed
+
+- **`git_fetch`** — its case rested on sandboxed-Bash network friction that no longer exists; raw `git fetch` output is tiny.
+- **`git_remote`, `git_describe`, `git_stash_list`, `git_reflog`, `git_branch_list`, `git_worktree_list`** — thin wrappers over ~50–200-token porcelain commands; zero per-call token savings while costing schema space in every non-deferred client session.
+- **`git_grep` content mode** — `pattern`, `filesOnly`, and ref-tree content search removed; working-tree content search duplicated the native grep/rg tooling every MCP client ships. `pickaxe` is now **required**; results always carry `commits[]` (never `matches`/`files`).
+- **Error codes** — `pattern_or_pickaxe_required`, `remote_list_failed`, `describe_failed`, `no_tag_found`, `unsafe_match_pattern`, `stash_list_failed`, `branch_list_failed`, `reflog_failed` leave the registry with their tools.
+
+### Changed
+
+- **`MCP_JSON_FORMAT_VERSION` `"5"` → `"6"`** — migration notes in [AGENTS.md](AGENTS.md) and [docs/mcp-tools.md](docs/mcp-tools.md).
+- **Docs** — all shipped docs (mcp-tools, install, HUMANS, SECURITY, AGENTS, README) aligned with the 24-tool surface; schema artifacts regenerated.
+- **CONTRIBUTING.md** — new **Tool inclusion criteria** section governing future additions and removals; “Adding a git tool” now starts with the criteria gate.
+
 ### Added
 
 - **`git_cherry_pick` `onConflict`** — `"abort"` (default, unchanged) or `"pause"`: on conflict, leave the conflict and native cherry-pick sequencer state in place instead of rolling back the whole range (`conflict.paused: true`, applied-so-far count derived from the HEAD advance). Closes the abort-only gap that previously forced a shell fallback to resolve conflicts on a multi-commit cherry-pick range.
