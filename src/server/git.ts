@@ -1,5 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  constants as fsConstants,
+  fstatSync,
+  openSync,
+  readFileSync,
+} from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 
@@ -151,15 +158,26 @@ export function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text:
 
 export function parseGitSubmodulePaths(gitRoot: string): string[] {
   const f = join(gitRoot, ".gitmodules");
-  // Skip non-regular files (character devices, sockets, etc.) — common in
-  // Claude Code sandbox environments where stub device files shadow paths.
-  // Use a single try/catch to avoid TOCTOU between existence check and open.
+  // Open once and check/read via the same fd — avoids a TOCTOU window between
+  // a separate stat and a separate open/read (the path could be swapped out
+  // from under a name-based check). O_NOFOLLOW rejects symlinks, matching the
+  // prior lstat-based behavior of skipping non-regular files (character
+  // devices, sockets, symlinks, etc. — common in Claude Code sandbox
+  // environments where stub device files shadow paths).
   let text: string;
+  let fd: number;
   try {
-    if (!lstatSync(f).isFile()) return [];
-    text = readFileSync(f, "utf8");
+    fd = openSync(f, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   } catch {
     return [];
+  }
+  try {
+    if (!fstatSync(fd).isFile()) return [];
+    text = readFileSync(fd, "utf8");
+  } catch {
+    return [];
+  } finally {
+    closeSync(fd);
   }
   const paths: string[] = [];
   let inSubmoduleSection = false;
