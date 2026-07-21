@@ -4,7 +4,19 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
-## [4.1.0] — 2026-07-21
+## [5.0.0] — 2026-07-21
+
+**Breaking: `format` now defaults to `"json"` on every tool.** Callers that omitted `format` previously got markdown; they now get minified JSON. Pass `format: "markdown"` explicitly to keep the old behavior.
+
+### Changed
+
+- **`format` default `"markdown"` → `"json"`** on all 24 tools (single change point: `FormatSchema` in `src/server/schemas.ts`; `git_log`'s own three-way `format` enum updated to match). JSON output was already minified (`JSON.stringify` with no envelope, no indentation) — this only changes which mode a caller gets when `format` is omitted.
+- **`batch_commit` successful-commit `output`** — condensed the same way as push output (`condensePushOutput`): `git commit`'s own `[branch sha] subject` confirmation line and pre-commit-hook noise are dropped (redundant with the already-returned `sha`/`message` fields), keeping only diffstat/mode/rename lines plus an omitted-line count (`condenseCommitOutput`). Failure output is unchanged (full detail).
+- **`batch_commit` tool description** — trimmed a sentence duplicated between the top-level description and the `files` field description (both explained mid-entry stage-failure rollback); the detail now lives only on `files`.
+
+### Considered, not changed
+
+- **`batch_commit` schema footprint** (~1k tokens once loaded): roughly 40% is the `files` field's `string | { path, lines: { from, to } }` union, which is the JSON-Schema shape hunk-level staging requires — flattening `lines: {from,to}` to sibling `lineFrom`/`lineTo` properties would trim it further but changes the **input** wire format for every existing caller. Deferred as a breaking change pending a decision, rather than folded into this release silently.
 
 ### Changed
 
