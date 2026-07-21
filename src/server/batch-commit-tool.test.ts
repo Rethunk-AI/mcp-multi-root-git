@@ -982,6 +982,39 @@ describe("batch_commit pathspec isolation and stage rollback", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.results[0]?.error).toBe("invalid_paths");
   });
+
+  test("stages a submodule gitlink pointer bump (not rejected as a directory pathspec)", async () => {
+    const dir = makeRepo();
+
+    const subDir = join(dir, "sub");
+    mkdirSync(subDir);
+    gitCmd(subDir, "init", "-b", "main");
+    gitCmd(subDir, "config", "user.email", "test@test.com");
+    gitCmd(subDir, "config", "user.name", "Test User");
+    writeFileSync(join(subDir, "sub.ts"), "const s = 1;\n");
+    gitCmd(subDir, "add", "sub.ts");
+    gitCmd(subDir, "commit", "-m", "init sub");
+
+    gitCmd(dir, "-c", "protocol.file.allow=always", "submodule", "add", "./sub", "sub");
+    gitCmd(dir, "commit", "-m", "chore: add submodule");
+
+    writeFileSync(join(subDir, "sub.ts"), "const s = 2;\n");
+    gitCmd(subDir, "add", "sub.ts");
+    gitCmd(subDir, "commit", "-m", "advance sub");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "chore(submodules): advance pointer", files: ["sub"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    const show = await spawnGitAsync(dir, ["log", "-1", "--name-only", "--pretty=format:"]);
+    expect(show.stdout).toContain("sub");
+  });
 });
 
 // ---------------------------------------------------------------------------

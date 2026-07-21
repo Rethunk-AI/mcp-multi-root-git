@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { parseGitSubmodulePaths, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { condensePushOutput } from "./push-output.js";
@@ -69,7 +69,9 @@ const DryRunSchema = z
 /**
  * True when `path` would stage the whole tree or a directory (not a single file).
  * Rejects `.`, `./`, paths resolving to gitTop, trailing-slash directory forms,
- * and on-disk directories.
+ * and on-disk directories. A checked-out submodule is a directory on disk but a
+ * single gitlink pathspec to git, so submodule paths (per `.gitmodules`) are
+ * exempted from the on-disk directory check.
  */
 function isWholeTreeOrDirectoryPathspec(path: string, gitTop: string): boolean {
   const t = path.trim();
@@ -78,6 +80,10 @@ function isWholeTreeOrDirectoryPathspec(path: string, gitTop: string): boolean {
 
   const abs = resolvePathForRepo(path, gitTop);
   if (resolve(abs) === resolve(gitTop)) return true;
+
+  if (parseGitSubmodulePaths(gitTop).some((p) => resolve(join(gitTop, p)) === resolve(abs))) {
+    return false;
+  }
 
   try {
     if (existsSync(abs) && statSync(abs).isDirectory()) return true;
