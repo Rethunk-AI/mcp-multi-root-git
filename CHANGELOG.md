@@ -4,9 +4,20 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-07-21
+
 ### Changed
 
 - **`git_push` / `batch_commit` `push: "after"`** — successful pushes now condense git output to the state-bearing lines (destination, ref updates, new branch/tag, `remote:` banners, `-u` tracking notice) plus an omitted-line count; pre-push hook noise (test runs, package installs) no longer floods the tool result ([#17](https://github.com/Rethunk-AI/mcp-multi-root-git/issues/17)). Both streams are now merged before filtering, so ref-update lines on stderr survive a noisy hook stdout. Failure output is unchanged (full detail).
+
+### Fixed
+
+- **`batch_commit` submodule pointer bumps** — the directory-pathspec guard rejected checked-out submodule paths (a gitlink to git, but an on-disk directory to `statSync`) as `invalid_paths` ([#18](https://github.com/Rethunk-AI/mcp-multi-root-git/issues/18)). Paths matching a `.gitmodules` entry are now staged as the single atomic pathspec they are.
+
+### Security
+
+- **`parseGitSubmodulePaths` TOCTOU** — the `.gitmodules` regular-file check and the subsequent read used two separate filesystem calls on the same path; both now go through one file descriptor (`open` with `O_NOFOLLOW`, `fstat`, then read), closing the race window (CodeQL `js/file-system-race`).
+- **Line-range staging temp patch file** — the scratch patch file written under the OS temp dir during hunk-level `batch_commit` staging used a predictable name and a non-exclusive write, allowing a symlink/pre-existing-file race; it's now an unguessable (`crypto.randomUUID()`) name created with exclusive-create (`wx`) and owner-only permissions (CodeQL `js/insecure-temporary-file`).
 
 ## [4.0.0] — 2026-07-18
 
@@ -202,7 +213,7 @@ Security-hardening and correctness release surfaced by a full-repo critical revi
 - **`batch_commit` linked worktrees** — hunk-level staging wrote its scratch patch under `${gitTop}/.git/`, which fails with `ENOTDIR` in a linked worktree (where `.git` is a file). The scratch path is now resolved via `git rev-parse --absolute-git-dir`, correct for both normal repos and worktrees.
 - **`batch_commit` dry run** — preview cleanup ran an unconditional `git reset HEAD --` over every touched path, silently unstaging work the caller had staged before invoking. A pre-staged snapshot is now taken first; cleanup resets only paths the dry run itself staged.
 - **`git_stash_list` index** — `index` was taken from the loop counter, so a malformed entry dropped by the parse guard shifted every later index and `git_stash_apply` could target the wrong stash. The index is now parsed from the canonical `stash@{N}` ref.
-- **`git_diff_summary` rename parsing** — the new path of a rename whose path contained the substring ` b/` was mis-reported because the greedy `diff --git` header regex split at the wrong point; the authoritative `rename to` body line is now used.
+- **`git_diff_summary` rename parsing** — the new path of a rename whose path contained the substring `b/` was mis-reported because the greedy `diff --git` header regex split at the wrong point; the authoritative `rename to` body line is now used.
 - **`.gitmodules` parser** — `parseGitSubmodulePaths` matched any `path =` line regardless of INI section and ignored comments; it now tracks `[submodule]` sections and strips `;`/`#` comments.
 - **`git_inventory` / `git_parity` v3 JSON** — `workspace_root` field corrected to `workspaceRoot` (camelCase), completing the v3 contract rename already applied to `git_log`.
 
@@ -227,7 +238,7 @@ Bug-fix and documentation release; includes one new `git_log` output format.
 - **`git_stash_list`**: stash message containing `|` caused the SHA field to be parsed as a mid-message fragment; SHA is now always the last pipe-separated field.
 - **`batch_commit`**: deleted tracked files (missing on disk) could not be staged; now staged via `git rm --cached`. Combining `{ path, lines }` with a deleted file is validated as an error.
 - **`batch_commit` hunk-level staging**: `newCount=0` pure-deletion hunks were excluded from line ranges that included the deletion point (`hunkEnd` was `newStart-1`); now `hunkEnd = newStart` for zero-count hunks.
-- **`git_diff_summary`**: diff header regex mis-parsed file paths containing ` b/` (e.g. `src/b/file.ts`), reporting wrong path and zero stats; now uses midpoint-symmetry split for non-renames, falls back to regex for renames.
+- **`git_diff_summary`**: diff header regex mis-parsed file paths containing `b/` (e.g. `src/b/file.ts`), reporting wrong path and zero stats; now uses midpoint-symmetry split for non-renames, falls back to regex for renames.
 - **`git_diff_summary`**: `git diff --stat` bar-graph character counting is scaled to terminal width and under-reports for large files; replaced with `git diff --numstat` for exact addition/deletion counts.
 - **`git_cherry_pick`**: branch deletion after cherry-pick now uses patch-id equivalence by default so source branches with differing SHAs but identical content are correctly detected as merged. Pass `strictMergedRefEquality: true` for strict SHA-reachability semantics.
 - **`parseGitSubmodulePaths`**: non-regular files at `.gitmodules` (character devices, sockets — common in Claude Code / sandbox environments) are now rejected via `lstatSync().isFile()` before `readFileSync`, preventing `EACCES` errors.
