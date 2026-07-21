@@ -19,7 +19,7 @@
       ]
     },
     "format": {
-      "default": "markdown",
+      "default": "json",
       "type": "string",
       "enum": [
         "markdown",

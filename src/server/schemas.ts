@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { MAX_INVENTORY_ROOTS_DEFAULT } from "./inventory.js";
 
-const FormatSchema = z.enum(["markdown", "json"]).optional().default("markdown");
+const FormatSchema = z.enum(["markdown", "json"]).optional().default("json");
 
 /** Max entries when `root` is an array (matches `git_inventory` `maxRoots` hard cap). */
 export const MAX_ROOT_PATHS = 256;

@@ -104,7 +104,7 @@ describe("git_log execute handler", () => {
     addCommit(dir, "x.txt", "chore: markdown test");
 
     const run = captureTool(registerGitLogTool);
-    const text = await run({ root: dir, since: SINCE_WIDE });
+    const text = await run({ root: dir, since: SINCE_WIDE, format: "markdown" });
     expect(text).toContain("chore: markdown test");
   });
 

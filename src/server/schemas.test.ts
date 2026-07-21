@@ -18,9 +18,9 @@ describe("MAX_ROOT_PATHS", () => {
 });
 
 describe("WorkspacePickSchema", () => {
-  test("defaults format to markdown", () => {
+  test("defaults format to json", () => {
     const parsed = WorkspacePickSchema.parse({});
-    expect(parsed.format).toBe("markdown");
+    expect(parsed.format).toBe("json");
     expect(parsed.workspaceRoot).toBeUndefined();
   });
 
@@ -35,9 +35,9 @@ describe("WorkspacePickSchema", () => {
 });
 
 describe("RootPickSchema", () => {
-  test("defaults format to markdown when root omitted", () => {
+  test("defaults format to json when root omitted", () => {
     const parsed = RootPickSchema.parse({});
-    expect(parsed.format).toBe("markdown");
+    expect(parsed.format).toBe("json");
     expect(parsed.root).toBeUndefined();
   });
 

@@ -271,9 +271,9 @@ export function registerGitLogTool(server: FastMCP): void {
       format: z
         .enum(["markdown", "json", "oneline"])
         .optional()
-        .default("markdown")
+        .default("json")
         .describe(
-          "`markdown` (default): headed sections per root. `json`: groups array. " +
+          "`json` (default): groups array. `markdown`: headed sections per root. " +
             "`oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
         ),
       since: z

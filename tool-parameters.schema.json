@@ -23,7 +23,7 @@
           ]
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -60,7 +60,7 @@
           ]
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -141,7 +141,7 @@
           ]
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -203,7 +203,7 @@
           ]
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -235,8 +235,8 @@
           ]
         },
         "format": {
-          "default": "markdown",
-          "description": "`markdown` (default): headed sections per root. `json`: groups array. `oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
+          "default": "json",
+          "description": "`json` (default): groups array. `markdown`: headed sections per root. `oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
           "type": "string",
           "enum": [
             "markdown",
@@ -306,7 +306,7 @@
           ]
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -379,7 +379,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -432,7 +432,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -493,7 +493,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -536,7 +536,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -572,7 +572,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -624,7 +624,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -735,7 +735,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -771,7 +771,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -836,7 +836,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -901,7 +901,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -933,7 +933,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -961,7 +961,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1006,7 +1006,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1048,7 +1048,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1100,7 +1100,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1138,7 +1138,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1172,7 +1172,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
@@ -1208,7 +1208,7 @@
           "type": "string"
         },
         "format": {
-          "default": "markdown",
+          "default": "json",
           "type": "string",
           "enum": [
             "markdown",
