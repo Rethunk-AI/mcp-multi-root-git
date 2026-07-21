@@ -263,13 +263,14 @@ async function stageFile(
     return { ok: false, error: "No hunks found in line range" };
   }
 
-  // Write partial patch to a temp file outside the git dir (avoids orphan files in .git)
-  const tempPatchFile = join(
-    tmpdir(),
-    `.mcp-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`,
-  );
+  // Write partial patch to a temp file outside the git dir (avoids orphan files in .git).
+  // Unguessable name + exclusive-create (fails rather than following/overwriting an
+  // existing path) closes the symlink/predictable-name race an attacker could otherwise
+  // race between path generation and write.
+  const { randomUUID } = await import("node:crypto");
+  const tempPatchFile = join(tmpdir(), `.mcp-patch-${randomUUID()}.patch`);
   const { writeFileSync, unlinkSync } = await import("node:fs");
-  writeFileSync(tempPatchFile, partialPatch, "utf8");
+  writeFileSync(tempPatchFile, partialPatch, { encoding: "utf8", mode: 0o600, flag: "wx" });
 
   const applyResult = await spawnGitAsync(gitTop, ["apply", "--cached", tempPatchFile]);
 
