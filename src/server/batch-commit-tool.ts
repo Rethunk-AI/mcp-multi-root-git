@@ -10,7 +10,7 @@ import { ERROR_CODES } from "./error-codes.js";
 import { parseGitSubmodulePaths, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { condensePushOutput } from "./push-output.js";
+import { condenseCommitOutput, condensePushOutput } from "./push-output.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -351,8 +351,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "Each entry stages its files then commits. Unrelated pre-staged index paths " +
       "are temporarily unstaged around the commit so they are not included " +
       "(hunk-level staging is preserved — pathspec commit mode is not used). " +
-      "Stops on first failure; mid-entry stage failures unstage that entry's " +
-      "already-staged paths. " +
+      "Stops on first failure (see `files` for mid-entry rollback). " +
       'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
       readOnlyHint: false,
@@ -588,7 +587,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
 
         // --- Extract SHA from commit output ---
         const shaMatch = /\[[\w/.-]+\s+([0-9a-f]+)\]/.exec(commitResult.stdout);
-        const gitOutput = (commitResult.stdout || commitResult.stderr).trim();
+        const gitOutput = condenseCommitOutput(commitResult.stdout, commitResult.stderr);
         results.push({
           index: i,
           ok: true,

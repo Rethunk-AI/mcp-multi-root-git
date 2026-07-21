@@ -32,3 +32,34 @@ export function condensePushOutput(stdout: string, stderr: string): string {
   }
   return kept.join("\n").trim();
 }
+
+const COMMIT_KEEP_PATTERNS: RegExp[] = [
+  /^\s*\d+\s+files?\s+changed/, // diffstat summary ("2 files changed, 41 insertions(+), 2 deletions(-)")
+  /^\s*(create|delete) mode \d+ /, // new/removed file mode lines
+  /^\s*rename .+=>.+\(\d+%\)/, // rename detection
+];
+
+/**
+ * Condense successful-commit output for `batch_commit`.
+ *
+ * `git commit`'s own confirmation line (`[branch sha] subject`) restates data
+ * already returned as the separate `sha`/`message` fields, and pre-commit
+ * hooks inherit stdio the same way pre-push hooks do (`condensePushOutput`)
+ * — both are noise on the success path. Keep only the diffstat/mode/rename
+ * lines, which carry information not available elsewhere in the response.
+ * Failures must keep the full output, so callers only run this on success.
+ */
+export function condenseCommitOutput(stdout: string, stderr: string): string {
+  const lines = [stdout, stderr]
+    .join("\n")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+  const kept = lines.filter((line) => COMMIT_KEEP_PATTERNS.some((p) => p.test(line)));
+  const omitted = lines.length - kept.length;
+  if (omitted > 0) {
+    kept.push(
+      `(${omitted} line${omitted === 1 ? "" : "s"} of commit confirmation/hook output omitted)`,
+    );
+  }
+  return kept.join("\n").trim();
+}
