@@ -650,7 +650,7 @@ One `groups` entry per **contiguous run of lines last touched by the same commit
 - **Index isolation per commit.** Unrelated paths that were already staged before the call are temporarily unstaged around an **index-based** `git commit` so they are not included. Pathspec/`--only` mode is intentionally avoided — it commits from the worktree and would squash hunk-level (`{ path, lines }`) staging.
 - **Each commit entry is processed sequentially within the call.** The tool stages files, commits, then moves to the next entry. All entries within a single `batch_commit` call happen in one atomic MCP transaction.
 - **A single `batch_commit` call cannot be split across multiple MCP calls.** Do NOT attempt incremental staging like "call 1 with file A, then call 2 with file B hoping they stage together." Each call is independent — call 1's commit lands immediately; call 2's changes are a separate transaction.
-- **Failed entry stops the batch.** If staging or commit fails on entry N, the tool aborts and skips remaining entries. On mid-entry `stage_failed`, paths already staged for that entry are unstaged (`git restore --staged`). **Entries that succeeded before the failure remain committed** — they are not rolled back.
+- **Failed entry stops the batch.** If staging or commit fails on entry N, the tool aborts and skips remaining entries. Both `stage_failed` and `commit_failed` restore the exact pre-entry index snapshot via `read-tree` (not just a HEAD reset) — any unrelated paths staged before the call re-appear staged, and this entry's own files are unstaged. **Entries that succeeded before the failure remain committed** — they are not rolled back.
 - **Include all files for a logical change in a single `batch_commit` call.** Group related files in each commit entry, list them all in the `files` array, and include all necessary entries in the `commits` array.
 - **dryRun** uses path-scoped `diff --stat`, unstages between entries, and restores the full pre-call index via `write-tree`/`read-tree` (including overlapping pre-staged paths).
 - **Concurrent calls on the same repo serialize in-process.** Two overlapping `batch_commit` calls targeting the same git toplevel run one after another (in call order) within this server process — this does not protect against a second server process or a human running `git` concurrently against the same repo.
@@ -718,7 +718,7 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 | `invalid_paths` | A pathspec is `.`, the repo root, or a directory; an absolute path was passed (rejected outright); or a path could not be matched to git's canonical staged name after staging (never silently dropped). |
 | `invalid_line_range` | A `{path, lines}` entry has `from > to`. |
 | `stage_failed` | Staging failed. `git add` error for modified/new files; `git rm --cached` error for deleted files (e.g. path never tracked in HEAD); `{path, lines}` on a deleted file. |
-| `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected). |
+| `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected); the pre-entry index snapshot is restored (same rollback as `stage_failed`). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
 ### `batch_commit` — push error codes (`push.error` field)

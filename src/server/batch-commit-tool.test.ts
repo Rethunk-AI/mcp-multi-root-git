@@ -1346,6 +1346,46 @@ describe("batch_commit commit_failed and push errors", () => {
     expect(parsed.results[0]?.error).toBe("commit_failed");
   });
 
+  test("commit_failed from a rejected hook restores the pre-call index byte-identically (like stage_failed)", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.ts"), "const s = 0;\n");
+    gitCmd(dir, "add", "shared.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Pre-stage an edit to shared.ts that differs from HEAD — this is the
+    // "pre-call staged content" that must survive the hook rejection intact.
+    writeFileSync(join(dir, "shared.ts"), "const s = 1; // pre-staged\n");
+    gitCmd(dir, "add", "shared.ts");
+    const preStagedBlob = gitCmd(dir, "show", ":shared.ts");
+
+    mkdirSync(join(dir, ".git", "hooks"), { recursive: true });
+    const hook = join(dir, ".git", "hooks", "pre-commit");
+    writeFileSync(hook, "#!/bin/sh\necho hook-reject\nexit 1\n");
+    chmodSync(hook, 0o755);
+
+    writeFileSync(join(dir, "new.ts"), "const n = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: hook fail", files: ["new.ts"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("commit_failed");
+
+    // new.ts (this entry's own file) must be unstaged — unlike the pre-fix
+    // behavior where a commit_failed entry left its files staged.
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout).not.toContain("new.ts");
+
+    // shared.ts's index entry must be restored to the exact pre-call staged
+    // blob — the same byte-identical guarantee stage_failed already provides.
+    const restoredBlob = gitCmd(dir, "show", ":shared.ts");
+    expect(restoredBlob).toBe(preStagedBlob);
+  });
+
   test('push: "after" on detached HEAD returns push_detached_head', async () => {
     const { work } = makeRepoWithUpstream();
     const sha = gitCmd(work, "rev-parse", "HEAD").trim();

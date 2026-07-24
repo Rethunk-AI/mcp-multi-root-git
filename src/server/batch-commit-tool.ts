@@ -420,7 +420,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "Each entry stages its files then commits. Unrelated pre-staged index paths " +
       "are temporarily unstaged around the commit so they are not included " +
       "(hunk-level staging is preserved — pathspec commit mode is not used). " +
-      "Stops on first failure (see `files` for mid-entry rollback). " +
+      "Stops on first failure; stage_failed and commit_failed both restore the pre-entry index snapshot. " +
       "Concurrent calls on the same repo serialize in-process only (not cross-process). " +
       'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
@@ -687,17 +687,11 @@ export function registerBatchCommitTool(server: FastMCP): void {
 
           const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
           if (!commitResult.ok) {
-            // Restore unrelated staged paths even on failure so we don't leave the
-            // index worse than when we entered this entry.
-            if (indexSnap && unrelatedStaged.length > 0) {
-              await spawnGitAsync(gitTop, [
-                "restore",
-                `--source=${indexSnap}`,
-                "--staged",
-                "--",
-                ...unrelatedStaged,
-              ]);
-            }
+            // Restore the exact pre-entry index snapshot — same rollback as
+            // stage_failed — rather than only restoring the unrelated paths,
+            // so this entry's own staged files don't linger in the index
+            // either (e.g. after a pre-commit hook rejects the commit).
+            await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
             const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
             results.push({
               index: i,
