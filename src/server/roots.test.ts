@@ -6,8 +6,8 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { FastMCP } from "fastmcp";
 
 import { ERROR_CODES } from "./error-codes.js";
@@ -24,6 +24,23 @@ function fakeServer(fileRoots: string[] = []): FastMCP {
     addTool() {},
     addResource() {},
   } as unknown as FastMCP;
+}
+
+/** Multi-session fake server; each group gets its own optional `sessionId`. */
+function fakeServerWithSessions(groups: { roots: string[]; sessionId?: string }[]): FastMCP {
+  return {
+    sessions: groups.map((g) => ({
+      roots: g.roots.map((uri) => ({ uri })),
+      sessionId: g.sessionId,
+    })),
+    addTool() {},
+    addResource() {},
+  } as unknown as FastMCP;
+}
+
+function writePresets(dir: string, json: unknown): void {
+  mkdirSync(join(dir, ".rethunk"), { recursive: true });
+  writeFileSync(join(dir, ".rethunk", "git-mcp-presets.json"), JSON.stringify(json));
 }
 
 describe("resolveRootPathList", () => {
@@ -200,5 +217,146 @@ describe("root resolution via git_status", () => {
     expect(parsed.error).toBe(ERROR_CODES.ROOT_LIST_TOO_MANY);
     expect(parsed.max).toBe(MAX_ROOT_PATHS);
     expect(parsed.count).toBe(MAX_ROOT_PATHS + 1);
+  });
+});
+
+describe("wildcard root: gitTopLevel resolution + dedup", () => {
+  test("nested/overlapping MCP roots collapse to one git toplevel", async () => {
+    const a = mkTmpDir("wild-nested-a-");
+    gitInitMain(a);
+    const nested = join(a, "subdir");
+    mkdirSync(nested, { recursive: true });
+
+    const result = requireGitAndRoots(
+      fakeServer([`file://${a}`, `file://${nested}`]),
+      { root: "*" },
+      undefined,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([a]);
+  });
+
+  test("a non-git MCP root is preserved as-is (not silently dropped)", async () => {
+    const a = mkTmpDir("wild-nongit-a-");
+    const b = mkTmpDir("wild-nongit-b-");
+    gitInitMain(b);
+
+    const result = requireGitAndRoots(
+      fakeServer([`file://${a}`, `file://${b}`]),
+      { root: "*" },
+      undefined,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([a, b]);
+  });
+});
+
+describe("multi-root preset routing (resolveRootsForPreset)", () => {
+  test("matches the root whose preset entry's workspaceRootHint matches its basename", () => {
+    const g1 = mkTmpDir("preset-route-g1-");
+    const g2 = mkTmpDir("preset-route-g2-");
+    gitInitMain(g1);
+    gitInitMain(g2);
+    writePresets(g2, {
+      schemaVersion: "1",
+      presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: basename(g2) } },
+    });
+
+    const result = requireGitAndRoots(fakeServer([`file://${g1}`, `file://${g2}`]), {}, "p");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([g2]);
+    expect(result.warning).toBeUndefined();
+  });
+
+  test("per-root isolation: an unparseable presets.json on an irrelevant root does not abort the search", () => {
+    const broken = mkTmpDir("preset-route-broken-");
+    const g2 = mkTmpDir("preset-route-ok-");
+    gitInitMain(broken);
+    gitInitMain(g2);
+    mkdirSync(join(broken, ".rethunk"), { recursive: true });
+    writeFileSync(join(broken, ".rethunk", "git-mcp-presets.json"), "{not valid json");
+    writePresets(g2, { schemaVersion: "1", presets: { p: { nestedRoots: ["pkg"] } } });
+
+    const result = requireGitAndRoots(fakeServer([`file://${broken}`, `file://${g2}`]), {}, "p");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([g2]);
+  });
+
+  test("workspaceRootHint mismatch surfaces an explicit warning instead of a silent fallback", () => {
+    const g1 = mkTmpDir("preset-hint-mismatch-g1-");
+    const g2 = mkTmpDir("preset-hint-mismatch-g2-");
+    gitInitMain(g1);
+    gitInitMain(g2);
+    writePresets(g1, {
+      schemaVersion: "1",
+      presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: "no-such-root-anywhere" } },
+    });
+
+    const result = requireGitAndRoots(fakeServer([`file://${g1}`, `file://${g2}`]), {}, "p");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([g1]);
+    expect(result.warning).toEqual({
+      code: "workspace_root_hint_mismatch",
+      preset: "p",
+      hint: "no-such-root-anywhere",
+    });
+  });
+});
+
+describe("listFileRoots session scoping", () => {
+  test("root '*' scopes to the calling session when sessionId matches a live session", () => {
+    const a = mkTmpDir("session-scope-a-");
+    const b = mkTmpDir("session-scope-b-");
+    gitInitMain(a);
+    gitInitMain(b);
+
+    const server = fakeServerWithSessions([
+      { roots: [`file://${a}`], sessionId: "session-a" },
+      { roots: [`file://${b}`], sessionId: "session-b" },
+    ]);
+
+    const result = requireGitAndRoots(server, { root: "*" }, undefined, "session-a");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([a]);
+  });
+
+  test("falls back to the aggregate across all sessions when sessionId has no match", () => {
+    const a = mkTmpDir("session-scope-fallback-a-");
+    const b = mkTmpDir("session-scope-fallback-b-");
+    gitInitMain(a);
+    gitInitMain(b);
+
+    const server = fakeServerWithSessions([
+      { roots: [`file://${a}`], sessionId: "session-a" },
+      { roots: [`file://${b}`], sessionId: "session-b" },
+    ]);
+
+    const result = requireGitAndRoots(server, { root: "*" }, undefined, "unknown-session");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([a, b]);
+  });
+
+  test("falls back to the aggregate across all sessions when sessionId is omitted (stdio transport)", () => {
+    const a = mkTmpDir("session-scope-omitted-a-");
+    const b = mkTmpDir("session-scope-omitted-b-");
+    gitInitMain(a);
+    gitInitMain(b);
+
+    const server = fakeServerWithSessions([
+      { roots: [`file://${a}`], sessionId: "session-a" },
+      { roots: [`file://${b}`], sessionId: "session-b" },
+    ]);
+
+    const result = requireGitAndRoots(server, { root: "*" }, undefined);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.roots).toEqual([a, b]);
   });
 });

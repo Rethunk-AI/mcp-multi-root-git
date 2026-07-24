@@ -5,7 +5,7 @@ import type { FastMCP } from "fastmcp";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { gateGit, gitTopLevel } from "./git.js";
-import { loadPresetsFromGitTop, presetLoadErrorPayload } from "./presets.js";
+import { loadPresetsFromGitTop } from "./presets.js";
 import { MAX_ROOT_PATHS } from "./schemas.js";
 
 function uriToPath(uri: string): string | null {
@@ -17,8 +17,16 @@ function uriToPath(uri: string): string | null {
   }
 }
 
-function listFileRoots(server: FastMCP): string[] {
-  const sessions = server.sessions;
+/**
+ * File roots for the current call. When `sessionId` matches a live session
+ * (HTTP transports), scope to just that session's roots; otherwise (stdio,
+ * or no matching session found) fall back to the prior aggregate-across-all-
+ * sessions behavior.
+ */
+function listFileRoots(server: FastMCP, sessionId?: string): string[] {
+  const allSessions = server.sessions;
+  const scoped = sessionId ? allSessions.filter((s) => s.sessionId === sessionId) : [];
+  const sessions = scoped.length > 0 ? scoped : allSessions;
   const paths: string[] = [];
   const seen = new Set<string>();
   for (const session of sessions) {
@@ -42,7 +50,9 @@ function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
   if (!normHint) return true;
   if (normRoot === normHint) return true;
   if (normRoot.endsWith(`/${normHint}`)) return true;
-  return basename(rootPath) === h;
+  // Last resort: compare against the normalized hint too, so a trailing
+  // slash/backslash on a single-segment hint (e.g. "myrepo/") still matches.
+  return basename(rootPath) === normHint;
 }
 
 /**
@@ -55,7 +65,7 @@ function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
 export type RootPickArgs = { root?: string | string[] };
 
 type ResolveRootsResult =
-  | { ok: true; roots: string[] }
+  | { ok: true; roots: string[]; warning?: Record<string, unknown> }
   | { ok: false; error: Record<string, unknown> };
 
 /**
@@ -104,26 +114,36 @@ function defaultRoots(fileRoots: string[]): ResolveRootsResult {
 /**
  * When a preset name is requested and multiple MCP roots exist, pick the first root
  * whose git toplevel loads a preset file containing that name.
+ *
+ * A root whose preset file is missing or fails to parse never aborts this search —
+ * it may simply be irrelevant to this preset name — it is just skipped in favor of
+ * the remaining candidates. When a matching preset entry exists but its
+ * `workspaceRootHint` fails to match any candidate root, the silent fallback to
+ * `defaultRoots` is annotated with an explicit `warning` instead of looking
+ * identical to "preset not found anywhere".
  */
-function resolveRootsForPreset(server: FastMCP, presetName: string): ResolveRootsResult {
-  const fileRoots = listFileRoots(server);
+function resolveRootsForPreset(
+  server: FastMCP,
+  presetName: string,
+  sessionId?: string,
+): ResolveRootsResult {
+  const fileRoots = listFileRoots(server, sessionId);
   if (fileRoots.length <= 1) {
     return defaultRoots(fileRoots);
   }
   const matches: string[] = [];
+  let hintMismatch: { hint: string } | undefined;
   for (const r of fileRoots) {
     const top = gitTopLevel(r);
     if (!top) continue;
     const loaded = loadPresetsFromGitTop(top);
-    if (!loaded.ok && loaded.reason !== "missing") {
-      return { ok: false, error: presetLoadErrorPayload(top, loaded) };
-    }
     if (!loaded.ok) continue;
     const entry = loaded.data[presetName];
     if (!entry) continue;
     const hint = entry.workspaceRootHint?.trim();
-    if (hint) {
-      if (!pathMatchesWorkspaceRootHint(r, hint)) continue;
+    if (hint && !pathMatchesWorkspaceRootHint(r, hint)) {
+      hintMismatch = { hint };
+      continue;
     }
     matches.push(r);
   }
@@ -131,18 +151,35 @@ function resolveRootsForPreset(server: FastMCP, presetName: string): ResolveRoot
   if (pick !== undefined) {
     return { ok: true, roots: [pick] };
   }
-  return defaultRoots(fileRoots);
+  const fallback = defaultRoots(fileRoots);
+  if (fallback.ok && hintMismatch) {
+    return {
+      ok: true,
+      roots: fallback.roots,
+      warning: {
+        code: "workspace_root_hint_mismatch",
+        preset: presetName,
+        hint: hintMismatch.hint,
+      },
+    };
+  }
+  return fallback;
 }
 
 type GitAndRootsResult =
-  | { ok: true; roots: string[] }
+  | { ok: true; roots: string[]; warning?: Record<string, unknown> }
   | { ok: false; error: Record<string, unknown> };
 
-/** `gateGit` plus `root` resolution; shared fan-out tool and resource prelude. */
+/**
+ * `gateGit` plus `root` resolution; shared fan-out tool and resource prelude.
+ * `sessionId` (from the tool's `Context.sessionId`, HTTP transports only) scopes
+ * `"*"` / omitted-root MCP-file-root lookups to the calling session when known.
+ */
 export function requireGitAndRoots(
   server: FastMCP,
   args: RootPickArgs,
   presetName: string | undefined,
+  sessionId?: string,
 ): GitAndRootsResult {
   const gg = gateGit();
   if (!gg.ok) {
@@ -159,7 +196,7 @@ export function requireGitAndRoots(
 
   const trimmed = root?.trim();
   if (trimmed === "*") {
-    const fileRoots = listFileRoots(server);
+    const fileRoots = listFileRoots(server, sessionId);
     if (fileRoots.length === 0) return defaultRoots(fileRoots);
     if (fileRoots.length > MAX_ROOT_PATHS) {
       return {
@@ -171,16 +208,27 @@ export function requireGitAndRoots(
         },
       };
     }
-    return { ok: true, roots: fileRoots };
+    // Same gitTopLevel resolution + Set dedup as resolveRootPathList, so two
+    // nested/overlapping MCP file roots that share a git toplevel collapse
+    // into one entry instead of double-counting the same repo.
+    const seen = new Set<string>();
+    const tops: string[] = [];
+    for (const r of fileRoots) {
+      const top = gitTopLevel(r) ?? r;
+      if (seen.has(top)) continue;
+      seen.add(top);
+      tops.push(top);
+    }
+    return { ok: true, roots: tops };
   }
   if (trimmed) {
     return { ok: true, roots: [resolve(trimmed)] };
   }
 
   if (presetName) {
-    return resolveRootsForPreset(server, presetName);
+    return resolveRootsForPreset(server, presetName, sessionId);
   }
-  return defaultRoots(listFileRoots(server));
+  return defaultRoots(listFileRoots(server, sessionId));
 }
 
 type SingleRepoResult =
@@ -195,13 +243,14 @@ type SingleRepoResult =
 export function requireSingleRepo(
   server: FastMCP,
   args: { workspaceRoot?: string },
+  sessionId?: string,
 ): SingleRepoResult {
   const gg = gateGit();
   if (!gg.ok) {
     return { ok: false, error: gg.body };
   }
   const ws = args.workspaceRoot?.trim();
-  const rootInput = ws ? resolve(ws) : (listFileRoots(server)[0] ?? process.cwd());
+  const rootInput = ws ? resolve(ws) : (listFileRoots(server, sessionId)[0] ?? process.cwd());
   const top = gitTopLevel(rootInput);
   if (!top)
     return { ok: false, error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: rootInput } };
