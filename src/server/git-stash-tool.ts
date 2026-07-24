@@ -17,7 +17,9 @@ export function registerGitStashApplyTool(server: FastMCP): void {
   server.addTool({
     name: "git_stash_apply",
     description:
-      "Apply or pop a git stash. `index` defaults to 0. `pop: true` removes stash after applying.",
+      "Apply or pop a git stash. `index` defaults to 0. `pop: true` removes stash after applying. " +
+      "On conflict, unlike git_merge/git_cherry_pick/git_revert, this never auto-aborts — the " +
+      "working tree is left exactly as git left it, with conflict markers in place.",
     annotations: {
       readOnlyHint: false,
       // pop:true deletes a stash entry — treat the tool as destructive for client filters.

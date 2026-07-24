@@ -8,12 +8,18 @@ import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+// SEAM (F1): add `RESET_NOT_ANCESTOR: "reset_not_ancestor"` to the Reset
+// section of error-codes.ts, then replace this local constant's use below
+// with `ERROR_CODES.RESET_NOT_ANCESTOR`.
+const RESET_NOT_ANCESTOR = "reset_not_ancestor";
+
 export function registerGitResetSoftTool(server: FastMCP): void {
   server.addTool({
     name: "git_reset_soft",
     description:
       "`git reset --soft <ref>`: moves HEAD back while keeping rewound changes staged. " +
-      "Use to re-split committed work. Refuses on a dirty tree.",
+      "Use to re-split committed work. Refuses on a dirty tree. Refuses when `ref` is not " +
+      "an ancestor of HEAD unless `force: true`.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -25,6 +31,13 @@ export function registerGitResetSoftTool(server: FastMCP): void {
         .min(1)
         .describe(
           "Commit to reset to: ancestor notation (`HEAD~1`, `HEAD~3`), branch name, or SHA.",
+        ),
+      force: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Skip the ancestor check and allow resetting to a ref that is not an ancestor of HEAD.",
         ),
     }),
     execute: async (args) => {
@@ -45,6 +58,35 @@ export function registerGitResetSoftTool(server: FastMCP): void {
             "git_reset_soft requires a clean working tree. " +
             "Commit or stash pending changes first.",
         });
+      }
+
+      // Refuse to reset onto a ref that is not an ancestor of HEAD unless
+      // force is set — otherwise a soft reset silently discards history
+      // (HEAD moves sideways/forward instead of just uncommitting). Only
+      // gate on refs that actually resolve; an unresolvable ref falls through
+      // to the `git reset --soft` call below, which reports `reset_failed`.
+      if (!args.force) {
+        const refSha = await spawnGitAsync(gitTop, [
+          "rev-parse",
+          "--verify",
+          "--quiet",
+          `${args.ref}^{commit}`,
+        ]);
+        if (refSha.ok) {
+          const ancestorCheck = await spawnGitAsync(gitTop, [
+            "merge-base",
+            "--is-ancestor",
+            args.ref,
+            "HEAD",
+          ]);
+          if (!ancestorCheck.ok) {
+            return jsonRespond({
+              error: RESET_NOT_ANCESTOR,
+              ref: args.ref,
+              detail: "ref is not an ancestor of HEAD. Pass force: true to reset anyway.",
+            });
+          }
+        }
       }
 
       // Probe HEAD before reset for the response.
