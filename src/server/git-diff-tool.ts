@@ -23,18 +23,18 @@ const MAX_PATHS = 256;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build the diff args array from parameters. */
-export function buildDiffArgs(opts: {
+/**
+ * Build just the range-selecting args (`base..head` or `--staged`), with no
+ * `diff` subcommand prefix and no `unified`/`paths` handling — the shared
+ * canonical range shape reused by both `git_diff` and `git_diff_summary`.
+ * Docs: `staged` is ignored when `base` is provided; `head` is used only
+ * when `base` is set. Prefer base..head over --staged whenever base is set.
+ */
+export function buildDiffRangeArgs(opts: {
   base?: string;
   head?: string;
-  paths?: string[];
-  unified?: number;
   staged?: boolean;
 }): { ok: true; args: string[] } | { ok: false; error: string } {
-  const args: string[] = ["diff"];
-
-  // Docs: `staged` is ignored when `base` is provided; `head` is used only
-  // when `base` is set. Prefer base..head over --staged whenever base is set.
   if (opts.base) {
     const baseStr = opts.base.trim();
     const headStr = opts.head?.trim() || "HEAD";
@@ -43,11 +43,27 @@ export function buildDiffArgs(opts: {
       return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
     }
 
-    args.push(`${baseStr}..${headStr}`);
-  } else if (opts.staged === true) {
-    args.push("--staged");
+    return { ok: true, args: [`${baseStr}..${headStr}`] };
+  }
+  if (opts.staged === true) {
+    return { ok: true, args: ["--staged"] };
   }
   // head without base is ignored (matches docs: head used only when base is set)
+  return { ok: true, args: [] };
+}
+
+/** Build the full `git diff` args array from parameters. */
+export function buildDiffArgs(opts: {
+  base?: string;
+  head?: string;
+  paths?: string[];
+  unified?: number;
+  staged?: boolean;
+}): { ok: true; args: string[] } | { ok: false; error: string } {
+  const rangeResult = buildDiffRangeArgs(opts);
+  if (!rangeResult.ok) return rangeResult;
+
+  const args: string[] = ["diff", ...rangeResult.args];
 
   // Apply unified context width if specified
   if (typeof opts.unified === "number") {
@@ -126,7 +142,7 @@ export function registerGitDiffTool(server: FastMCP): void {
     name: "git_diff",
     description:
       "Raw diff text for scoped file(s) or range. `staged: true` for staged changes, " +
-      "`base`/`head` for revision ranges, `path`/`paths` to scope, `unified` for context lines. " +
+      "`base`/`head` for revision ranges, `paths` to scope, `unified` for context lines. " +
       "Output is capped by `maxBytes` (default 512000) to bound agent context.",
     annotations: {
       title: "Git Diff",
@@ -146,17 +162,11 @@ export function registerGitDiffTool(server: FastMCP): void {
         .describe(
           'Head ref (e.g. "feature-branch"). Ancestor notation is accepted (e.g. "HEAD~3", "main^2"). Defaults to HEAD. Used only when `base` is set.',
         ),
-      path: z
-        .string()
-        .optional()
-        .describe("Scope to a single file. Unioned with `paths` if both given."),
       paths: z
         .array(z.string())
         .max(MAX_PATHS)
         .optional()
-        .describe(
-          `Scope to multiple files (must be within repo root, max ${MAX_PATHS}). Unioned with \`path\` if both given.`,
-        ),
+        .describe(`Scope to one or more files (must be within repo root, max ${MAX_PATHS}).`),
       staged: z
         .boolean()
         .optional()
@@ -185,11 +195,8 @@ export function registerGitDiffTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const gitTop = pre.gitTop;
 
-      // Union path + paths, trim, dedup
+      // Trim + dedup paths, preserving order
       const rawPaths: string[] = [];
-      if (args.path && typeof args.path === "string" && args.path.trim()) {
-        rawPaths.push(args.path.trim());
-      }
       if (Array.isArray(args.paths)) {
         for (const p of args.paths) {
           if (typeof p === "string" && p.trim()) {
@@ -197,7 +204,6 @@ export function registerGitDiffTool(server: FastMCP): void {
           }
         }
       }
-      // Dedup preserving order
       const dedupedPaths = [...new Set(rawPaths)];
 
       // Confine each path within the repo

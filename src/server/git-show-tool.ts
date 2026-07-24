@@ -23,7 +23,6 @@ const MAX_PATHS = 256;
 
 type ShowJson = {
   ref: string;
-  path?: string;
   paths?: string[];
   stat?: boolean;
   message: string;
@@ -45,16 +44,14 @@ type ShowJson = {
 async function runGitShow(opts: {
   top: string;
   ref: string;
-  path?: string;
   paths?: string[];
   stat?: boolean;
   maxBytes: number;
 }): Promise<ShowJson | { error: string; detail?: string }> {
-  const { top, ref, path, paths, stat, maxBytes } = opts;
+  const { top, ref, paths, stat, maxBytes } = opts;
 
-  // Merge single path + paths array into a unified list (deduped, order preserved).
+  // Dedup paths, preserving order.
   const effectivePaths: string[] = [];
-  if (path) effectivePaths.push(path);
   if (paths) {
     for (const p of paths) {
       if (!effectivePaths.includes(p)) effectivePaths.push(p);
@@ -149,10 +146,7 @@ async function runGitShow(opts: {
     ref,
     message,
   };
-  // Reflect single legacy path (for backward-compat) and new paths[] in result.
-  if (path && !paths) {
-    result.path = path;
-  } else if (effectivePaths.length > 0) {
+  if (effectivePaths.length > 0) {
     result.paths = effectivePaths;
   }
   if (stat) {
@@ -177,7 +171,7 @@ export function registerGitShowTool(server: FastMCP): void {
   server.addTool({
     name: "git_show",
     description:
-      "Inspect commit content by ref/SHA. Returns commit message and diff (or --stat diffstat when stat:true). Optionally filter to specific paths via path or paths[].",
+      "Inspect commit content by ref/SHA. Returns commit message and diff (or --stat diffstat when stat:true). Optionally filter to specific paths via `paths[]`.",
     annotations: {
       title: "Git Show",
       readOnlyHint: true,
@@ -190,19 +184,11 @@ export function registerGitShowTool(server: FastMCP): void {
         .describe(
           'Commit reference (SHA, branch, tag, or ancestor notation like "HEAD~3", "main^2").',
         ),
-      path: z
-        .string()
-        .optional()
-        .describe(
-          "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
-        ),
       paths: z
         .array(z.string())
         .max(MAX_PATHS)
         .optional()
-        .describe(
-          `Optional list of file paths (max ${MAX_PATHS}) to filter the shown diff/stat. Merged with \`path\` when both are provided.`,
-        ),
+        .describe(`Optional list of file paths (max ${MAX_PATHS}) to filter the shown diff/stat.`),
       stat: z
         .boolean()
         .optional()
@@ -229,12 +215,6 @@ export function registerGitShowTool(server: FastMCP): void {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 
-      if (args.path !== undefined) {
-        if (!validateRepoPath(args.path, top).underTop) {
-          return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
-        }
-      }
-
       if (Array.isArray(args.paths)) {
         for (const p of args.paths) {
           if (!validateRepoPath(p, top).underTop) {
@@ -246,7 +226,6 @@ export function registerGitShowTool(server: FastMCP): void {
       const result = await runGitShow({
         top,
         ref: args.ref,
-        path: args.path,
         paths: args.paths,
         stat: args.stat,
         maxBytes: typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES,

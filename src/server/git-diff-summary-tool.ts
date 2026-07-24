@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
-import { isSafeGitCommitIsh, isSafeGitRangeToken } from "./git-refs.js";
+import { buildDiffRangeArgs, rangeLabel } from "./git-diff-tool.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -194,69 +194,6 @@ export function matchesAnyPattern(filePath: string, patterns: string[]): boolean
   return false;
 }
 
-/** Build the diff args array from the `range` parameter. */
-export function buildDiffArgs(
-  range: string | undefined,
-): { ok: true; args: string[] } | { ok: false; error: string } {
-  if (range === undefined || range === "") {
-    return { ok: true, args: [] };
-  }
-  const normalized = range.trim().toLowerCase();
-  if (normalized === "staged" || normalized === "cached") {
-    return { ok: true, args: ["--cached"] };
-  }
-  if (normalized === "head") {
-    return { ok: true, args: ["HEAD"] };
-  }
-
-  // "A..B", "A...B", or a single ref (ancestor notation like "HEAD~3" accepted
-  // on any endpoint) — delegates to the shared range validator.
-  const trimmed = range.trim();
-  if (!isSafeGitRangeToken(trimmed)) {
-    return { ok: false, error: ERROR_CODES.UNSAFE_RANGE_TOKEN };
-  }
-  return { ok: true, args: [trimmed] };
-}
-
-/**
- * Same as `buildDiffArgs`, but first checks whether `range` is a literal ref
- * (branch/tag/commit-ish) that exists in `gitTop` — e.g. a branch actually
- * named "staged" or "head". A real ref of that exact name takes precedence
- * over the synthetic `staged`/`cached`/`head` magic strings so it is never
- * shadowed and unreachable. When no such literal ref exists, falls back to
- * `buildDiffArgs`'s normal magic-string handling.
- */
-export async function resolveDiffRangeArgs(
-  gitTop: string,
-  range: string | undefined,
-): Promise<{ ok: true; args: string[] } | { ok: false; error: string }> {
-  if (range !== undefined && range !== "") {
-    const trimmed = range.trim();
-    const normalized = trimmed.toLowerCase();
-    if (normalized === "staged" || normalized === "cached" || normalized === "head") {
-      if (isSafeGitCommitIsh(trimmed)) {
-        const refCheck = await spawnGitAsync(gitTop, [
-          "rev-parse",
-          "--verify",
-          "--quiet",
-          `${trimmed}^{commit}`,
-        ]);
-        if (refCheck.ok) {
-          return { ok: true, args: [trimmed] };
-        }
-      }
-    }
-  }
-  return buildDiffArgs(range);
-}
-
-/** Human-readable label for the range. */
-function rangeLabel(range: string | undefined, diffArgs: string[]): string {
-  if (!range || range === "") return "unstaged changes";
-  if (diffArgs[0] === "--cached") return "staged changes";
-  return range;
-}
-
 /** Build the `git_diff_summary` JSON payload from the already-assembled per-file diffs. */
 function buildGitDiffSummaryJson(opts: {
   rangeStr: string;
@@ -299,20 +236,30 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
     name: "git_diff_summary",
     description:
       "Structured diff viewer: per-file diffs with counts, truncated to configurable limits. " +
-      "Noise files (lock files, dist, etc.) excluded by default. Use `range` to target staged, HEAD, or a revision range.",
+      "Noise files (lock files, dist, etc.) excluded by default. Use `staged`/`base`/`head` to target staged, a revision range, or (default) unstaged changes.",
     annotations: {
       title: "Git Diff Summary",
       readOnlyHint: true,
       openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
-      range: z
+      base: z
         .string()
         .optional()
         .describe(
-          'Diff range. Examples: "staged", "HEAD~3..HEAD", "main...feature". ' +
-            "Default: unstaged changes.",
+          'Base ref (e.g. "main"). Ancestor notation is accepted (e.g. "HEAD~3", "main^2"). Omit for unstaged changes.',
         ),
+      head: z
+        .string()
+        .optional()
+        .describe(
+          'Head ref (e.g. "feature-branch"). Ancestor notation is accepted (e.g. "HEAD~3", "main^2"). Defaults to HEAD. Used only when `base` is set.',
+        ),
+      staged: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Show staged changes (`git diff --staged`). Ignored if `base` is set."),
       fileFilter: z
         .string()
         .optional()
@@ -343,8 +290,12 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const gitTop = pre.gitTop;
 
-      // --- Build git diff args (real refs of the same name beat staged/cached/head magic strings) ---
-      const diffArgsResult = await resolveDiffRangeArgs(gitTop, args.range);
+      // --- Build git diff range args (canonical explicit base/head/staged shape, shared with git_diff) ---
+      const diffArgsResult = buildDiffRangeArgs({
+        base: args.base,
+        head: args.head,
+        staged: args.staged,
+      });
       if (!diffArgsResult.ok) {
         return jsonRespond({ error: diffArgsResult.error });
       }
@@ -440,7 +391,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         });
       }
 
-      const rangeStr = rangeLabel(args.range, diffArgs);
+      const rangeStr = rangeLabel({ base: args.base, head: args.head, staged: args.staged });
       const summary = buildGitDiffSummaryJson({
         rangeStr,
         totalFiles,

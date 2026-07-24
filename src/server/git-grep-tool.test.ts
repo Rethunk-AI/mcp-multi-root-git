@@ -45,10 +45,10 @@ describe("git_grep_tool", () => {
         format: "json",
       }),
     ) as {
-      results: Array<{ commits?: Array<{ sha: string; subject: string }>; error?: string }>;
+      groups: Array<{ commits?: Array<{ sha: string; subject: string }>; error?: string }>;
     };
 
-    const group = parsed.results[0];
+    const group = parsed.groups[0];
     expect(group?.error).toBeUndefined();
     expect(group?.commits?.length).toBeGreaterThanOrEqual(2);
     const subjects = (group?.commits ?? []).map((c) => c.subject);
@@ -71,9 +71,9 @@ describe("git_grep_tool", () => {
         pickaxe: { mode: "G", term: "beta_[0-9]+" },
         format: "json",
       }),
-    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
+    ) as { groups: Array<{ commits?: Array<{ subject: string }> }> };
 
-    const subjects = (parsed.results[0]?.commits ?? []).map((c) => c.subject);
+    const subjects = (parsed.groups[0]?.commits ?? []).map((c) => c.subject);
     expect(subjects).toContain("feat: beta");
     expect(subjects).not.toContain("feat: alpha");
   });
@@ -89,11 +89,11 @@ describe("git_grep_tool", () => {
         pickaxe: { mode: "S", term: "nonexistent-term-xyz" },
         format: "json",
       }),
-    ) as { results: Array<{ commits?: unknown[]; error?: string }> };
+    ) as { groups: Array<{ commits?: unknown[]; error?: string }> };
 
-    expect(parsed.results.length).toBe(1);
-    expect(parsed.results[0]?.error).toBeUndefined();
-    expect(parsed.results[0]?.commits).toEqual([]);
+    expect(parsed.groups.length).toBe(1);
+    expect(parsed.groups[0]?.error).toBeUndefined();
+    expect(parsed.groups[0]?.commits).toEqual([]);
   });
 
   test("maxMatches: truncates commit list and sets truncated: true", async () => {
@@ -112,9 +112,9 @@ describe("git_grep_tool", () => {
         maxMatches: 2,
         format: "json",
       }),
-    ) as { results: Array<{ commits?: unknown[]; truncated?: boolean }> };
+    ) as { groups: Array<{ commits?: unknown[]; truncated?: boolean }> };
 
-    const group = parsed.results[0];
+    const group = parsed.groups[0];
     expect(group?.commits?.length).toBe(2);
     expect(group?.truncated).toBe(true);
   });
@@ -147,9 +147,9 @@ describe("git_grep_tool", () => {
         paths: ["a.txt"],
         format: "json",
       }),
-    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
+    ) as { groups: Array<{ commits?: Array<{ subject: string }> }> };
 
-    const subjects = (parsed.results[0]?.commits ?? []).map((c) => c.subject);
+    const subjects = (parsed.groups[0]?.commits ?? []).map((c) => c.subject);
     expect(subjects).toContain("feat: a");
     expect(subjects).not.toContain("feat: b");
   });
@@ -168,10 +168,10 @@ describe("git_grep_tool", () => {
         ref: earlySha,
         format: "json",
       }),
-    ) as { results: Array<{ commits?: unknown[] }> };
+    ) as { groups: Array<{ commits?: unknown[] }> };
 
     // The late-term commit is not reachable from the early tip.
-    expect(parsed.results[0]?.commits).toEqual([]);
+    expect(parsed.groups[0]?.commits).toEqual([]);
   });
 
   test("unsafe ref token rejected", async () => {
@@ -189,7 +189,7 @@ describe("git_grep_tool", () => {
     expect(result).toContain("unsafe_ref_token");
   });
 
-  test("multi-root fan-out returns one results entry per root", async () => {
+  test("multi-root fan-out returns one groups entry per root", async () => {
     const a = makeRepo();
     const b = makeRepo();
     addCommit(a, "a.txt", "needle-a\n", "feat: a");
@@ -198,9 +198,9 @@ describe("git_grep_tool", () => {
     const tool = captureTool(registerGitGrepTool);
     const parsed = JSON.parse(
       await tool({ root: [a, b], pickaxe: { mode: "S", term: "needle" }, format: "json" }),
-    ) as { results: Array<{ commits?: unknown[] }> };
-    expect(parsed.results).toHaveLength(2);
-    expect(parsed.results.every((r) => (r.commits?.length ?? 0) >= 1)).toBe(true);
+    ) as { groups: Array<{ commits?: unknown[] }> };
+    expect(parsed.groups).toHaveLength(2);
+    expect(parsed.groups.every((r) => (r.commits?.length ?? 0) >= 1)).toBe(true);
   });
 
   test("ignoreCase: false (default) is case-sensitive for G mode regex", async () => {
@@ -214,8 +214,8 @@ describe("git_grep_tool", () => {
         pickaxe: { mode: "G", term: "widget" },
         format: "json",
       }),
-    ) as { results: Array<{ commits?: unknown[] }> };
-    expect(caseSensitive.results[0]?.commits).toEqual([]);
+    ) as { groups: Array<{ commits?: unknown[] }> };
+    expect(caseSensitive.groups[0]?.commits).toEqual([]);
 
     const caseInsensitive = JSON.parse(
       await tool({
@@ -224,12 +224,12 @@ describe("git_grep_tool", () => {
         ignoreCase: true,
         format: "json",
       }),
-    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
-    const subjects = (caseInsensitive.results[0]?.commits ?? []).map((c) => c.subject);
+    ) as { groups: Array<{ commits?: Array<{ subject: string }> }> };
+    const subjects = (caseInsensitive.groups[0]?.commits ?? []).map((c) => c.subject);
     expect(subjects).toContain("feat: add Widget");
   });
 
-  test("path (singular) is unioned with paths, deduplicated", async () => {
+  test("paths array scopes to multiple files, deduplicated", async () => {
     const repo = makeRepo();
     addCommit(repo, "a.txt", "union-term\n", "feat: a");
     addCommit(repo, "b.txt", "union-term\n", "feat: b");
@@ -240,13 +240,12 @@ describe("git_grep_tool", () => {
       await tool({
         root: repo,
         pickaxe: { mode: "S", term: "union-term" },
-        path: "a.txt",
-        paths: ["b.txt", "a.txt"],
+        paths: ["b.txt", "a.txt", "a.txt"],
         format: "json",
       }),
-    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
+    ) as { groups: Array<{ commits?: Array<{ subject: string }> }> };
 
-    const subjects = (parsed.results[0]?.commits ?? []).map((c) => c.subject);
+    const subjects = (parsed.groups[0]?.commits ?? []).map((c) => c.subject);
     expect(subjects).toContain("feat: a");
     expect(subjects).toContain("feat: b");
     expect(subjects).not.toContain("feat: c");
@@ -285,11 +284,11 @@ describe("git_grep_tool", () => {
         format: "json",
       });
       const parsed = JSON.parse(result) as {
-        results: Array<{ error?: string; truncated?: boolean; commits?: unknown[] }>;
+        groups: Array<{ error?: string; truncated?: boolean; commits?: unknown[] }>;
       };
-      expect(parsed.results[0]?.error).toBeUndefined();
-      expect(parsed.results[0]?.truncated).toBe(true);
-      expect(Array.isArray(parsed.results[0]?.commits)).toBe(true);
+      expect(parsed.groups[0]?.error).toBeUndefined();
+      expect(parsed.groups[0]?.truncated).toBe(true);
+      expect(Array.isArray(parsed.groups[0]?.commits)).toBe(true);
     } finally {
       if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
       else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;

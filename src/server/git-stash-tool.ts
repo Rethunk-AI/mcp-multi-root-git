@@ -15,16 +15,16 @@ function buildGitStashApplyJson(opts: {
   index: number;
   pop: boolean;
   output: string | undefined;
-  conflictPaths: string[];
+  conflicts: string[];
 }): Record<string, unknown> {
-  const { applied, index, pop, output, conflictPaths } = opts;
+  const { applied, index, pop, output, conflicts } = opts;
   return {
     ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
     applied,
     stashIndex: index,
     popped: pop,
     ...spreadDefined("output", output || undefined),
-    ...spreadWhen(conflictPaths.length > 0, { conflictPaths }),
+    ...spreadWhen(conflicts.length > 0, { conflicts }),
   };
 }
 
@@ -79,7 +79,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       // On apply/pop failure, surface unresolved conflict paths when present
       // (mirrors merge/cherry-pick/revert). Leave the tree as git left it —
       // stash conflicts are not auto-aborted.
-      const paths = applied ? [] : await conflictPaths(gitTop);
+      const conflicts = applied ? [] : await conflictPaths(gitTop);
 
       return jsonRespond(
         buildGitStashApplyJson({
@@ -87,7 +87,7 @@ export function registerGitStashApplyTool(server: FastMCP): void {
           index: args.index,
           pop: args.pop,
           output,
-          conflictPaths: paths,
+          conflicts,
         }),
       );
     },

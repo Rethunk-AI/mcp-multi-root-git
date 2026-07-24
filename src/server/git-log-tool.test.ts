@@ -242,7 +242,7 @@ describe("git_log execute handler", () => {
       root: dir,
       format: "json",
       since: SINCE_WIDE,
-      branch: "--output=/tmp/x",
+      ref: "--output=/tmp/x",
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_ref_token");
@@ -346,7 +346,7 @@ describe("git_log execute handler", () => {
       root: dir,
       format: "json",
       since: SINCE_WIDE,
-      branch: "no-such-branch-xyz",
+      ref: "no-such-branch-xyz",
     });
     const parsed = JSON.parse(text) as { groups: Array<{ error?: string }> };
     expect(parsed.groups[0]?.error).toBe("git_log_failed");
@@ -430,7 +430,7 @@ describe("git_log execute handler", () => {
     expect(excludeSubjects).not.toContain("merge: combine feature");
   });
 
-  test("path (singular) is unioned with paths, deduplicated", async () => {
+  test("paths array scopes to multiple files, deduplicated", async () => {
     const dir = makeRepo();
     addCommit(dir, "a.ts", "feat: a");
     addCommit(dir, "b.ts", "feat: b");
@@ -441,8 +441,7 @@ describe("git_log execute handler", () => {
       root: dir,
       format: "json",
       since: SINCE_WIDE,
-      path: "a.ts",
-      paths: ["b.ts", "a.ts"],
+      paths: ["b.ts", "a.ts", "a.ts"],
     });
     const parsed = JSON.parse(text) as {
       groups: Array<{ commits: Array<{ subject: string }> }>;

@@ -68,14 +68,14 @@ describe("git_stash_apply execute handler", () => {
     const parsed = JSON.parse(text) as {
       applied: boolean;
       error?: string;
-      conflictPaths?: string[];
+      conflicts?: string[];
     };
     expect(parsed.applied).toBe(false);
     expect(parsed.error).toBe("stash_apply_failed");
-    expect(parsed.conflictPaths).toBeUndefined();
+    expect(parsed.conflicts).toBeUndefined();
   });
 
-  test("conflicted apply returns applied=false with conflictPaths; pop retains stash", async () => {
+  test("conflicted apply returns applied=false with conflicts; pop retains stash", async () => {
     const dir = makeRepoWithSeed();
     // Commit base → stash divergent edit → commit a different edit → apply conflicts (UU).
     writeFileSync(join(dir, "conflict.txt"), "base\n");
@@ -99,13 +99,13 @@ describe("git_stash_apply execute handler", () => {
     const applyParsed = JSON.parse(applyText) as {
       applied: boolean;
       error?: string;
-      conflictPaths?: string[];
+      conflicts?: string[];
       output?: string;
     };
     expect(applyParsed.applied).toBe(false);
     expect(applyParsed.error).toBe("stash_apply_failed");
-    expect(applyParsed.conflictPaths).toBeDefined();
-    expect(applyParsed.conflictPaths).toContain("conflict.txt");
+    expect(applyParsed.conflicts).toBeDefined();
+    expect(applyParsed.conflicts).toContain("conflict.txt");
 
     // Abort conflicted tree, then pop — conflicted pop must retain the stash entry.
     gitCmd(dir, "reset", "--hard", "HEAD");
@@ -120,11 +120,11 @@ describe("git_stash_apply execute handler", () => {
     const popParsed = JSON.parse(popText) as {
       applied: boolean;
       popped: boolean;
-      conflictPaths?: string[];
+      conflicts?: string[];
     };
     expect(popParsed.applied).toBe(false);
     expect(popParsed.popped).toBe(true);
-    expect(popParsed.conflictPaths).toContain("conflict.txt");
+    expect(popParsed.conflicts).toContain("conflict.txt");
 
     expect(stashCount(dir)).toBe(1);
   });

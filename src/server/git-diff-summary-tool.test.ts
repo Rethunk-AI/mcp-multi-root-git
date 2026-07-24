@@ -8,13 +8,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  buildDiffArgs,
   extractFileInfo,
   matchesAnyPattern,
   parseDiffOutput,
   parseNumstatOutput,
   registerGitDiffSummaryTool,
-  resolveDiffRangeArgs,
   truncateDiffBody,
 } from "./git-diff-summary-tool.js";
 import {
@@ -230,94 +228,11 @@ describe("matchesAnyPattern", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Unit: buildDiffArgs
-// ---------------------------------------------------------------------------
-
-describe("buildDiffArgs", () => {
-  test('undefined and empty string both → empty args (range === undefined || range === "")', () => {
-    expect(buildDiffArgs(undefined)).toEqual({ ok: true, args: [] });
-    expect(buildDiffArgs("")).toEqual({ ok: true, args: [] });
-  });
-
-  test('"staged" → --cached', () => {
-    expect(buildDiffArgs("staged")).toEqual({ ok: true, args: ["--cached"] });
-  });
-
-  test('"cached" → --cached (alias)', () => {
-    expect(buildDiffArgs("cached")).toEqual({ ok: true, args: ["--cached"] });
-  });
-
-  test('"HEAD" → HEAD arg', () => {
-    expect(buildDiffArgs("HEAD")).toEqual({ ok: true, args: ["HEAD"] });
-  });
-
-  test("two-dot and three-dot ranges both → single range arg (separatorMatch branch)", () => {
-    expect(buildDiffArgs("main..feature")).toEqual({ ok: true, args: ["main..feature"] });
-    expect(buildDiffArgs("main...feature")).toEqual({ ok: true, args: ["main...feature"] });
-  });
-
-  test("single safe ref → single arg", () => {
-    const r = buildDiffArgs("abc1234");
-    expect(r).toEqual({ ok: true, args: ["abc1234"] });
-  });
-
-  test("ancestor notation is accepted, on a single ref and on either range endpoint", () => {
-    expect(buildDiffArgs("HEAD~3")).toEqual({ ok: true, args: ["HEAD~3"] });
-    expect(buildDiffArgs("HEAD~3..HEAD")).toEqual({ ok: true, args: ["HEAD~3..HEAD"] });
-    expect(buildDiffArgs("main...feature^2")).toEqual({ ok: true, args: ["main...feature^2"] });
-  });
-
-  test("unsafe tokens are rejected with bare ERROR_CODES.UNSAFE_RANGE_TOKEN", () => {
-    const injectionResult = buildDiffArgs("; rm -rf /");
-    expect(injectionResult.ok).toBe(false);
-    if (!injectionResult.ok) expect(injectionResult.error).toBe("unsafe_range_token");
-
-    const rangeInjectionResult = buildDiffArgs("-x..HEAD");
-    expect(rangeInjectionResult.ok).toBe(false);
-    if (!rangeInjectionResult.ok) expect(rangeInjectionResult.error).toBe("unsafe_range_token");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Unit: resolveDiffRangeArgs (real refs must not be shadowed by magic strings)
-// ---------------------------------------------------------------------------
-
-describe("resolveDiffRangeArgs", () => {
-  test("no literal ref named 'staged' → falls back to --cached magic mapping", async () => {
-    const dir = makeRepoWithSeed();
-    const r = await resolveDiffRangeArgs(dir, "staged");
-    expect(r).toEqual({ ok: true, args: ["--cached"] });
-  });
-
-  test("a real branch literally named 'staged' takes precedence over the magic string", async () => {
-    const dir = makeRepoWithSeed();
-    gitCmd(dir, "branch", "staged");
-    const r = await resolveDiffRangeArgs(dir, "staged");
-    expect(r).toEqual({ ok: true, args: ["staged"] });
-  });
-
-  test("a real branch literally named 'head' (lowercase) takes precedence over the HEAD magic mapping", async () => {
-    const dir = makeRepoWithSeed();
-    gitCmd(dir, "branch", "head");
-    const r = await resolveDiffRangeArgs(dir, "head");
-    expect(r).toEqual({ ok: true, args: ["head"] });
-  });
-
-  test("typed 'HEAD' still resolves to HEAD (real ref path and magic path agree)", async () => {
-    const dir = makeRepoWithSeed();
-    const r = await resolveDiffRangeArgs(dir, "HEAD");
-    expect(r).toEqual({ ok: true, args: ["HEAD"] });
-  });
-
-  test("non-magic ranges pass through to buildDiffArgs unchanged", async () => {
-    const dir = makeRepoWithSeed();
-    const r = await resolveDiffRangeArgs(dir, "main..feature");
-    expect(r).toEqual({ ok: true, args: ["main..feature"] });
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Execute handler: end-to-end via fake server harness
+//
+// Range selection now uses the explicit base/head/staged shape shared with
+// git_diff (v7) — see git-diff-tool.ts's buildDiffRangeArgs/rangeLabel,
+// which this tool reuses directly.
 // ---------------------------------------------------------------------------
 
 describe("git_diff_summary execute handler", () => {
@@ -357,7 +272,7 @@ describe("git_diff_summary execute handler", () => {
     writeFileSync(join(dir, "unstaged.ts"), "const u = 9;\n");
 
     const run = captureTool(registerGitDiffSummaryTool);
-    const text = await run({ workspaceRoot: dir, format: "json", range: "staged" });
+    const text = await run({ workspaceRoot: dir, format: "json", staged: true });
     const parsed = JSON.parse(text) as {
       range: string;
       files: Array<{ path: string }>;
@@ -395,7 +310,7 @@ describe("git_diff_summary execute handler", () => {
     addCommit(dir, "range.ts", "const v = 2;\n", "chore: bump");
 
     const run = captureTool(registerGitDiffSummaryTool);
-    const text = await run({ workspaceRoot: dir, format: "json", range: "HEAD~1..HEAD" });
+    const text = await run({ workspaceRoot: dir, format: "json", base: "HEAD~1", head: "HEAD" });
     const parsed = JSON.parse(text) as {
       range: string;
       files: Array<{ path: string }>;
@@ -487,13 +402,13 @@ describe("git_diff_summary execute handler", () => {
     expect(parsed.totalFiles).toBe(1);
   });
 
-  test("unsafe range returns exact error===unsafe_range_token on the wire", async () => {
+  test("unsafe base ref returns exact error===unsafe_range_token on the wire", async () => {
     const dir = makeRepoWithSeed();
     const run = captureTool(registerGitDiffSummaryTool);
     const text = await run({
       workspaceRoot: dir,
       format: "json",
-      range: "; rm -rf /",
+      base: "; rm -rf /",
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_range_token");
@@ -516,7 +431,7 @@ describe("git_diff_summary execute handler", () => {
     const text = await run({
       workspaceRoot: dir,
       format: "json",
-      range: "staged",
+      staged: true,
       excludePatterns: [],
     });
     const parsed = JSON.parse(text) as {
@@ -556,7 +471,7 @@ describe("git_diff_summary execute handler", () => {
     }
   });
 
-  test("range literally named 'staged' as a real branch diffs against that branch, not --cached", async () => {
+  test("a real branch literally named 'staged' is reachable via `base` (no magic-string ambiguity)", async () => {
     const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "staged");
     addCommit(dir, "on-staged-branch.ts", "const s = 1;\n", "feat: on staged branch");
@@ -564,12 +479,9 @@ describe("git_diff_summary execute handler", () => {
     addCommit(dir, "on-main.ts", "const m = 1;\n", "feat: on main");
 
     const run = captureTool(registerGitDiffSummaryTool);
-    const text = await run({ workspaceRoot: dir, format: "json", range: "staged" });
+    const text = await run({ workspaceRoot: dir, format: "json", base: "staged" });
     const parsed = JSON.parse(text) as { range: string; files: Array<{ path: string }> };
-    // `git diff staged` (a real branch, not the --cached magic string) compares
-    // the working tree against that branch's tip — on-main.ts (present on
-    // main, absent from staged) must show up as a difference.
-    expect(parsed.range).toBe("staged");
+    expect(parsed.range).toBe("staged..HEAD");
     expect(parsed.files.map((f) => f.path)).toContain("on-main.ts");
   });
 });

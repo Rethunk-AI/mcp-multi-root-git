@@ -118,15 +118,15 @@ async function runGitLog(opts: {
   ignoreCase: boolean;
   author: string | undefined;
   maxCommits: number;
-  branch: string | undefined;
+  ref: string | undefined;
   follow: boolean;
   merges: "only" | "exclude" | undefined;
 }): Promise<LogResult | { error: string; path: string }> {
-  const { top, since, until, paths, grep, ignoreCase, author, maxCommits, branch, follow, merges } =
+  const { top, since, until, paths, grep, ignoreCase, author, maxCommits, ref, follow, merges } =
     opts;
 
   // Resolve branch first (needed for output metadata).
-  const resolvedBranch = await gitCurrentBranch(top, branch);
+  const resolvedBranch = await gitCurrentBranch(top, ref);
 
   // Fetch one extra commit to detect truncation.
   const fetchLimit = maxCommits + 1;
@@ -154,8 +154,8 @@ async function runGitLog(opts: {
     logArgs.push("--follow");
   }
 
-  if (branch?.trim()) {
-    logArgs.push(branch.trim());
+  if (ref?.trim()) {
+    logArgs.push(ref.trim());
   }
 
   if (grep?.trim()) {
@@ -259,10 +259,6 @@ export function registerGitLogTool(server: FastMCP): void {
           "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
         ),
       until: z.string().optional().describe("Passed to `--until=`. Same format as `since`."),
-      path: z
-        .string()
-        .optional()
-        .describe("Limit to commits touching this path. Unioned with `paths`."),
       paths: z
         .array(z.string())
         .max(MAX_PATHS)
@@ -298,7 +294,7 @@ export function registerGitLogTool(server: FastMCP): void {
         .describe(
           `Max commits per root (hard cap ${MAX_COMMITS_HARD_CAP}, default ${DEFAULT_MAX_COMMITS}).`,
         ),
-      branch: z.string().optional().describe("Ref/branch to log from. Default: HEAD."),
+      ref: z.string().optional().describe("Ref/branch to log from. Default: HEAD."),
       follow: z
         .boolean()
         .optional()
@@ -321,9 +317,7 @@ export function registerGitLogTool(server: FastMCP): void {
         return jsonRespond({ error: ERROR_CODES.INVALID_SINCE, until: rawUntil });
       }
 
-      // Union singular `path` + `paths` array (dedup, order preserved).
       const rawPathsInput: string[] = [];
-      if (args.path?.trim()) rawPathsInput.push(args.path.trim());
       for (const p of args.paths ?? []) {
         if (p.trim()) rawPathsInput.push(p.trim());
       }
@@ -346,9 +340,9 @@ export function registerGitLogTool(server: FastMCP): void {
         });
       }
 
-      // Validate branch — reject leading-dash and other injection attempts.
-      if (args.branch && !isSafeGitAncestorRef(args.branch)) {
-        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, branch: args.branch });
+      // Validate ref — reject leading-dash and other injection attempts.
+      if (args.ref && !isSafeGitAncestorRef(args.ref)) {
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 
       const maxCommits = Math.min(args.maxCommits ?? DEFAULT_MAX_COMMITS, MAX_COMMITS_HARD_CAP);
@@ -384,7 +378,7 @@ export function registerGitLogTool(server: FastMCP): void {
           ignoreCase: args.ignoreCase ?? true,
           author: args.author,
           maxCommits,
-          branch: args.branch,
+          ref: args.ref,
           follow,
           merges: args.merges,
         });

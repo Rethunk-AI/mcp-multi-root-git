@@ -36,7 +36,7 @@ interface PickaxeCommit {
 }
 
 interface GrepRootJson {
-  root: string;
+  workspaceRoot: string;
   repo: string;
   commits?: PickaxeCommit[];
   truncated?: boolean;
@@ -142,7 +142,6 @@ export function registerGitGrepTool(server: FastMCP): void {
         .string()
         .optional()
         .describe("Commit/branch/tag to use as the history tip. Must be a safe ref token."),
-      path: z.string().optional().describe("Limit history to this path. Unioned with `paths`."),
       paths: z
         .array(z.string())
         .max(MAX_PATHS)
@@ -179,10 +178,7 @@ export function registerGitGrepTool(server: FastMCP): void {
       }
       const ref = args.ref?.trim() || undefined;
 
-      // Union singular `path` + `paths` array (dedup, order preserved).
       const rawPathsInput: string[] = [];
-      const singlePath = args.path?.trim();
-      if (singlePath) rawPathsInput.push(singlePath);
       if (Array.isArray(args.paths)) {
         for (const p of args.paths) {
           if (typeof p === "string" && p.trim()) rawPathsInput.push(p.trim());
@@ -206,7 +202,7 @@ export function registerGitGrepTool(server: FastMCP): void {
           const top = await gitTopLevelAsync(rootInput);
           if (!top) {
             return {
-              root: rootInput,
+              workspaceRoot: rootInput,
               repo: basename(rootInput),
               error: ERROR_CODES.NOT_A_GIT_REPOSITORY,
               detail: rootInput,
@@ -216,7 +212,7 @@ export function registerGitGrepTool(server: FastMCP): void {
           for (const p of rawPaths) {
             if (!validateRepoPath(p, top).underTop) {
               return {
-                root: top,
+                workspaceRoot: top,
                 repo: basename(top),
                 error: ERROR_CODES.PATH_ESCAPES_REPO,
                 detail: p,
@@ -234,10 +230,15 @@ export function registerGitGrepTool(server: FastMCP): void {
             maxMatches,
           });
           if ("error" in result) {
-            return { root: top, repo: basename(top), error: result.error, detail: result.detail };
+            return {
+              workspaceRoot: top,
+              repo: basename(top),
+              error: result.error,
+              detail: result.detail,
+            };
           }
           return {
-            root: top,
+            workspaceRoot: top,
             repo: basename(top),
             commits: result.commits,
             ...spreadWhen(result.truncated, { truncated: true }),
@@ -245,7 +246,7 @@ export function registerGitGrepTool(server: FastMCP): void {
         },
       );
 
-      return jsonRespond({ results: groups });
+      return jsonRespond({ groups });
     },
   });
 }

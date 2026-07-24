@@ -15,9 +15,9 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_inventory` | `rethunk-git_git_inventory` | Status + ahead/behind per path; default upstream each repo’s `@{u}`; pass **both** `remote` and `branch` for fixed tracking; optional `compareRefs: { left, right }` for ahead/behind between arbitrary local refs (independent of upstream). `nestedRoots`, `preset`, `presetMerge`, `maxRoots`, plus `root` (array form cannot combine with `preset`/`nestedRoots`). **Read-only.** |
 | `git_parity` | `rethunk-git_git_parity` | Compare `git rev-parse HEAD` for path pairs. `pairs`, `preset`, `presetMerge`, plus `root`. **Read-only.** |
 | `list_presets` | `rethunk-git_list_presets` | List presets (name, `nestedRoots`, `parityPairs`, `workspaceRootHint`) from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. `root` only. **Read-only.** |
-| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more roots. Returns commit history with author, date, subject, and shortstat. Optional `follow: true` follows renames (`git log --follow`; requires exactly one `paths` entry). Args: `since`, `paths`, `follow?`, `grep`, `author`, `maxCommits`, `branch`, plus `root`. **Read-only.** |
+| `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more roots. Returns commit history with author, date, subject, and shortstat. Optional `follow: true` follows renames (`git log --follow`; requires exactly one `paths` entry). Args: `since`, `paths`, `follow?`, `grep`, `author`, `maxCommits`, `ref`, plus `root`. **Read-only.** |
 | `git_grep` | `rethunk-git_git_grep` | Read-only pickaxe history search across one or more roots (`pickaxe: { mode: "S"\|"G", term }` → `git log -S`/`-G`, `commits[]` per root). `pickaxe` is required — content-mode working-tree search was removed in v6 (use the client's native grep/rg tooling). Args: `pickaxe`, `ref?`, `paths?`, `ignoreCase?`, `maxMatches?`, plus `root`. **Read-only.** |
-| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `range`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot`. **Read-only.** |
+| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `base?`, `head?`, `staged?` (same explicit range shape as `git_diff`), `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot`. **Read-only.** |
 | `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Optional `maxBytes` caps returned UTF-8 bytes (`truncated: true` when cut). Args: `workspaceRoot`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`, `maxBytes?`. **Read-only.** |
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus patch (or `--stat` diffstat). Optional `path`/`paths` filter the patch to those paths (`git show <ref> -- <path>`), not a raw blob checkout. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot`. **Read-only.** |
 | `git_conflicts` | `rethunk-git_git_conflicts` | Inspect an in-progress conflicted merge/cherry-pick/revert/rebase in the working tree (markers under the git dir). Per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` into ours/theirs (and base, for diff3-style) hunks. **Note:** `git_merge` and `git_cherry_pick` always attempt `--abort` before returning a conflict report, so a successful abort leaves a clean tree — call this tool for conflicts still in progress (manual ops, failed abort, or other tools), not as a follow-up to those tools' conflict payloads. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot`. **Read-only.** |
@@ -25,7 +25,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot`. **Mutating — not idempotent.** |
 | `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Omitting `branch` on a detached HEAD fails (`push_detached_head`) — an explicit `branch` is accepted regardless of HEAD state. Never force-pushes. `workspaceRoot`. **Mutating.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. **`auto`/`rebase` rewrite the source branch tip in place** when rebasing (new SHAs on the source ref), then fast-forward the destination — not destination-only. Refuses on dirty tree; stops on first conflict and attempts `--abort` (abort failure surfaces `rebase_abort_failed` / `merge_abort_failed`). Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot`. **Mutating.** |
-| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Hard-caps expanded/deduped picks at **100** commits per call (`cherry_pick_too_many_commits`). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; refuses when a cherry-pick is already in progress (`cherry_pick_in_progress`). Stops on first conflict: `onConflict: "abort"` (default) attempts `--abort` (abort failure → `cherry_pick_abort_failed`); `onConflict: "pause"` leaves the conflict and native sequencer state in place (`conflict.paused: true`) for `git_cherry_pick_continue`. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped, and only run on full success); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?`, `onConflict?` + `workspaceRoot`. **Mutating.** |
+| `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources into a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `into..<branch>`, oldest-first). Hard-caps expanded/deduped picks at **100** commits per call (`cherry_pick_too_many_commits`). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; refuses when a cherry-pick is already in progress (`cherry_pick_in_progress`). Stops on first conflict: `onConflict: "abort"` (default) attempts `--abort` (abort failure → `cherry_pick_abort_failed`); `onConflict: "pause"` leaves the conflict and native sequencer state in place (`conflict.paused: true`) for `git_cherry_pick_continue`. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped, and only run on full success); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `into?`, cleanup flags, `strictMergedRefEquality?`, `onConflict?` + `workspaceRoot`. **Mutating.** |
 | `git_cherry_pick_continue` | `rethunk-git_git_cherry_pick_continue` | Resume or abort a cherry-pick left in progress (by `git_cherry_pick`'s `onConflict: "pause"` or any other means — reads `CHERRY_PICK_HEAD` live off `.git`, stateless). `action: "continue"` (default) requires no remaining unmerged paths (`cherry_pick_unresolved_paths` otherwise), then runs `git -c core.editor=true cherry-pick --continue`; if a later pick then conflicts, reports it the same shape as a paused `git_cherry_pick` call (`conflict.paused: true`) so this tool can be called again. `action: "abort"` rolls back via `git cherry-pick --abort` (same abort helper/reporting as `git_cherry_pick`). Errors `no_cherry_pick_in_progress` when nothing is in progress. Args: `action?` + `workspaceRoot`. **Mutating.** |
 | `git_reset_soft` | `rethunk-git_git_reset_soft` | Soft-reset the current branch to a ref (`HEAD~N`, SHA, branch). Rewound changes land in the staging index; requires a clean working tree. Args: `ref`, plus `workspaceRoot`. **Mutating — not idempotent.** |
 | `git_revert` | `rethunk-git_git_revert` | Create new commit(s) that undo the changes introduced by one or more source commits (`git revert`), applied in listed order. Never rewrites history — safe on shared/pushed branches, unlike `git_reset_soft`. Refuses on dirty tree; `onConflict: "abort"` (default) aborts and leaves the tree clean, `onConflict: "pause"` leaves the conflict and native sequencer state in place for `git_revert_continue`. Args: `sources`, `noCommit?`, `mainline?`, `onConflict?`, plus `workspaceRoot`. **Mutating — not idempotent.** |
@@ -34,7 +34,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_branch` | `rethunk-git_git_branch` | Create, delete, or rename a local branch. `action: "create"` bases a new branch on `from` (default `HEAD`); `action: "delete"` removes `name` (`force: true` for `-D` on an unmerged branch); `action: "rename"` renames `name` to `newName`. Refuses protected branch names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix) in any role — as source, target, or rename endpoint. Args: `action`, `name`, `from?`, `newName?`, `force?`, plus `workspaceRoot`. **Mutating.** |
 | `git_worktree_add` | `rethunk-git_git_worktree_add` | Create a new linked worktree, creating the branch from `baseRef` if it does not yet exist. Sibling paths outside the git toplevel are allowed; leading `-` / option-like basenames and NUL bytes are rejected (`invalid_paths`). Path is passed to git after `--`. Refuses on protected branch names. Args: `path`, `branch`, `baseRef?`, plus `workspaceRoot`. **Mutating.** |
 | `git_worktree_remove` | `rethunk-git_git_worktree_remove` | Remove a registered worktree; refuses to remove the main worktree. Same path argv rules as add (leading `-` / NUL → `invalid_paths`; path after `--`). Optional `force: true` for dirty trees. Args: `path`, `force?`, plus `workspaceRoot`. **Mutating.** |
-| `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo (`destructiveHint: true` — pop can delete a stash entry). On failure emits `error: stash_apply_failed` and optional `conflictPaths`. Args: `index?`, `pop?`, plus `workspaceRoot`. **Mutating.** |
+| `git_stash_apply` | `rethunk-git_git_stash_apply` | Apply or pop a stash entry for one repo (`destructiveHint: true` — pop can delete a stash entry). On failure emits `error: stash_apply_failed` and optional `conflicts`. Args: `index?`, `pop?`, plus `workspaceRoot`. **Mutating.** |
 | `git_stash_push` | `rethunk-git_git_stash_push` | Stash working-tree changes (`git stash push`). Optional `message`, `includeUntracked` (-u), `keepIndex` (--keep-index), `paths` to scope. Args: `message?`, `includeUntracked?`, `paths?`, `keepIndex?`, plus `workspaceRoot`. **Mutating.** |
 
 All tools return **minified JSON** (no envelope; optional fields omitted when empty/null/false). There is no alternate output format (markdown mode was removed in v7).
@@ -55,7 +55,7 @@ All tools return **minified JSON** (no envelope; optional fields omitted when em
 ```json
 {
   "groups": [{
-    "mcpRoot": "/abs/workspace",
+    "workspaceRoot": "/abs/workspace",
     "repos": [
       { "label": ".", "path": "/abs/workspace", "statusText": "## main...origin/main\nM src/foo.ts", "ok": true },
       { "label": "sub", "path": "/abs/workspace/sub", "statusText": "## main...origin/main", "ok": true }
@@ -268,6 +268,37 @@ v5 changes from v4: `batch_commit` successful `results[*]` entries drop the echo
 
 v4 changes from v3: `git_blame` output is run-length grouped (`lines[]` with per-line commit metadata → `groups[]` with metadata once per contiguous same-commit run); `git_diff_summary` per-file `truncated` is omitted when `false`.
 
+### v7 migration
+
+v7 is a breaking wire-contract pass: markdown output removed, several params/fields renamed for cross-tool consistency, and the overloaded `git_diff_summary` range string replaced with the same explicit shape `git_diff` already used.
+
+**Output format**
+
+- `format` param **removed from every tool** (all 25). JSON is now the only output — there is no replacement param; simply stop passing `format`.
+
+**Renamed input params**
+
+| Tool | Old param | New param | Notes |
+| ---- | --------- | --------- | ----- |
+| `git_cherry_pick` | `onto` | `into` | Matches `git_merge`'s destination param name. |
+| `git_log` | `branch` | `ref` | Matches `git_grep`/`git_show`/`git_blame`'s ref param naming. |
+| `git_diff_summary` | `range` (string: `"staged"`/`"cached"`/`"head"`/`A..B`/single ref) | `base?`, `head?`, `staged?` | Same explicit shape as `git_diff`. The old magic-string/literal-ref disambiguation is gone — `base`/`head` are always literal refs, `staged` is always the boolean. |
+| `git_log`, `git_grep`, `git_diff`, `git_show` | `path` (singular, unioned with `paths`) | *(removed)* | Use `paths: [x]` instead of `path: x`. `git_blame`'s required singular `path` is unrelated and unchanged. |
+
+**Renamed/removed output fields**
+
+| Tool | Old field | New field | Notes |
+| ---- | --------- | --------- | ----- |
+| `git_cherry_pick` | top-level `onto` | `into` | Echoes the renamed input param. |
+| `git_cherry_pick` | error `onto_detached_head` | `into_detached_head` | Now the same code `git_merge` uses for the equivalent case. |
+| `git_merge` | per-source `conflictPaths` | `conflicts` | |
+| `git_cherry_pick` | `conflict.paths` | `conflict.conflicts` | Also applies to `git_cherry_pick_continue`'s paused-conflict shape. |
+| `git_stash_apply` | top-level `conflictPaths` | `conflicts` | `git_revert`/`git_revert_continue` already used `conflicts` — now all four conflict-reporting mutating tools agree. |
+| `git_grep` | top-level `results` | `groups` | Matches the other five fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`) which already used a domain-specific or `groups` key. |
+| `git_grep` | per-entry `root` | `workspaceRoot` | |
+| `git_status` | per-entry `mcpRoot` | `workspaceRoot` | |
+| `git_show` | `path` (singular, present only when `paths` omitted) | *(removed — always `paths[]` when any path filter applied)* | |
+
 The package also ships **`tool-parameters.schema.json`**, generated from the registered Zod parameter schemas via `bun run schema:tools`, plus the published **`schemas/`** directory (`schemas/index.json` + one JSON Schema per tool) via `bun run schema:individual`. Connected MCP clients should still prefer live schema discovery from `initialize` / tool listing; the shipped artifacts are for offline inspection, drift checks, and code generation.
 
 ### Field omission (consumer contract, v2+)
@@ -297,15 +328,14 @@ To keep responses compact, **optional fields are usually omitted when they would
 | ----------- | ------ | --------- | ------- |
 | `since` | string | `"7.days"` | Passed to `git log --since=`. Accepts ISO timestamps (`2026-04-01T00:00:00Z`) or git relative forms (`48.hours`, `2.weeks.ago`). |
 | `until` | string | — | Passed to `git log --until=`. Same format as `since`. |
-| `path` | string | — | Limit to commits touching this single path. Unioned with `paths` (deduped). |
 | `paths` | string[] | (all) | Restrict to commits touching these paths (appended after `--`). Each entry is confined with `resolvePathForRepo` / `assertRelativePathUnderTop` → `path_escapes_repo` on escape. |
-| `follow` | boolean | `false` | Pass `--follow` for rename-aware history. Requires **exactly one** entry across `path`/`paths` combined; otherwise top-level `invalid_paths` with `detail: "follow requires exactly one path"`. |
+| `follow` | boolean | `false` | Pass `--follow` for rename-aware history. Requires **exactly one** entry in `paths`; otherwise top-level `invalid_paths` with `detail: "follow requires exactly one path"`. |
 | `grep` | string | — | Filter by commit message regex (git `--grep`). Case-sensitivity controlled by `ignoreCase`. |
 | `ignoreCase` | boolean | `true` | Case-sensitivity of `grep` (`-i`). Default `true` (case-insensitive); set `false` for case-sensitive matching. |
 | `author` | string | — | Filter by author name or email (`--author=`). |
 | `merges` | `"only"` \| `"exclude"` | — | `"only"`: merge commits only (`--merges`). `"exclude"`: no merge commits (`--no-merges`). Omit to include both. |
 | `maxCommits` | int | `50` | Max commits per root. Hard cap: `500`. |
-| `branch` | string | `HEAD` | Ref/branch to log from. |
+| `ref` | string | `HEAD` | Ref/branch to log from. |
 | `root` | string \| string[] \| `"*"` | — | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 
 ### `git_log` — JSON shape
@@ -347,7 +377,7 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `invalid_since` | The `since` string contains shell metacharacters and was rejected. |
 | `invalid_paths` | A `paths` entry failed validation, or `follow: true` was set without exactly one `paths` entry (`detail: "follow requires exactly one path"`). |
 | `path_escapes_repo` | A `paths` entry resolves outside that root's git toplevel. |
-| `unsafe_ref_token` | `branch` contains characters outside the argv-safe subset. |
+| `unsafe_ref_token` | `ref` contains characters outside the argv-safe subset. |
 | `git_log_failed` | `git log` exited non-zero (e.g. unknown branch ref). |
 | `invalid_root_path` | A `root` array entry is empty, not inside a git worktree, or not a directory git recognizes. |
 | `root_list_too_many` | More than 256 entries in the `root` array. |
@@ -359,7 +389,6 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | ----------- | ------ | --------- | ------- |
 | `pickaxe` | `{ mode: "S" \| "G", term: string }` | — | **Required.** Pickaxe history search (`git log -S` / `-G`): `S` finds commits that changed the occurrence count of `term`; `G` finds commits whose diff lines match the `term` regex. JSON results are `commits[]` of `{ sha, subject }` per root. |
 | `ref` | string | — | Commit/branch/tag to use as the history tip. Validated as a safe ref token (`isSafeGitAncestorRef`); rejects `--`-prefixed or otherwise unsafe tokens. |
-| `path` | string | — | Limit history to this single path. Unioned with `paths` (deduped). |
 | `paths` | string[] | — | Limit history to these paths. Each must resolve within the repo root (`resolvePathForRepo` / `assertRelativePathUnderTop`); escaping paths are rejected per-root. |
 | `ignoreCase` | boolean | `false` | Case-insensitive match (`-i`). Confirmed to affect both `S` and `G` pickaxe modes (not `G`-only). |
 | `maxMatches` | integer | `200` | Cap on commits per root. Hard cap `1000`. |
@@ -371,9 +400,9 @@ Content-mode working-tree search (`pattern`, `filesOnly`, ref-tree search) was *
 
 ```json
 {
-  "results": [
+  "groups": [
     {
-      "root": "/abs/workspace",
+      "workspaceRoot": "/abs/workspace",
       "repo": "workspace",
       "commits": [
         { "sha": "a1b2c3d4e5f6…", "subject": "feat: introduce needle" }
@@ -384,7 +413,7 @@ Content-mode working-tree search (`pattern`, `filesOnly`, ref-tree search) was *
 }
 ```
 
-One `results` entry per resolved root, each carrying `commits[]` of `{ sha, subject }` hits. `truncated: true` is present only when the per-root commit count exceeded `maxMatches`. A root that fails to resolve or whose git invocation errors carries `error` (and optional `detail`) instead of `commits`. Zero pickaxe hits is **not** an error — `commits` is simply empty.
+One `groups` entry per resolved root, each carrying `commits[]` of `{ sha, subject }` hits. `truncated: true` is present only when the per-root commit count exceeded `maxMatches`. A root that fails to resolve or whose git invocation errors carries `error` (and optional `detail`) instead of `commits`. Zero pickaxe hits is **not** an error — `commits` is simply empty.
 
 ### `git_grep` — error codes
 
@@ -421,7 +450,9 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 
 | Parameter | Type | Default | Notes |
 | ----------- | ------ | --------- | ------- |
-| `range` | string | unstaged | Diff range. `"staged"` / `"cached"` for index; `"HEAD"` for last commit; `"A..B"` or `"A...B"` for revision ranges; single ref. Ancestor notation (`HEAD~3`, `main^2`) is accepted on any endpoint. Default: unstaged working-tree changes. A real ref literally named `staged`/`cached`/`head` takes precedence over the synthetic magic strings — it is resolved as that ref, never shadowed. |
+| `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. Ancestor notation (`HEAD~3`, `main^2`) is accepted. Same canonical shape as `git_diff` (v7). |
+| `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. Ancestor notation accepted. |
+| `staged` | boolean | `false` | When `true`, diffs the index (`git diff --staged`). Ignored when `base` is provided. |
 | `fileFilter` | string | — | Glob pattern to restrict output to matching files (e.g. `"*.ts"`, `"src/**"`). |
 | `maxLinesPerFile` | int | `50` | Max diff lines to include per file (1–2000). |
 | `maxFiles` | int | `30` | Max files to include in output (1–500). |
@@ -456,7 +487,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | ------ | --------- |
 | `git_not_found` | `git` binary not on `PATH`. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
-| `unsafe_range_token` | The `range` string contains characters outside the safe token set. |
+| `unsafe_range_token` | `base` or `head` contains characters outside the safe token set. |
 | `git_diff_failed` | `git diff` exited non-zero. |
 
 ---
@@ -467,8 +498,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | ----------- | ------ | --------- | ------- |
 | `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
 | `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
-| `path` | string | — | Optional single file path to scope the diff. Confined to the repo (`path_escapes_repo` on escape). |
-| `paths` | string[] | — | Multiple file paths to scope the diff; unioned with `path` (deduped). Each confined to the repo. |
+| `paths` | string[] | — | File paths to scope the diff. Each confined to the repo. |
 | `unified` | integer | — | Context lines around each change (passed as `-U<n>`, 0–100). Omit for git's default (3). |
 | `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
 | `maxBytes` | integer | `512000` | Cap on UTF-8 bytes of returned diff text (1024–10000000), cut at a line boundary (never mid-line) — even a single line exceeding `maxBytes` is dropped whole rather than truncated mid-line. Oversized output is truncated; JSON emits `truncated: true` (omitted when false). |
@@ -493,7 +523,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | Code | Meaning |
 | ------ | --------- |
 | `unsafe_range_token` | `base` or `head` contains characters outside the argv-safe subset. |
-| `path_escapes_repo` | A `path` / `paths` entry resolves outside the git toplevel. |
+| `path_escapes_repo` | A `paths` entry resolves outside the git toplevel. |
 | `git_diff_failed` | `git diff` exited non-zero. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
@@ -504,9 +534,8 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | Parameter | Type | Notes |
 | ----------- | ------ | ------- |
 | `ref` | string | Commit, branch, tag, or other git rev-spec to inspect. Ancestor notation (`HEAD~3`, `main^2`) is accepted. |
-| `path` | string | Optional single path. When provided, filters the shown patch/stat to that path (`git show <ref> -- <path>`), not a raw blob (`ref:path`) checkout. |
 | `stat` | boolean | When `true`, runs `git show --stat` — commit message plus per-file diffstat, no full patch (`statOutput` in JSON). |
-| `paths` | string[] | Filter the shown patch/stat to these repo-relative paths; unioned with `path`. Each confined to the repo. |
+| `paths` | string[] | Filter the shown patch/stat to these repo-relative paths (`git show <ref> -- <paths>`), not a raw blob (`ref:path`) checkout. Each confined to the repo. |
 | `maxBytes` | integer | Cap on UTF-8 bytes of returned diff/stat content (default `512000`), cut at a line boundary. Oversized output is truncated with `truncated: true`. |
 | `workspaceRoot` | — | Standard single-repo pick. |
 
@@ -516,13 +545,13 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 {
   "ref": "HEAD",
   "message": "feat: add tool",
-  "path": "src/server.ts",
+  "paths": ["src/server.ts"],
   "diff": "diff --git a/src/server.ts b/src/server.ts\n...",
   "truncated": true
 }
 ```
 
-`path` is omitted when not requested; `paths` is present when multiple paths were given. `diff` is omitted when `git show` returns only a commit message. With `stat: true`, `stat` is `true` and `statOutput` carries the diffstat instead of a full `diff`. `diff` parsing recognizes merge-commit combined-diff bodies (`diff --cc` / `diff --combined`), not just the plain two-parent `diff --git` form. `truncated: true` is present when the `maxBytes` cap fired, or when the underlying `git show` subprocess itself hit the output buffer cap (`GIT_SUBPROCESS_MAX_BUFFER_BYTES`) — the tool still returns the partial output rather than failing.
+`paths` is omitted when not requested. `diff` is omitted when `git show` returns only a commit message. With `stat: true`, `stat` is `true` and `statOutput` carries the diffstat instead of a full `diff`. `diff` parsing recognizes merge-commit combined-diff bodies (`diff --cc` / `diff --combined`), not just the plain two-parent `diff --git` form. `truncated: true` is present when the `maxBytes` cap fired, or when the underlying `git show` subprocess itself hit the output buffer cap (`GIT_SUBPROCESS_MAX_BUFFER_BYTES`) — the tool still returns the partial output rather than failing.
 
 ### `git_show` — error codes
 
@@ -764,7 +793,7 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 
 **`outcome`** (per source): `fast_forward`, `rebase_then_ff`, `merge_commit`, `up_to_date`, or `conflicts`. Cleanup fields (`branchDeleted`, `worktreeRemoved`) are only emitted when the corresponding flag was set and the operation actually ran; `up_to_date` sources are the safest case to clean up (the source is fully contained in the destination by ref ancestry) and get the same cleanup fields as every other successful outcome. Cleanup fields are never populated on partial-failure runs.
 
-On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` with `conflictStage` (`"rebase"` or `"merge"`), `conflictPaths` (array of paths with unresolved markers), and an `error` code. The tool attempts `git rebase --abort` / `git merge --abort`. When abort succeeds, the tree is clean. When abort itself fails, the per-source `error` is `rebase_abort_failed` / `merge_abort_failed` (tree may still be mid-rebase/merge; `detail` carries abort stderr). Remaining sources are not attempted.
+On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` with `conflictStage` (`"rebase"` or `"merge"`), `conflicts` (array of paths with unresolved markers), and an `error` code. The tool attempts `git rebase --abort` / `git merge --abort`. When abort succeeds, the tree is clean. When abort itself fails, the per-source `error` is `rebase_abort_failed` / `merge_abort_failed` (tree may still be mid-rebase/merge; `detail` carries abort stderr). Remaining sources are not attempted.
 
 ### `git_merge` — error codes
 
@@ -792,8 +821,8 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 
 | Parameter | Type | Notes |
 | ----------- | ------ | ------- |
-| `sources` | `string[]` | Source specs. 1–50 entries. Each entry is one of: a full/short SHA, an `A..B` / `A...B` range, or a branch name. Branch names expand to `onto..<branch>` (oldest-first). After SHA-reachability filtering, at most **100** commits are fed to `git cherry-pick` per call; oversize returns `cherry_pick_too_many_commits` with `picked` + `max`. |
-| `onto` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
+| `sources` | `string[]` | Source specs. 1–50 entries. Each entry is one of: a full/short SHA, an `A..B` / `A...B` range, or a branch name. Branch names expand to `into..<branch>` (oldest-first). After SHA-reachability filtering, at most **100** commits are fed to `git cherry-pick` per call; oversize returns `cherry_pick_too_many_commits` with `picked` + `max`. |
+| `into` | string | Destination branch. Defaults to the currently checked-out branch. Rejected when HEAD is detached. |
 | `deleteMergedBranches` | boolean | Default `false`. After all commits apply, delete each **branch-kind** source locally. Deletion uses **patch-id equivalence** by default — correct for cherry-pick workflows where SHA differs but diff is identical. When the source branch's own history includes merge commits (patch-id can't verify a merge's unique content), deletion automatically falls back to the strict `git branch -d` ancestry check instead of trusting patch-id. Protected names always skipped; never touches remote refs. |
 | `deleteMergedWorktrees` | boolean | Default `false`. After success, remove any local worktree attached to a branch-kind source (`git worktree remove`). Protected tails always skipped. |
 | `strictMergedRefEquality` | boolean | Default `false`. When `true`, branch deletion uses strict SHA-reachability (`git branch -d` ancestry semantics) instead of patch-id equivalence. Use when you need git's exact ancestry guarantee rather than content equivalence. |
@@ -805,7 +834,7 @@ On conflict: top-level `ok` is `false`, the conflicting entry has `ok: false` wi
 ```json
 {
   "ok": true,
-  "onto": "main",
+  "into": "main",
   "headSha": "a1b2c3d…",
   "picked": 3,
   "applied": 2,
@@ -825,14 +854,14 @@ On conflict, the response has `ok: false` and a top-level `conflict` object:
 ```json
 {
   "ok": false,
-  "onto": "main",
+  "into": "main",
   "picked": 2,
   "applied": 0,
   "results": [ ... ],
   "conflict": {
     "stage": "cherry-pick",
     "commit": "abcdef1",
-    "paths": ["src/foo.ts"],
+    "conflicts": ["src/foo.ts"],
     "detail": "…git stderr…",
     "error": "cherry_pick_conflicts"
   }
@@ -846,7 +875,7 @@ With `onConflict: "pause"`, the tool does **not** abort — `conflict.paused: tr
 ```json
 {
   "ok": false,
-  "onto": "main",
+  "into": "main",
   "picked": 3,
   "applied": 1,
   "results": [ ... ],
@@ -854,7 +883,7 @@ With `onConflict: "pause"`, the tool does **not** abort — `conflict.paused: tr
     "stage": "cherry-pick",
     "paused": true,
     "commit": "abcdef1",
-    "paths": ["src/foo.ts"],
+    "conflicts": ["src/foo.ts"],
     "detail": "…git stderr…",
     "error": "cherry_pick_conflicts"
   }
@@ -865,12 +894,12 @@ With `onConflict: "pause"`, the tool does **not** abort — `conflict.paused: tr
 
 | Code | Meaning |
 | ------ | --------- |
-| `unsafe_ref_token` | A source or `onto` contains characters outside the argv-safe subset. |
-| `onto_detached_head` | HEAD is detached and no `onto` was given. |
+| `unsafe_ref_token` | A source or `into` contains characters outside the argv-safe subset. |
+| `into_detached_head` | HEAD is detached and no `into` was given (shared code with `git_merge`'s equivalent case). |
 | `working_tree_dirty` | Uncommitted changes present. Commit, stash, or discard before cherry-picking. |
 | `cherry_pick_in_progress` | A cherry-pick is already in progress (`CHERRY_PICK_HEAD` set, e.g. left paused by a prior call). Response includes `commit`. Resolve via `git_cherry_pick_continue` first. |
-| `checkout_failed` | Could not switch to `onto`. |
-| `destination_not_found` | `onto` does not resolve to a commit. |
+| `checkout_failed` | Could not switch to `into`. |
+| `destination_not_found` | `into` does not resolve to a commit. |
 | `source_not_found` | A source spec resolves to neither a branch, a range, nor a commit. |
 | `range_resolution_failed` | `git rev-list` failed to expand a range spec. |
 | `cherry_pick_too_many_commits` | Expanded/deduped pick list exceeds the hard cap of 100. Response includes `picked` + `max`. |
@@ -910,7 +939,7 @@ If resuming lands on another conflict later in the same range, the response mirr
     "stage": "cherry-pick",
     "paused": true,
     "commit": "def4567",
-    "paths": ["src/bar.ts"],
+    "conflicts": ["src/bar.ts"],
     "detail": "…git stderr…"
   }
 }
@@ -1216,11 +1245,11 @@ On failure (`applied: false`):
   "stashIndex": 0,
   "popped": false,
   "output": "…",
-  "conflictPaths": ["conflict.txt"]
+  "conflicts": ["conflict.txt"]
 }
 ```
 
-`error: "stash_apply_failed"` on every failed apply/pop. `conflictPaths` is omitted when empty (omit-empty rule); populated via `git diff --name-only --diff-filter=U`. The tree is left as git left it (no auto-abort). With `pop: true`, a conflicted pop retains the stash entry (git does not drop it until the apply succeeds). `output` is omitted when git produced no stdout/stderr text. `popped` mirrors the requested `pop` flag (whether pop was attempted), not whether the stash entry was removed.
+`error: "stash_apply_failed"` on every failed apply/pop. `conflicts` is omitted when empty (omit-empty rule); populated via `git diff --name-only --diff-filter=U`. The tree is left as git left it (no auto-abort). With `pop: true`, a conflicted pop retains the stash entry (git does not drop it until the apply succeeds). `output` is omitted when git produced no stdout/stderr text. `popped` mirrors the requested `pop` flag (whether pop was attempted), not whether the stash entry was removed.
 
 ### `git_stash_apply` — error codes
 

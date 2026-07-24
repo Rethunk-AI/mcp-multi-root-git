@@ -47,8 +47,8 @@ export const ERROR_CODES = {
   UNSAFE_TAG_TOKEN: "unsafe_tag_token",
 
   // Branch / ref state
+  /** Shared by `git_merge` (`into?`) and `git_cherry_pick` (`into?`, v7 renamed from `onto`). */
   INTO_DETACHED_HEAD: "into_detached_head",
-  ONTO_DETACHED_HEAD: "onto_detached_head",
   PROTECTED_BRANCH: "protected_branch",
   WORKING_TREE_DIRTY: "working_tree_dirty",
 

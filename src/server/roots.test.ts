@@ -166,9 +166,9 @@ describe("root resolution via git_status", () => {
     gitInitMain(a);
     const run = captureTool(registerGitStatusTool);
     const text = await run({ root: a, format: "json" });
-    const parsed = JSON.parse(text) as { groups?: { mcpRoot: string }[] };
+    const parsed = JSON.parse(text) as { groups?: { workspaceRoot: string }[] };
     expect(parsed.groups?.length).toBe(1);
-    expect(parsed.groups?.[0]?.mcpRoot).toBe(a);
+    expect(parsed.groups?.[0]?.workspaceRoot).toBe(a);
   });
 
   test("root array: two sibling repos → two status groups", async () => {
@@ -178,10 +178,10 @@ describe("root resolution via git_status", () => {
     gitInitMain(b);
     const run = captureTool(registerGitStatusTool);
     const text = await run({ format: "json", root: [a, b] });
-    const parsed = JSON.parse(text) as { groups?: { mcpRoot: string; repos: unknown[] }[] };
+    const parsed = JSON.parse(text) as { groups?: { workspaceRoot: string; repos: unknown[] }[] };
     expect(parsed.groups?.length).toBe(2);
-    expect(parsed.groups?.[0]?.mcpRoot).toBe(a);
-    expect(parsed.groups?.[1]?.mcpRoot).toBe(b);
+    expect(parsed.groups?.[0]?.workspaceRoot).toBe(a);
+    expect(parsed.groups?.[1]?.workspaceRoot).toBe(b);
   });
 
   test('root: "*" fans out across MCP client file roots', async () => {
@@ -195,8 +195,8 @@ describe("root resolution via git_status", () => {
       `file://${b}`,
     ]);
     const text = await run({ root: "*", format: "json" });
-    const parsed = JSON.parse(text) as { groups?: { mcpRoot: string }[] };
-    expect(parsed.groups?.map((g) => g.mcpRoot)).toEqual([a, b]);
+    const parsed = JSON.parse(text) as { groups?: { workspaceRoot: string }[] };
+    expect(parsed.groups?.map((g) => g.workspaceRoot)).toEqual([a, b]);
   });
 
   test("root array dedupes same repo (nested path + root)", async () => {

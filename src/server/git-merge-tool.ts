@@ -52,7 +52,7 @@ interface SourceResult {
   outcome?: SourceOutcome;
   mergedSha?: string;
   conflictStage?: "rebase" | "merge";
-  conflictPaths?: string[];
+  conflicts?: string[];
   branchDeleted?: boolean;
   worktreeRemoved?: string;
   error?: string;
@@ -186,7 +186,7 @@ async function fastForward(gitTop: string, source: string): Promise<SourceResult
           ok: false,
           outcome: "conflicts",
           conflictStage: "merge",
-          conflictPaths: [],
+          conflicts: [],
           error: ERROR_CODES.MERGE_ABORT_FAILED,
           detail: abort.detail ?? gitFailureDetail(r),
         };
@@ -197,7 +197,7 @@ async function fastForward(gitTop: string, source: string): Promise<SourceResult
       ok: false,
       outcome: "conflicts",
       conflictStage: "merge",
-      conflictPaths: [],
+      conflicts: [],
       error: ERROR_CODES.MERGE_FAILED,
       detail: gitFailureDetail(r),
     };
@@ -228,7 +228,7 @@ async function mergeCommit(
         ok: false,
         outcome: "conflicts",
         conflictStage: "merge",
-        conflictPaths: paths,
+        conflicts: paths,
         error: ERROR_CODES.MERGE_ABORT_FAILED,
         detail: abort.detail ?? gitFailureDetail(r),
       };
@@ -238,7 +238,7 @@ async function mergeCommit(
       ok: false,
       outcome: "conflicts",
       conflictStage: "merge",
-      conflictPaths: paths,
+      conflicts: paths,
       error: ERROR_CODES.MERGE_CONFLICTS,
       detail: gitFailureDetail(r),
     };
@@ -275,7 +275,7 @@ async function rebaseSourceOntoInto(
         ok: false,
         outcome: "conflicts",
         conflictStage: "rebase",
-        conflictPaths: paths,
+        conflicts: paths,
         error: ERROR_CODES.REBASE_ABORT_FAILED,
         detail: abort.detail ?? gitFailureDetail(r),
       };
@@ -285,7 +285,7 @@ async function rebaseSourceOntoInto(
       ok: false,
       outcome: "conflicts",
       conflictStage: "rebase",
-      conflictPaths: paths,
+      conflicts: paths,
       error: ERROR_CODES.REBASE_CONFLICTS,
       detail: gitFailureDetail(r),
     };
@@ -363,8 +363,8 @@ function buildGitMergeJson(opts: {
       ...spreadDefined("outcome", r.outcome),
       ...spreadDefined("mergedSha", r.mergedSha),
       ...spreadDefined("conflictStage", r.conflictStage),
-      ...spreadWhen((r.conflictPaths?.length ?? 0) > 0, {
-        conflictPaths: r.conflictPaths,
+      ...spreadWhen((r.conflicts?.length ?? 0) > 0, {
+        conflicts: r.conflicts,
       }),
       ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
       ...spreadDefined("worktreeRemoved", r.worktreeRemoved),

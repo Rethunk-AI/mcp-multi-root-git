@@ -42,7 +42,7 @@ describe("git_diff execute handler", () => {
     gitCmd(repo, "add", "seed.txt");
     const run = captureTool(registerGitDiffTool);
 
-    const text = await run({ workspaceRoot: repo, staged: true, path: "seed.txt" });
+    const text = await run({ workspaceRoot: repo, staged: true, paths: ["seed.txt"] });
     const parsed = JSON.parse(text) as { range: string; diff: string };
 
     expect(parsed.range).toBe("staged changes (seed.txt)");

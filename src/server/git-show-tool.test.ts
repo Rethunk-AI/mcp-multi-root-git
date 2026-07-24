@@ -56,12 +56,12 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "HEAD~1",
-      path: "file.txt",
+      paths: ["file.txt"],
     });
     const parsed = JSON.parse(result);
 
     // Result should contain the file path and content from the previous commit
-    expect(parsed.path).toBe("file.txt");
+    expect(parsed.paths).toEqual(["file.txt"]);
     expect(parsed.diff).toContain("first content");
   });
 
@@ -73,7 +73,7 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "HEAD",
-      path: "file.txt",
+      paths: ["file.txt"],
       format: "json",
     });
 
@@ -81,7 +81,7 @@ describe("git_show_tool", () => {
     expect(parsed.ref).toBe("HEAD");
     expect(parsed.message).toContain("feat: add file");
     expect(typeof parsed.diff).toBe("string");
-    expect(parsed.path).toBe("file.txt");
+    expect(parsed.paths).toEqual(["file.txt"]);
   });
 
   test("git show not_a_git_repository error for invalid path", async () => {
@@ -145,7 +145,7 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "HEAD",
-      path: "../../etc/passwd",
+      paths: ["../../etc/passwd"],
     });
 
     expect(result).toContain("path_escapes_repo");

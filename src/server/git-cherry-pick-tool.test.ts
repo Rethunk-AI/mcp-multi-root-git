@@ -49,7 +49,7 @@ function createBranchWithCommits(
 // ---------------------------------------------------------------------------
 
 describe("git_cherry_pick branch sources", () => {
-  test("single branch source plays every new commit onto destination", async () => {
+  test("single branch source plays every new commit into destination", async () => {
     const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/a", [
       { path: "a1.txt", body: "a1\n", message: "feat: a1" },
@@ -111,7 +111,7 @@ describe("git_cherry_pick branch sources", () => {
     const headAfterFirst = gitCmd(dir, "rev-parse", "HEAD").trim();
     expect(headAfterFirst).not.toBe(headBefore);
 
-    // Second call with the branch source. `onto..feature/a` still lists the original
+    // Second call with the branch source. `into..feature/a` still lists the original
     // SHA (it is not an ancestor of main — different SHA than the cherry-picked copy).
     // `--empty=drop` handles the patch-equivalence at cherry-pick time, so `applied`
     // is 0 and HEAD does not advance.
@@ -258,12 +258,12 @@ describe("git_cherry_pick conflicts", () => {
     const parsed = JSON.parse(text) as {
       ok: boolean;
       applied: number;
-      conflict?: { stage: string; paths: string[]; error?: string };
+      conflict?: { stage: string; conflicts: string[]; error?: string };
     };
     expect(parsed.ok).toBe(false);
     expect(parsed.applied).toBe(0);
     expect(parsed.conflict?.stage).toBe("cherry-pick");
-    expect(parsed.conflict?.paths).toContain("shared.txt");
+    expect(parsed.conflict?.conflicts).toContain("shared.txt");
     // Conflict object carries an error code, mirroring git_merge's per-source `merge_conflicts`.
     expect(parsed.conflict?.error).toBe("cherry_pick_conflicts");
     // Repo state is clean (cherry-pick aborted).
@@ -507,7 +507,7 @@ describe("git_cherry_pick guardrails", () => {
     expect(parsed.error).toBe("unsafe_ref_token");
   });
 
-  test("onto checks out a non-current destination branch", async () => {
+  test("into checks out a non-current destination branch", async () => {
     const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "dest");
     addCommit(dir, "dest.txt", "d\n", "chore: dest base");
@@ -518,16 +518,16 @@ describe("git_cherry_pick guardrails", () => {
     const text = await run({
       workspaceRoot: dir,
       format: "json",
-      onto: "dest",
+      into: "dest",
       sources: ["feature/a"],
     });
     const parsed = JSON.parse(text) as {
       ok: boolean;
-      onto: string;
+      into: string;
       applied: number;
     };
     expect(parsed.ok).toBe(true);
-    expect(parsed.onto).toBe("dest");
+    expect(parsed.into).toBe("dest");
     expect(parsed.applied).toBe(1);
     expect(gitCmd(dir, "branch", "--show-current").trim()).toBe("dest");
     expect(existsSync(join(dir, "a.txt"))).toBe(true);
@@ -564,8 +564,8 @@ describe("git_cherry_pick guardrails", () => {
 
   test("cap is enforced BEFORE the dedupe subprocess spawning, even when every commit would dedupe away", async () => {
     const dir = makeRepoWithSeed();
-    // Build an over-cap chain, then fast-forward `onto` all the way to the tip —
-    // every commit in the range is now already-reachable from `onto`, so the
+    // Build an over-cap chain, then fast-forward `into` all the way to the tip —
+    // every commit in the range is now already-reachable from `into`, so the
     // *post*-dedupe pick count would be 0 (old behavior: no error, no-op success).
     // The cap must instead be checked on the raw range size before filterAndDedupe
     // ever spawns a `merge-base --is-ancestor` subprocess per commit.
@@ -674,7 +674,7 @@ describe("git_cherry_pick onConflict: pause", () => {
         stage: string;
         paused?: boolean;
         commit?: string;
-        paths: string[];
+        conflicts: string[];
         error?: string;
       };
     };
@@ -682,7 +682,7 @@ describe("git_cherry_pick onConflict: pause", () => {
     expect(parsed.applied).toBe(0);
     expect(parsed.conflict?.paused).toBe(true);
     expect(parsed.conflict?.commit).toBe(conflictSha);
-    expect(parsed.conflict?.paths).toContain("shared.txt");
+    expect(parsed.conflict?.conflicts).toContain("shared.txt");
     expect(parsed.conflict?.error).toBe("cherry_pick_conflicts");
 
     // Sequencer state left in place (not aborted): CHERRY_PICK_HEAD still set, tree still dirty.
@@ -867,14 +867,14 @@ describe("git_cherry_pick_continue", () => {
     const second = JSON.parse(secondText) as {
       ok: boolean;
       applied: number;
-      conflict?: { paused?: boolean; commit?: string; paths: string[] };
+      conflict?: { paused?: boolean; commit?: string; conflicts: string[] };
     };
     // The sequencer committed feat: alpha, then hit a second conflict on feat: other-alpha.
     expect(second.ok).toBe(false);
     expect(second.applied).toBe(1);
     expect(second.conflict?.paused).toBe(true);
     expect(second.conflict?.commit).toBe(shaOtherAlpha);
-    expect(second.conflict?.paths).toContain("other.txt");
+    expect(second.conflict?.conflicts).toContain("other.txt");
     expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
 
     // Resolve the second conflict and finish the loop.

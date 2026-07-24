@@ -44,7 +44,7 @@ interface SourceReport extends ResolvedSource {
 interface ConflictReport {
   stage: "cherry-pick";
   commit?: string;
-  paths: string[];
+  conflicts: string[];
   detail?: string;
   /** `onConflict: "pause"` left the conflict + sequencer state in place instead of aborting. */
   paused?: boolean;
@@ -81,12 +81,12 @@ async function branchExists(gitTop: string, name: string): Promise<boolean> {
 /**
  * Expand a source spec into a list of SHAs to cherry-pick.
  * - `A..B` / `A...B` → `git rev-list --reverse` of the range
- * - branch name (refs/heads/<name> exists) → `onto..<branch>` oldest-first
+ * - branch name (refs/heads/<name> exists) → `into..<branch>` oldest-first
  * - SHA or ref → single commit
  */
 async function resolveSource(
   gitTop: string,
-  onto: string,
+  into: string,
   raw: string,
 ): Promise<ResolvedSource | { error: string; detail?: string; raw: string }> {
   if (raw.includes("..")) {
@@ -113,7 +113,7 @@ async function resolveSource(
   }
 
   if (await branchExists(gitTop, raw)) {
-    const commits = await commitListBetween(gitTop, onto, raw);
+    const commits = await commitListBetween(gitTop, into, raw);
     if (commits === null) {
       return { error: ERROR_CODES.RANGE_RESOLUTION_FAILED, raw };
     }
@@ -148,7 +148,7 @@ function countUniqueCommits(resolved: ResolvedSource[]): number {
  */
 async function filterAndDedupe(
   gitTop: string,
-  onto: string,
+  into: string,
   resolved: ResolvedSource[],
 ): Promise<{ picks: string[]; perSourceKept: Map<string, string[]> }> {
   const seen = new Set<string>();
@@ -160,7 +160,7 @@ async function filterAndDedupe(
       if (seen.has(sha)) continue;
       seen.add(sha);
       // Skip commits already reachable from destination (would produce empty commits).
-      const contained = await spawnGitAsync(gitTop, ["merge-base", "--is-ancestor", sha, onto]);
+      const contained = await spawnGitAsync(gitTop, ["merge-base", "--is-ancestor", sha, into]);
       if (contained.ok) continue; // already in destination
       picks.push(sha);
       kept.push(sha);
@@ -203,23 +203,23 @@ export async function branchHasUnmergedMergeCommits(
  * check. That patch-id comparison silently ignores merge commits (plain `git diff-tree` shows no
  * diff for a merge without `-m`/`-c`), so it cannot vouch for any unique content a merge commit
  * introduced (e.g. via conflict resolution). When `branch`'s own history since its merge-base
- * with `onto` contains merge commits, fall back to the strict `-d` path instead of trusting that
+ * with `into` contains merge commits, fall back to the strict `-d` path instead of trusting that
  * incomplete check enough to force-delete.
  */
 export async function maybeDeleteCherryPickedBranch(
   gitTop: string,
   branch: string,
-  onto: string,
+  into: string,
   strict: boolean,
 ): Promise<boolean> {
-  const useStrict = strict || (await branchHasUnmergedMergeCommits(gitTop, branch, onto));
+  const useStrict = strict || (await branchHasUnmergedMergeCommits(gitTop, branch, into));
   if (useStrict) {
-    const merged = await isFullyMergedInto(gitTop, branch, onto);
+    const merged = await isFullyMergedInto(gitTop, branch, into);
     if (!merged) return false;
     const r = await spawnGitAsync(gitTop, ["branch", "-d", branch]);
     return r.ok;
   }
-  const merged = await isContentEquivalentlyMergedInto(gitTop, branch, onto);
+  const merged = await isContentEquivalentlyMergedInto(gitTop, branch, into);
   if (!merged) return false;
   // -D required: git branch -d checks ref ancestry (fails after cherry-pick),
   // but we've already verified content equivalence via patch-id.
@@ -230,7 +230,7 @@ export async function maybeDeleteCherryPickedBranch(
 /** Build the `git_cherry_pick` JSON payload from the already-assembled per-source reports. */
 function buildGitCherryPickJson(opts: {
   allOk: boolean;
-  onto: string;
+  into: string;
   headSha: string | undefined;
   appliedCount: number;
   pickedCount: number;
@@ -240,7 +240,7 @@ function buildGitCherryPickJson(opts: {
 }): Record<string, unknown> {
   const {
     allOk,
-    onto,
+    into,
     headSha,
     appliedCount,
     pickedCount,
@@ -250,7 +250,7 @@ function buildGitCherryPickJson(opts: {
   } = opts;
   return {
     ok: allOk,
-    onto,
+    into,
     ...spreadDefined("headSha", headSha),
     applied: appliedCount,
     picked: pickedCount,
@@ -267,7 +267,7 @@ function buildGitCherryPickJson(opts: {
         stage: conflict?.stage ?? "cherry-pick",
         ...spreadWhen(conflict?.paused === true, { paused: true }),
         ...spreadDefined("commit", conflict?.commit),
-        paths: conflict?.paths ?? [],
+        conflicts: conflict?.conflicts ?? [],
         ...spreadDefined("detail", conflict?.detail),
         ...spreadDefined("error", conflict?.error),
         ...spreadWhen(conflict?.abortFailed === true, {
@@ -291,8 +291,8 @@ export function registerGitCherryPickTool(server: FastMCP): void {
   server.addTool({
     name: "git_cherry_pick",
     description:
-      "Cherry-pick commits from one or more sources onto a destination. Sources: SHAs, `A..B` ranges, " +
-      "or branch names (expanded to `onto..<branch>`, oldest-first). Already-reachable commits skipped. " +
+      "Cherry-pick commits from one or more sources into a destination. Sources: SHAs, `A..B` ranges, " +
+      "or branch names (expanded to `into..<branch>`, oldest-first). Already-reachable commits skipped. " +
       `Hard-capped at ${MAX_CHERRY_PICK_COMMITS} commits per call (after dedupe). ` +
       "Refuses on dirty tree or an in-progress cherry-pick; stops on first conflict. Optional flags " +
       "delete source branches/worktrees after success using patch-id equivalence (set " +
@@ -311,8 +311,8 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         .array(z.string().min(1))
         .min(1)
         .max(50)
-        .describe("Sources: SHA, `A..B` range, or branch name (resolves to `onto..<branch>`)."),
-      onto: z
+        .describe("Sources: SHA, `A..B` range, or branch name (resolves to `into..<branch>`)."),
+      into: z
         .string()
         .optional()
         .describe("Destination branch. Defaults to the currently checked-out branch."),
@@ -370,10 +370,10 @@ export function registerGitCherryPickTool(server: FastMCP): void {
 
       // --- Resolve destination ---
       const startBranch = await getCurrentBranch(gitTop);
-      const onto = args.onto?.trim() || startBranch;
-      if (!onto) return jsonRespond({ error: ERROR_CODES.ONTO_DETACHED_HEAD });
-      if (args.onto !== undefined && !isSafeGitRefToken(args.onto)) {
-        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.onto });
+      const into = args.into?.trim() || startBranch;
+      if (!into) return jsonRespond({ error: ERROR_CODES.INTO_DETACHED_HEAD });
+      if (args.into !== undefined && !isSafeGitRefToken(args.into)) {
+        return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.into });
       }
 
       // --- Refuse dirty tree ---
@@ -382,8 +382,8 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       }
 
       // --- Ensure destination is checked out ---
-      if (onto !== startBranch) {
-        const co = await spawnGitAsync(gitTop, ["checkout", onto]);
+      if (into !== startBranch) {
+        const co = await spawnGitAsync(gitTop, ["checkout", into]);
         if (!co.ok) {
           return jsonRespond({
             error: ERROR_CODES.CHECKOUT_FAILED,
@@ -392,14 +392,14 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         }
       }
 
-      if (!(await resolveRef(gitTop, onto))) {
-        return jsonRespond({ error: ERROR_CODES.DESTINATION_NOT_FOUND, ref: onto });
+      if (!(await resolveRef(gitTop, into))) {
+        return jsonRespond({ error: ERROR_CODES.DESTINATION_NOT_FOUND, ref: into });
       }
 
       // --- Resolve each source ---
       const resolved: ResolvedSource[] = [];
       for (const raw of args.sources) {
-        const r = await resolveSource(gitTop, onto, raw);
+        const r = await resolveSource(gitTop, into, raw);
         if ("error" in r) {
           return jsonRespond({
             error: r.error,
@@ -425,7 +425,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       }
 
       // --- Dedupe + skip already-present ---
-      const { picks, perSourceKept } = await filterAndDedupe(gitTop, onto, resolved);
+      const { picks, perSourceKept } = await filterAndDedupe(gitTop, into, resolved);
 
       // --- Apply cherry-pick (single atomic call) ---
       // `--empty=drop` silently drops commits that would produce no change against the
@@ -438,7 +438,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         const r = await spawnGitAsync(gitTop, ["cherry-pick", "--empty=drop", ...picks]);
         if (!r.ok) {
           const failedSha = await cherryPickHead(gitTop);
-          const paths = await conflictPaths(gitTop);
+          const conflicts = await conflictPaths(gitTop);
           if (onConflict === "pause") {
             // Leave the conflict + native sequencer state in place. Commits already
             // applied before the conflicting one stay applied — compute that count
@@ -449,7 +449,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               stage: "cherry-pick",
               paused: true,
               ...spreadDefined("commit", failedSha),
-              paths,
+              conflicts,
               detail: gitFailureDetail(r),
               error: ERROR_CODES.CHERRY_PICK_CONFLICTS,
             };
@@ -458,7 +458,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
             conflict = {
               stage: "cherry-pick",
               ...spreadDefined("commit", failedSha),
-              paths,
+              conflicts,
               detail: gitFailureDetail(r),
               error: abort.ok
                 ? ERROR_CODES.CHERRY_PICK_CONFLICTS
@@ -501,7 +501,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
             const deleted = await maybeDeleteCherryPickedBranch(
               gitTop,
               src.raw,
-              onto,
+              into,
               args.strictMergedRefEquality ?? false,
             );
             if (deleted) src.branchDeleted = true;
@@ -515,7 +515,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       return jsonRespond(
         buildGitCherryPickJson({
           allOk,
-          onto,
+          into,
           headSha,
           appliedCount,
           pickedCount: picks.length,
@@ -536,7 +536,7 @@ interface ContinueConflictReport {
   stage: "cherry-pick";
   paused: true;
   commit?: string;
-  paths: string[];
+  conflicts: string[];
   detail?: string;
 }
 
@@ -634,8 +634,8 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
 
       if (!r.ok) {
         const failedSha = await cherryPickHead(gitTop);
-        const paths = failedSha ? await conflictPaths(gitTop) : [];
-        if (failedSha && paths.length > 0) {
+        const conflicts = failedSha ? await conflictPaths(gitTop) : [];
+        if (failedSha && conflicts.length > 0) {
           // A later commit in the same range conflicted — report it the same shape as a
           // paused git_cherry_pick call so the caller can loop this tool to resolution.
           const adv = await spawnGitAsync(gitTop, ["rev-list", "--count", `${preHead}..HEAD`]);
@@ -644,7 +644,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
             stage: "cherry-pick",
             paused: true,
             ...spreadDefined("commit", failedSha),
-            paths,
+            conflicts,
             ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
           return jsonRespond(buildGitCherryPickContinueConflictJson(applied, conflict));

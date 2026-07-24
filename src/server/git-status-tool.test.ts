@@ -24,7 +24,7 @@ describe("git_status execute handler", () => {
     const run = captureTool(registerGitStatusTool);
     const text = await run({ root: dir, format: "json" });
     const parsed = JSON.parse(text) as {
-      groups: Array<{ mcpRoot: string; repos: Array<{ label: string; ok: boolean }> }>;
+      groups: Array<{ workspaceRoot: string; repos: Array<{ label: string; ok: boolean }> }>;
     };
     expect(parsed.groups).toHaveLength(1);
     expect(parsed.groups[0]?.repos[0]?.label).toBe(".");
@@ -206,7 +206,7 @@ describe("git_status execute handler", () => {
 
     const run = captureTool(registerGitStatusTool);
     const text = await run({ root: [dir1, dir2, dir3], format: "json" });
-    const parsed = JSON.parse(text) as { groups: Array<{ mcpRoot: string }> };
-    expect(parsed.groups.map((g) => g.mcpRoot)).toEqual([dir1, dir2, dir3]);
+    const parsed = JSON.parse(text) as { groups: Array<{ workspaceRoot: string }> };
+    expect(parsed.groups.map((g) => g.workspaceRoot)).toEqual([dir1, dir2, dir3]);
   });
 });

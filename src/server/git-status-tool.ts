@@ -33,7 +33,7 @@ type RepoRow = {
   changedFilesOmittedCount?: number;
 };
 type StatusGroup = {
-  mcpRoot: string;
+  workspaceRoot: string;
   repos: RepoRow[];
   submodulesTruncated?: boolean;
   submodulesOmittedCount?: number;
@@ -178,7 +178,7 @@ export function registerGitStatusTool(server: FastMCP): void {
         const top = tops[rootIndex];
         if (!top) {
           return {
-            mcpRoot: rootInput,
+            workspaceRoot: rootInput,
             repos: [
               { label: rootInput, path: rootInput, statusText: "not a git repository", ok: false },
             ],
@@ -200,7 +200,7 @@ export function registerGitStatusTool(server: FastMCP): void {
           }
         }
         return {
-          mcpRoot: rootInput,
+          workspaceRoot: rootInput,
           repos: [],
           ...spreadWhen(submodulesTruncated, { submodulesTruncated: true, submodulesOmittedCount }),
         };
