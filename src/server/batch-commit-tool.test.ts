@@ -943,6 +943,46 @@ describe("batch_commit pathspec isolation and stage rollback", () => {
     expect(staged.stdout).not.toContain("good.ts");
   });
 
+  test("mid-entry stage failure restores pre-call staged content byte-identically (not HEAD)", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "shared.ts"), "const s = 0;\n");
+    writeFileSync(join(dir, "bad.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "shared.ts", "bad.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // Pre-stage an edit to shared.ts that differs from both HEAD and the
+    // further edit made below — this is the "pre-call staged content" a bare
+    // `git restore --staged` (which resets to HEAD) would destroy.
+    writeFileSync(join(dir, "shared.ts"), "const s = 1; // pre-staged\n");
+    gitCmd(dir, "add", "shared.ts");
+    const preStagedBlob = gitCmd(dir, "show", ":shared.ts");
+
+    // Further worktree edit on top of the pre-staged version — this entry
+    // re-stages shared.ts before it fails on bad.ts's out-of-range hunk.
+    writeFileSync(join(dir, "shared.ts"), "const s = 2; // entry edit\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: partial stage fail with pre-staged sibling",
+          files: ["shared.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("stage_failed");
+
+    // shared.ts's index entry must be restored to the exact pre-call staged
+    // blob — not reset to HEAD (losing the pre-staged edit) and not left with
+    // the entry's own further edit (which never should have stuck).
+    const restoredBlob = gitCmd(dir, "show", ":shared.ts");
+    expect(restoredBlob).toBe(preStagedBlob);
+  });
+
   test("rejects '.' whole-tree pathspec", async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");

@@ -456,10 +456,30 @@ export function registerBatchCommitTool(server: FastMCP): void {
           break;
         }
 
+        // --- Snapshot the index before staging so a mid-entry stage failure
+        // restores the exact pre-entry index state. A bare `git restore
+        // --staged` resets to HEAD and would destroy content already staged
+        // on the same path before this call started; read-tree from this
+        // snapshot restores it byte-identically instead.
+        const entrySnapshotResult = await spawnGitAsync(gitTop, ["write-tree"]);
+        if (!entrySnapshotResult.ok) {
+          results.push({
+            index: i,
+            ok: false,
+            message: entry.message,
+            files: filePaths,
+            error: ERROR_CODES.COMMIT_FAILED,
+            detail:
+              (entrySnapshotResult.stderr || entrySnapshotResult.stdout).trim() ||
+              "failed to snapshot index before staging",
+          });
+          break;
+        }
+        const entrySnapshot = entrySnapshotResult.stdout.trim();
+
         // --- Stage files (with optional line ranges) ---
         let stagingFailed = false;
         let stagingError = "";
-        const stagedSoFar: string[] = [];
         for (const fileEntry of fileEntries) {
           const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
           if (!stageResult.ok) {
@@ -467,15 +487,11 @@ export function registerBatchCommitTool(server: FastMCP): void {
             stagingError = stageResult.error || "Unknown error";
             break;
           }
-          stagedSoFar.push(fileEntry.path);
         }
 
         if (stagingFailed) {
-          // Unstage anything this entry already staged (live + dryRun).
-          // dryRun final cleanup also restores via read-tree when available.
-          if (stagedSoFar.length > 0) {
-            await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...stagedSoFar]);
-          }
+          // Restore the exact pre-entry index state from the snapshot above.
+          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
           results.push({
             index: i,
             ok: false,
@@ -509,9 +525,9 @@ export function registerBatchCommitTool(server: FastMCP): void {
             ...spreadDefined("diffStat", diffStat || undefined),
           });
 
-          // Unstage this entry before the next so the next entry's staging starts clean
-          // relative to the snapshot (final read-tree still restores pre-call index).
-          await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...filePaths]);
+          // Restore this entry's pre-staging snapshot before the next so the next
+          // entry starts clean (final read-tree still restores the full pre-call index).
+          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
           continue;
         }
 
