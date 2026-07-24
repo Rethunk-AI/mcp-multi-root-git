@@ -1,14 +1,14 @@
 import type { FastMCP } from "fastmcp";
 
 import { jsonRespond, spreadDefined } from "./json.js";
-import { forEachPresetRoot } from "./presets.js";
+import { forEachPresetRoot, type PresetEntry } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
 
 type PresetRow = {
   name: string;
-  nestedRootsCount: number;
-  parityPairsCount: number;
+  nestedRoots?: PresetEntry["nestedRoots"];
+  parityPairs?: PresetEntry["parityPairs"];
   workspaceRootHint?: string;
 };
 
@@ -25,7 +25,8 @@ type PresetRootRow = {
 export function registerListPresetsTool(server: FastMCP): void {
   server.addTool({
     name: "list_presets",
-    description: "List presets from .rethunk/git-mcp-presets.json.",
+    description:
+      "List presets (name, nestedRoots, parityPairs) from .rethunk/git-mcp-presets.json.",
     annotations: {
       readOnlyHint: true,
     },
@@ -40,8 +41,8 @@ export function registerListPresetsTool(server: FastMCP): void {
         const presets: PresetRow[] = data
           ? Object.entries(data).map(([name, e]) => ({
               name,
-              nestedRootsCount: e.nestedRoots?.length ?? 0,
-              parityPairsCount: e.parityPairs?.length ?? 0,
+              ...spreadDefined("nestedRoots", e.nestedRoots?.length ? e.nestedRoots : undefined),
+              ...spreadDefined("parityPairs", e.parityPairs?.length ? e.parityPairs : undefined),
               ...spreadDefined(
                 "workspaceRootHint",
                 e.workspaceRootHint ? e.workspaceRootHint : undefined,
@@ -86,10 +87,15 @@ export function registerListPresetsTool(server: FastMCP): void {
           lines.push(`preset_schema_version: ${row.presetSchemaVersion}`, "");
         }
         for (const p of row.presets) {
-          lines.push(
-            `- **${p.name}**: nestedRoots=${p.nestedRootsCount}, parityPairs=${p.parityPairsCount}` +
-              (p.workspaceRootHint ? `, hint=${p.workspaceRootHint}` : ""),
-          );
+          const parts: string[] = [];
+          if (p.nestedRoots?.length) parts.push(`nestedRoots=${p.nestedRoots.join(",")}`);
+          if (p.parityPairs?.length) {
+            parts.push(
+              `parityPairs=${p.parityPairs.map((pp) => `${pp.left}->${pp.right}`).join(",")}`,
+            );
+          }
+          if (p.workspaceRootHint) parts.push(`hint=${p.workspaceRootHint}`);
+          lines.push(`- **${p.name}**${parts.length ? `: ${parts.join(", ")}` : ""}`);
         }
         lines.push("");
       }
