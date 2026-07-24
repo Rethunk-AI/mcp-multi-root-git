@@ -13,13 +13,24 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { registerGitBlameTool } from "./git-blame-tool.js";
-import { addCommit, captureTool, cleanupTmpPaths, makeRepo } from "./test-harness.js";
+import {
+  addCommit,
+  captureTool,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepo,
+  mkTmpDir,
+  writeTestGitConfig,
+} from "./test-harness.js";
 
 interface BlameGroupJson {
   sha: string;
   author: string;
+  authorMail?: string;
   date: string;
   summary: string;
   startLine: number;
@@ -206,5 +217,84 @@ describe("git_blame_tool", () => {
 
     const parsed = JSON.parse(result) as { error: string };
     expect(parsed.error).toBe("invalid_line_range");
+  });
+
+  test("groups include authorMail from the porcelain author-mail line", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "hello.txt", "line one\n", "feat: add hello");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({ workspaceRoot: repo, path: "hello.txt", format: "json" });
+
+    const parsed = JSON.parse(result) as { groups: BlameGroupJson[] };
+    expect(parsed.groups[0]?.authorMail).toBe("test@example.com");
+  });
+
+  test("accepts a 64-hex SHA-256 object name from a sha256-format repo", async () => {
+    const dir = mkTmpDir("mcp-blame-sha256-");
+    gitCmd(dir, "init", "--object-format=sha256", "-b", "main");
+    writeTestGitConfig(dir);
+    writeFileSync(join(dir, "hello.txt"), "line one\n");
+    gitCmd(dir, "add", "hello.txt");
+    gitCmd(dir, "commit", "-m", "feat: add hello (sha256 repo)");
+
+    const tool = captureTool(registerGitBlameTool);
+    const result = await tool({ workspaceRoot: dir, path: "hello.txt", format: "json" });
+
+    const parsed = JSON.parse(result) as { groups: BlameGroupJson[] };
+    expect(parsed.groups).toHaveLength(1);
+    expect(parsed.groups[0]?.sha).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("ignoreWhitespace (-w) ignores a whitespace-only change when assigning blame", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "ws.txt", "const x = 1;\n", "feat: initial");
+    // Reindent only (whitespace-only change) in a second commit.
+    addCommit(repo, "ws.txt", "  const x = 1;\n", "chore: reindent");
+
+    const tool = captureTool(registerGitBlameTool);
+    const withoutFlag = JSON.parse(
+      await tool({ workspaceRoot: repo, path: "ws.txt", format: "json" }),
+    ) as { groups: BlameGroupJson[] };
+    const withFlag = JSON.parse(
+      await tool({
+        workspaceRoot: repo,
+        path: "ws.txt",
+        ignoreWhitespace: true,
+        format: "json",
+      }),
+    ) as { groups: BlameGroupJson[] };
+
+    // Without -w, the reindent commit owns the line; with -w, blame attributes
+    // it back to the original commit that introduced the (whitespace-insensitive) content.
+    expect(withoutFlag.groups[0]?.summary).toBe("chore: reindent");
+    expect(withFlag.groups[0]?.summary).toBe("feat: initial");
+  });
+
+  test("subprocess-level buffer truncation returns partial groups + truncated:true, not git_blame_failed", async () => {
+    const repo = makeRepo();
+    const bigLines = Array.from({ length: 200 }, (_, i) => `line-${i}-${"z".repeat(30)}`).join(
+      "\n",
+    );
+    addCommit(repo, "big.txt", `${bigLines}\n`, "feat: add big file");
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const tool = captureTool(registerGitBlameTool);
+      const result = await tool({ workspaceRoot: repo, path: "big.txt", format: "json" });
+      const parsed = JSON.parse(result) as {
+        error?: string;
+        truncated?: boolean;
+        groups?: BlameGroupJson[];
+      };
+
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.truncated).toBe(true);
+      expect(Array.isArray(parsed.groups)).toBe(true);
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
   });
 });

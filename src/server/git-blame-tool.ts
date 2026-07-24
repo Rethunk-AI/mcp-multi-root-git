@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -17,6 +17,7 @@ interface BlameLine {
   line: number;
   sha: string;
   author: string;
+  authorMail?: string;
   date: string;
   summary: string;
   content: string;
@@ -26,6 +27,7 @@ interface BlameLine {
 interface BlameGroup {
   sha: string;
   author: string;
+  authorMail?: string;
   date: string;
   summary: string;
   startLine: number;
@@ -47,9 +49,17 @@ interface BlameJson {
 
 interface ShaMetaCache {
   author: string;
+  authorMail?: string;
   authorTime: number;
   authorTz: string;
   summary: string;
+}
+
+/** Strip the `<...>` angle brackets porcelain wraps the email address in. */
+function stripAngleBrackets(s: string): string {
+  const t = s.trim();
+  if (t.startsWith("<") && t.endsWith(">")) return t.slice(1, -1);
+  return t;
 }
 
 /**
@@ -103,8 +113,9 @@ function parsePorcelain(output: string): BlameLine[] {
       continue;
     }
 
-    // Header: "<sha40> <origLine> <finalLine> [numLines]"
-    const headerMatch = /^([0-9a-f]{40}) \d+ (\d+)/.exec(headerLine);
+    // Header: "<sha> <origLine> <finalLine> [numLines]" — sha is 40 hex chars
+    // (SHA-1) or 64 hex chars (SHA-256 object-format repos).
+    const headerMatch = /^([0-9a-f]{40}|[0-9a-f]{64}) \d+ (\d+)/.exec(headerLine);
     if (!headerMatch) {
       i++;
       continue;
@@ -116,6 +127,7 @@ function parsePorcelain(output: string): BlameLine[] {
 
     // Collect key-value lines until the TAB-prefixed content line
     let author = "";
+    let authorMail: string | undefined;
     let authorTime = 0;
     let authorTz = "+0000";
     let summary = "";
@@ -137,6 +149,8 @@ function parsePorcelain(output: string): BlameLine[] {
       // Parse known key-value pairs
       if (l.startsWith("author ") && !l.startsWith("author-")) {
         author = l.slice("author ".length);
+      } else if (l.startsWith("author-mail ")) {
+        authorMail = stripAngleBrackets(l.slice("author-mail ".length)) || undefined;
       } else if (l.startsWith("author-time ")) {
         authorTime = Number.parseInt(l.slice("author-time ".length), 10);
       } else if (l.startsWith("author-tz ")) {
@@ -153,10 +167,11 @@ function parsePorcelain(output: string): BlameLine[] {
     const cached = metaCache.get(sha);
     if (cached === undefined) {
       // First occurrence — we collected the metadata
-      metaCache.set(sha, { author, authorTime, summary, authorTz });
+      metaCache.set(sha, { author, authorMail, authorTime, summary, authorTz });
     } else {
       // Subsequent occurrence — restore from cache
       author = cached.author;
+      authorMail = cached.authorMail;
       authorTime = cached.authorTime;
       authorTz = cached.authorTz;
       summary = cached.summary;
@@ -168,6 +183,7 @@ function parsePorcelain(output: string): BlameLine[] {
       line: finalLine,
       sha,
       author,
+      ...spreadDefined("authorMail", authorMail),
       date,
       summary,
       content,
@@ -198,6 +214,7 @@ function groupBlameLines(lines: BlameLine[]): BlameGroup[] {
     current = {
       sha: l.sha,
       author: l.author,
+      ...spreadDefined("authorMail", l.authorMail),
       date: l.date,
       summary: l.summary,
       startLine: l.line,
@@ -242,7 +259,8 @@ export function registerGitBlameTool(server: FastMCP): void {
   server.addTool({
     name: "git_blame",
     description:
-      "File authorship, grouped into contiguous same-commit line runs (sha, author, date, summary once per run). Optionally restrict to a commit-ish ref and/or a line range.",
+      "File authorship, grouped into contiguous same-commit line runs (sha, author, date, summary once per run). Optionally restrict to a commit-ish ref and/or a line range. " +
+      "`ignoreWhitespace`/`detectMoves`/`detectCopies` mirror git blame's `-w`/`-M`/`-C`.",
     annotations: {
       readOnlyHint: true,
     },
@@ -276,6 +294,21 @@ export function registerGitBlameTool(server: FastMCP): void {
         .optional()
         .default(2000)
         .describe("Max blamed lines to return. Default: 2000."),
+      ignoreWhitespace: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Ignore whitespace-only changes when assigning blame (`-w`)."),
+      detectMoves: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Detect lines moved or copied within the same file (`-M`)."),
+      detectCopies: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Detect lines moved or copied from other files in the same commit (`-C`)."),
     }),
     execute: async (args) => {
       const pre = requireSingleRepo(server, args);
@@ -309,6 +342,9 @@ export function registerGitBlameTool(server: FastMCP): void {
 
       // Build git blame args
       const blameArgs: string[] = ["blame", "--porcelain"];
+      if (args.ignoreWhitespace === true) blameArgs.push("-w");
+      if (args.detectMoves === true) blameArgs.push("-M");
+      if (args.detectCopies === true) blameArgs.push("-C");
       if (args.ref !== undefined) {
         blameArgs.push(args.ref as string);
       }
@@ -317,8 +353,12 @@ export function registerGitBlameTool(server: FastMCP): void {
       }
       blameArgs.push("--", args.path as string);
 
-      const r = await spawnGitAsync(top, blameArgs);
-      if (!r.ok) {
+      const r = await spawnGitAsync(top, blameArgs, {
+        maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
+      });
+      // A subprocess-level buffer cap (r.truncated) still yields usable partial
+      // porcelain output — parse and return it instead of failing outright.
+      if (!r.ok && !r.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_BLAME_FAILED,
           detail: (r.stderr || r.stdout).trim(),
@@ -327,16 +367,20 @@ export function registerGitBlameTool(server: FastMCP): void {
 
       const allLines = parsePorcelain(r.stdout);
       const maxLines = (args.maxLines as number | undefined) ?? 2000;
-      const truncated = allLines.length > maxLines;
-      const blameLines = truncated ? allLines.slice(0, maxLines) : allLines;
+      const capTruncated = allLines.length > maxLines;
+      const blameLines = capTruncated ? allLines.slice(0, maxLines) : allLines;
+      const truncated = capTruncated || r.truncated === true;
 
       const blameJson: BlameJson = {
         ...spreadDefined("ref", args.ref as string | undefined),
         path: args.path as string,
         groups: groupBlameLines(blameLines),
+        // omittedLines is only meaningful when our own maxLines cap fired —
+        // when truncation instead came solely from the subprocess buffer cap,
+        // the exact omitted count is unknown, so it's left out.
         ...spreadWhen(truncated, {
           truncated: true,
-          omittedLines: allLines.length - maxLines,
+          ...spreadWhen(capTruncated, { omittedLines: allLines.length - maxLines }),
         }),
       };
 
