@@ -8,13 +8,13 @@ import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
   GIT_SUBPROCESS_PARALLELISM,
-  gitTopLevel,
+  gitTopLevelAsync,
   resolveGitSubprocessMaxBufferBytes,
   spawnGitAsync,
 } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ export function registerGitGrepTool(server: FastMCP): void {
         ),
     }),
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = await requireGitAndRootsAsync(server, args, undefined);
       if (!pre.ok) return jsonRespond(pre.error);
 
       const pickaxe = args.pickaxe;
@@ -229,7 +229,7 @@ export function registerGitGrepTool(server: FastMCP): void {
         jobs,
         GIT_SUBPROCESS_PARALLELISM,
         async ({ rootInput }): Promise<GrepRootJson> => {
-          const top = gitTopLevel(rootInput);
+          const top = await gitTopLevelAsync(rootInput);
           if (!top) {
             return {
               root: rootInput,

@@ -1,8 +1,8 @@
 /**
  * Tests for root resolution paths in src/server/roots.ts.
  *
- * Covers resolveRootPathList / requireSingleRepo / requireGitAndRoots edge
- * errors directly, plus git_status happy-path routing.
+ * Covers resolveRootPathListAsync / requireSingleRepo / requireGitAndRootsAsync
+ * edge errors directly, plus git_status happy-path routing.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -12,7 +12,7 @@ import type { FastMCP } from "fastmcp";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
-import { requireGitAndRoots, requireSingleRepo, resolveRootPathList } from "./roots.js";
+import { requireGitAndRootsAsync, requireSingleRepo, resolveRootPathListAsync } from "./roots.js";
 import { MAX_ROOT_PATHS } from "./schemas.js";
 import {
   captureTool,
@@ -44,10 +44,10 @@ function fakeServerWithSessions(groups: { roots: string[]; sessionId?: string }[
   } as unknown as FastMCP;
 }
 
-describe("resolveRootPathList", () => {
-  test("returns root_list_too_many when length exceeds MAX_ROOT_PATHS", () => {
+describe("resolveRootPathListAsync", () => {
+  test("returns root_list_too_many when length exceeds MAX_ROOT_PATHS", async () => {
     const raw = Array.from({ length: MAX_ROOT_PATHS + 1 }, (_, i) => `/tmp/r${i}`);
-    const result = resolveRootPathList(raw);
+    const result = await resolveRootPathListAsync(raw);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toEqual({
@@ -57,34 +57,34 @@ describe("resolveRootPathList", () => {
     });
   });
 
-  test("returns root_list_empty for an empty array", () => {
-    const result = resolveRootPathList([]);
+  test("returns root_list_empty for an empty array", async () => {
+    const result = await resolveRootPathListAsync([]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toEqual({ error: ERROR_CODES.ROOT_LIST_EMPTY });
   });
 
-  test("returns invalid_root_path for a blank entry", () => {
-    const blank = resolveRootPathList(["   "]);
+  test("returns invalid_root_path for a blank entry", async () => {
+    const blank = await resolveRootPathListAsync(["   "]);
     expect(blank.ok).toBe(false);
     if (blank.ok) return;
     expect(blank.error).toEqual({ error: ERROR_CODES.INVALID_ROOT_PATH, path: "   " });
   });
 
-  test("returns invalid_root_path for a non-git directory", () => {
+  test("returns invalid_root_path for a non-git directory", async () => {
     const dir = mkTmpDir("root-nongit-");
-    const result = resolveRootPathList([dir]);
+    const result = await resolveRootPathListAsync([dir]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.error).toBe(ERROR_CODES.INVALID_ROOT_PATH);
   });
 
-  test("returns ok with unique git toplevels", () => {
+  test("returns ok with unique git toplevels", async () => {
     const a = mkTmpDir("root-ok-a-");
     const b = mkTmpDir("root-ok-b-");
     gitInitMain(a);
     gitInitMain(b);
-    const result = resolveRootPathList([a, b, a]);
+    const result = await resolveRootPathListAsync([a, b, a]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([a, b]);
@@ -113,19 +113,19 @@ describe("requireSingleRepo", () => {
   });
 });
 
-describe("requireGitAndRoots", () => {
-  test("root array + presetName → root_list_preset_conflict", () => {
+describe("requireGitAndRootsAsync", () => {
+  test("root array + presetName → root_list_preset_conflict", async () => {
     const a = mkTmpDir("preset-conflict-");
     gitInitMain(a);
-    const result = requireGitAndRoots(fakeServer(), { root: [a] }, "fleet");
+    const result = await requireGitAndRootsAsync(fakeServer(), { root: [a] }, "fleet");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toEqual({ error: ERROR_CODES.ROOT_LIST_PRESET_CONFLICT });
   });
 
-  test('root "*" over MAX_ROOT_PATHS → root_list_too_many', () => {
+  test('root "*" over MAX_ROOT_PATHS → root_list_too_many', async () => {
     const uris = Array.from({ length: MAX_ROOT_PATHS + 1 }, (_, i) => `file:///tmp/star-root-${i}`);
-    const result = requireGitAndRoots(fakeServer(uris), { root: "*" }, undefined);
+    const result = await requireGitAndRootsAsync(fakeServer(uris), { root: "*" }, undefined);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toEqual({
@@ -135,9 +135,9 @@ describe("requireGitAndRoots", () => {
     });
   });
 
-  test("root array of non-git paths surfaces invalid_root_path via resolveRootPathList", () => {
+  test("root array of non-git paths surfaces invalid_root_path via resolveRootPathListAsync", async () => {
     const dir = mkTmpDir("fanout-nongit-");
-    const result = requireGitAndRoots(fakeServer(), { root: [dir] }, undefined);
+    const result = await requireGitAndRootsAsync(fakeServer(), { root: [dir] }, undefined);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.error).toBe(ERROR_CODES.INVALID_ROOT_PATH);
@@ -228,7 +228,7 @@ describe("wildcard root: gitTopLevel resolution + dedup", () => {
     const nested = join(a, "subdir");
     mkdirSync(nested, { recursive: true });
 
-    const result = requireGitAndRoots(
+    const result = await requireGitAndRootsAsync(
       fakeServer([`file://${a}`, `file://${nested}`]),
       { root: "*" },
       undefined,
@@ -243,7 +243,7 @@ describe("wildcard root: gitTopLevel resolution + dedup", () => {
     const b = mkTmpDir("wild-nongit-b-");
     gitInitMain(b);
 
-    const result = requireGitAndRoots(
+    const result = await requireGitAndRootsAsync(
       fakeServer([`file://${a}`, `file://${b}`]),
       { root: "*" },
       undefined,
@@ -254,8 +254,8 @@ describe("wildcard root: gitTopLevel resolution + dedup", () => {
   });
 });
 
-describe("multi-root preset routing (resolveRootsForPreset)", () => {
-  test("matches the root whose preset entry's workspaceRootHint matches its basename", () => {
+describe("multi-root preset routing (resolveRootsForPresetAsync)", () => {
+  test("matches the root whose preset entry's workspaceRootHint matches its basename", async () => {
     const g1 = mkTmpDir("preset-route-g1-");
     const g2 = mkTmpDir("preset-route-g2-");
     gitInitMain(g1);
@@ -265,14 +265,18 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
       presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: basename(g2) } },
     });
 
-    const result = requireGitAndRoots(fakeServer([`file://${g1}`, `file://${g2}`]), {}, "p");
+    const result = await requireGitAndRootsAsync(
+      fakeServer([`file://${g1}`, `file://${g2}`]),
+      {},
+      "p",
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([g2]);
     expect(result.warning).toBeUndefined();
   });
 
-  test("per-root isolation: an unparseable presets.json on an irrelevant root does not abort the search", () => {
+  test("per-root isolation: an unparseable presets.json on an irrelevant root does not abort the search", async () => {
     const broken = mkTmpDir("preset-route-broken-");
     const g2 = mkTmpDir("preset-route-ok-");
     gitInitMain(broken);
@@ -281,13 +285,17 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
     writeFileSync(join(broken, ".rethunk", "git-mcp-presets.json"), "{not valid json");
     writePresetFixture(g2, { schemaVersion: "1", presets: { p: { nestedRoots: ["pkg"] } } });
 
-    const result = requireGitAndRoots(fakeServer([`file://${broken}`, `file://${g2}`]), {}, "p");
+    const result = await requireGitAndRootsAsync(
+      fakeServer([`file://${broken}`, `file://${g2}`]),
+      {},
+      "p",
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([g2]);
   });
 
-  test("workspaceRootHint mismatch surfaces an explicit warning instead of a silent fallback", () => {
+  test("workspaceRootHint mismatch surfaces an explicit warning instead of a silent fallback", async () => {
     const g1 = mkTmpDir("preset-hint-mismatch-g1-");
     const g2 = mkTmpDir("preset-hint-mismatch-g2-");
     gitInitMain(g1);
@@ -297,7 +305,11 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
       presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: "no-such-root-anywhere" } },
     });
 
-    const result = requireGitAndRoots(fakeServer([`file://${g1}`, `file://${g2}`]), {}, "p");
+    const result = await requireGitAndRootsAsync(
+      fakeServer([`file://${g1}`, `file://${g2}`]),
+      {},
+      "p",
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([g1]);
@@ -310,7 +322,7 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
 });
 
 describe("listFileRoots session scoping", () => {
-  test("root '*' scopes to the calling session when sessionId matches a live session", () => {
+  test("root '*' scopes to the calling session when sessionId matches a live session", async () => {
     const a = mkTmpDir("session-scope-a-");
     const b = mkTmpDir("session-scope-b-");
     gitInitMain(a);
@@ -321,13 +333,13 @@ describe("listFileRoots session scoping", () => {
       { roots: [`file://${b}`], sessionId: "session-b" },
     ]);
 
-    const result = requireGitAndRoots(server, { root: "*" }, undefined, "session-a");
+    const result = await requireGitAndRootsAsync(server, { root: "*" }, undefined, "session-a");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([a]);
   });
 
-  test("falls back to the aggregate across all sessions when sessionId has no match", () => {
+  test("falls back to the aggregate across all sessions when sessionId has no match", async () => {
     const a = mkTmpDir("session-scope-fallback-a-");
     const b = mkTmpDir("session-scope-fallback-b-");
     gitInitMain(a);
@@ -338,13 +350,18 @@ describe("listFileRoots session scoping", () => {
       { roots: [`file://${b}`], sessionId: "session-b" },
     ]);
 
-    const result = requireGitAndRoots(server, { root: "*" }, undefined, "unknown-session");
+    const result = await requireGitAndRootsAsync(
+      server,
+      { root: "*" },
+      undefined,
+      "unknown-session",
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([a, b]);
   });
 
-  test("falls back to the aggregate across all sessions when sessionId is omitted (stdio transport)", () => {
+  test("falls back to the aggregate across all sessions when sessionId is omitted (stdio transport)", async () => {
     const a = mkTmpDir("session-scope-omitted-a-");
     const b = mkTmpDir("session-scope-omitted-b-");
     gitInitMain(a);
@@ -355,7 +372,7 @@ describe("listFileRoots session scoping", () => {
       { roots: [`file://${b}`], sessionId: "session-b" },
     ]);
 
-    const result = requireGitAndRoots(server, { root: "*" }, undefined);
+    const result = await requireGitAndRootsAsync(server, { root: "*" }, undefined);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.roots).toEqual([a, b]);

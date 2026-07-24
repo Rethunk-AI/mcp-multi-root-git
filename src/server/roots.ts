@@ -75,46 +75,10 @@ type ResolveRootsResult =
   | { ok: false; error: Record<string, unknown> };
 
 /**
- * Resolve an explicit `root` path array to unique git toplevels
- * (stable order, first occurrence wins).
- */
-export function resolveRootPathList(raw: string[]): ResolveRootsResult {
-  if (raw.length > MAX_ROOT_PATHS) {
-    return {
-      ok: false,
-      error: {
-        error: ERROR_CODES.ROOT_LIST_TOO_MANY,
-        max: MAX_ROOT_PATHS,
-        count: raw.length,
-      },
-    };
-  }
-  const seen = new Set<string>();
-  const tops: string[] = [];
-  for (const item of raw) {
-    const trimmed = item.trim();
-    if (trimmed.length === 0) {
-      return { ok: false, error: { error: ERROR_CODES.INVALID_ROOT_PATH, path: item } };
-    }
-    const abs = resolve(trimmed);
-    const top = gitTopLevel(abs);
-    if (!top) {
-      return { ok: false, error: { error: ERROR_CODES.INVALID_ROOT_PATH, path: abs } };
-    }
-    if (seen.has(top)) continue;
-    seen.add(top);
-    tops.push(top);
-  }
-  if (tops.length === 0) {
-    return { ok: false, error: { error: ERROR_CODES.ROOT_LIST_EMPTY } };
-  }
-  return { ok: true, roots: tops };
-}
-
-/**
- * Async, pooled twin of {@link resolveRootPathList} — resolves all candidate
- * toplevels concurrently (bounded by `GIT_SUBPROCESS_PARALLELISM`) instead of
- * one blocking `spawnSync` per path. Used by the fan-out read tools
+ * Resolve an explicit `root` path array to unique git toplevels (stable
+ * order, first occurrence wins). Resolves all candidate toplevels
+ * concurrently (bounded by `GIT_SUBPROCESS_PARALLELISM`) instead of one
+ * blocking `spawnSync` per path. Used by the fan-out read tools
  * (`git_status`/`git_inventory`/`git_parity`) via {@link requireGitAndRootsAsync}.
  * `topMemo` defaults to a fresh {@link createTopLevelMemo} per call — pass one
  * in explicitly to share it with sibling resolution work in the same tool
@@ -173,7 +137,9 @@ function defaultRoots(fileRoots: string[]): ResolveRootsResult {
 
 /**
  * When a preset name is requested and multiple MCP roots exist, pick the first root
- * whose git toplevel loads a preset file containing that name.
+ * whose git toplevel loads a preset file containing that name. Resolves every
+ * candidate root's toplevel concurrently (bounded by `GIT_SUBPROCESS_PARALLELISM`)
+ * up front, then applies first-match-in-order selection.
  *
  * A root whose preset file is missing or fails to parse never aborts this search —
  * it may simply be irrelevant to this preset name — it is just skipped in favor of
@@ -181,56 +147,6 @@ function defaultRoots(fileRoots: string[]): ResolveRootsResult {
  * `workspaceRootHint` fails to match any candidate root, the silent fallback to
  * `defaultRoots` is annotated with an explicit `warning` instead of looking
  * identical to "preset not found anywhere".
- */
-function resolveRootsForPreset(
-  server: FastMCP,
-  presetName: string,
-  sessionId?: string,
-): ResolveRootsResult {
-  const fileRoots = listFileRoots(server, sessionId);
-  if (fileRoots.length <= 1) {
-    return defaultRoots(fileRoots);
-  }
-  const matches: string[] = [];
-  let hintMismatch: { hint: string } | undefined;
-  for (const r of fileRoots) {
-    const top = gitTopLevel(r);
-    if (!top) continue;
-    const loaded = loadPresetsFromGitTop(top);
-    if (!loaded.ok) continue;
-    const entry = loaded.data[presetName];
-    if (!entry) continue;
-    const hint = entry.workspaceRootHint?.trim();
-    if (hint && !pathMatchesWorkspaceRootHint(r, hint)) {
-      hintMismatch = { hint };
-      continue;
-    }
-    matches.push(r);
-  }
-  const pick = matches[0];
-  if (pick !== undefined) {
-    return { ok: true, roots: [pick] };
-  }
-  const fallback = defaultRoots(fileRoots);
-  if (fallback.ok && hintMismatch) {
-    return {
-      ok: true,
-      roots: fallback.roots,
-      warning: {
-        code: "workspace_root_hint_mismatch",
-        preset: presetName,
-        hint: hintMismatch.hint,
-      },
-    };
-  }
-  return fallback;
-}
-
-/**
- * Async, pooled twin of {@link resolveRootsForPreset} — resolves every
- * candidate root's toplevel concurrently (bounded by
- * `GIT_SUBPROCESS_PARALLELISM`) up front, then applies the exact same
- * first-match-in-order selection as the sync version.
  */
 async function resolveRootsForPresetAsync(
   server: FastMCP,
@@ -287,75 +203,11 @@ type GitAndRootsResult =
  * `gateGit` plus `root` resolution; shared fan-out tool and resource prelude.
  * `sessionId` (from the tool's `Context.sessionId`, HTTP transports only) scopes
  * `"*"` / omitted-root MCP-file-root lookups to the calling session when known.
- */
-export function requireGitAndRoots(
-  server: FastMCP,
-  args: RootPickArgs,
-  presetName: string | undefined,
-  sessionId?: string,
-): GitAndRootsResult {
-  const gg = gateGit();
-  if (!gg.ok) {
-    return { ok: false, error: gg.body };
-  }
-
-  const root = args.root;
-  if (Array.isArray(root)) {
-    if (presetName) {
-      return { ok: false, error: { error: ERROR_CODES.ROOT_LIST_PRESET_CONFLICT } };
-    }
-    return resolveRootPathList(root);
-  }
-
-  const trimmed = root?.trim();
-  if (trimmed === "*") {
-    const fileRoots = listFileRoots(server, sessionId);
-    if (fileRoots.length === 0) return defaultRoots(fileRoots);
-    if (fileRoots.length > MAX_ROOT_PATHS) {
-      return {
-        ok: false,
-        error: {
-          error: ERROR_CODES.ROOT_LIST_TOO_MANY,
-          max: MAX_ROOT_PATHS,
-          count: fileRoots.length,
-        },
-      };
-    }
-    // Same gitTopLevel resolution + Set dedup as resolveRootPathList, so two
-    // nested/overlapping MCP file roots that share a git toplevel collapse
-    // into one entry instead of double-counting the same repo.
-    const seen = new Set<string>();
-    const tops: string[] = [];
-    for (const r of fileRoots) {
-      const top = gitTopLevel(r) ?? r;
-      if (seen.has(top)) continue;
-      seen.add(top);
-      tops.push(top);
-    }
-    return { ok: true, roots: tops };
-  }
-  if (trimmed) {
-    return { ok: true, roots: [resolve(trimmed)] };
-  }
-
-  if (presetName) {
-    return resolveRootsForPreset(server, presetName, sessionId);
-  }
-  return defaultRoots(listFileRoots(server, sessionId));
-}
-
-/**
- * Async, pooled twin of {@link requireGitAndRoots} for the fan-out read tools
- * that iterate `roots` themselves (`git_status`, `git_inventory`,
- * `git_parity`) — every toplevel resolution on the `root` array / `"*"` /
- * preset paths runs through a bounded pool instead of one blocking
- * `spawnSync` per candidate. Creates one {@link createTopLevelMemo} per call
- * (per tool invocation, per this function's own contract — no cross-call
- * cache) and shares it across the array/`"*"`/preset branches below.
- *
- * Kept alongside the sync {@link requireGitAndRoots}: `git_grep`, `git_log`,
- * `list_presets`, and the `rethunk-git://presets` resource still call the
- * sync version directly and are out of this change's scope.
+ * Every toplevel resolution on the `root` array / `"*"` / preset paths runs
+ * through a bounded pool instead of one blocking `spawnSync` per candidate.
+ * Creates one {@link createTopLevelMemo} per call (per tool invocation, per
+ * this function's own contract — no cross-call cache) and shares it across
+ * the array/`"*"`/preset branches below.
  */
 export async function requireGitAndRootsAsync(
   server: FastMCP,

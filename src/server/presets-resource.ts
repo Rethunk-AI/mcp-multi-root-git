@@ -3,7 +3,7 @@ import type { FastMCP } from "fastmcp";
 import { ERROR_CODES } from "./error-codes.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { forEachPresetRoot } from "./presets.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 
 export function registerPresetsResource(server: FastMCP): void {
   server.addResource({
@@ -11,7 +11,7 @@ export function registerPresetsResource(server: FastMCP): void {
     name: "git-mcp-presets",
     mimeType: "application/json",
     async load() {
-      const pre = requireGitAndRoots(server, { root: "*" }, undefined);
+      const pre = await requireGitAndRootsAsync(server, { root: "*" }, undefined);
       if (!pre.ok) {
         return { text: jsonRespond(pre.error) };
       }
@@ -19,7 +19,7 @@ export function registerPresetsResource(server: FastMCP): void {
         return { text: jsonRespond({ error: ERROR_CODES.NO_WORKSPACE_ROOT }) };
       }
 
-      const roots = forEachPresetRoot(pre.roots, (base, data) => ({
+      const roots = await forEachPresetRoot(pre.roots, (base, data) => ({
         workspaceRoot: base.workspaceRoot,
         gitTop: base.gitTop,
         presetFile: base.presetFile,

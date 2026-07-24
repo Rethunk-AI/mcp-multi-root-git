@@ -8,13 +8,13 @@ import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
   GIT_SUBPROCESS_PARALLELISM,
-  gitTopLevel,
+  gitTopLevelAsync,
   resolveGitSubprocessMaxBufferBytes,
   spawnGitAsync,
 } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ export function registerGitLogTool(server: FastMCP): void {
         ),
     }),
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = await requireGitAndRootsAsync(server, args, undefined);
       if (!pre.ok) return jsonRespond(pre.error);
 
       // Validate `since`/`until` — reject obvious injection attempts (newlines, semicolons, shell chars).
@@ -409,7 +409,7 @@ export function registerGitLogTool(server: FastMCP): void {
       // Fan out across roots. Path confinement is per-root (each has its own toplevel).
       const jobs = pre.roots.map((rootInput) => ({ rootInput }));
       const results = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async ({ rootInput }) => {
-        const top = gitTopLevel(rootInput);
+        const top = await gitTopLevelAsync(rootInput);
         if (!top) {
           return {
             _error: true as const,

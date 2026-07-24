@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 
 import { jsonRespond, spreadDefined } from "./json.js";
 import { forEachPresetRoot, type PresetEntry } from "./presets.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
 
 type PresetRow = {
@@ -32,12 +32,12 @@ export function registerListPresetsTool(server: FastMCP): void {
     },
     parameters: RootPickSchema,
     execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, undefined);
+      const pre = await requireGitAndRootsAsync(server, args, undefined);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
 
-      const out = forEachPresetRoot<PresetRootRow>(pre.roots, (base, data) => {
+      const out = await forEachPresetRoot<PresetRootRow>(pre.roots, (base, data) => {
         const presets: PresetRow[] = data
           ? Object.entries(data).map(([name, e]) => ({
               name,

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { gitTopLevel } from "./git.js";
+import { asyncPool, createTopLevelMemo, GIT_SUBPROCESS_PARALLELISM } from "./git.js";
 
 /**
  * Schema for `.rethunk/git-mcp-presets.json` at the workspace root.
@@ -352,15 +352,18 @@ export type PresetRootBase = {
  * preset data (`undefined` when the file is missing, invalid, or the root isn't a git
  * repository).
  */
-export function forEachPresetRoot<T>(
+export async function forEachPresetRoot<T>(
   roots: string[],
   build: (base: PresetRootBase, data: PresetFile | undefined) => T,
-): T[] {
+): Promise<T[]> {
   const loadCache = new Map<string, PresetLoadResult>();
   const out: T[] = [];
 
-  for (const ws of roots) {
-    const top = gitTopLevel(ws);
+  const topMemo = createTopLevelMemo();
+  const tops = await asyncPool(roots, GIT_SUBPROCESS_PARALLELISM, (ws) => topMemo(ws));
+
+  roots.forEach((ws, i) => {
+    const top = tops[i] ?? null;
     const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
 
     if (!top) {
@@ -376,7 +379,7 @@ export function forEachPresetRoot<T>(
           undefined,
         ),
       );
-      continue;
+      return;
     }
 
     let loaded = loadCache.get(top);
@@ -404,7 +407,7 @@ export function forEachPresetRoot<T>(
           ),
         );
       }
-      continue;
+      return;
     }
 
     out.push(
@@ -419,7 +422,7 @@ export function forEachPresetRoot<T>(
         loaded.data,
       ),
     );
-  }
+  });
 
   return out;
 }
