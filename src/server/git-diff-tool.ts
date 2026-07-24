@@ -31,9 +31,9 @@ const MAX_PATHS = 256;
  * when `base` is set. Prefer base..head over --staged whenever base is set.
  */
 export function buildDiffRangeArgs(opts: {
-  base?: string;
-  head?: string;
-  staged?: boolean;
+  base?: string | undefined;
+  head?: string | undefined;
+  staged?: boolean | undefined;
 }): { ok: true; args: string[] } | { ok: false; error: string } {
   if (opts.base) {
     const baseStr = opts.base.trim();
@@ -54,12 +54,12 @@ export function buildDiffRangeArgs(opts: {
 
 /** Build the full `git diff` args array from parameters. */
 export function buildDiffArgs(opts: {
-  base?: string;
-  head?: string;
-  paths?: string[];
-  unified?: number;
-  staged?: boolean;
-  findCopies?: boolean;
+  base?: string | undefined;
+  head?: string | undefined;
+  paths?: string[] | undefined;
+  unified?: number | undefined;
+  staged?: boolean | undefined;
+  findCopies?: boolean | undefined;
 }): { ok: true; args: string[] } | { ok: false; error: string } {
   const rangeResult = buildDiffRangeArgs(opts);
   if (!rangeResult.ok) return rangeResult;
@@ -86,10 +86,10 @@ export function buildDiffArgs(opts: {
 
 /** Human-readable label for the range. */
 export function rangeLabel(opts: {
-  base?: string;
-  head?: string;
-  paths?: string[];
-  staged?: boolean;
+  base?: string | undefined;
+  head?: string | undefined;
+  paths?: string[] | undefined;
+  staged?: boolean | undefined;
 }): string {
   let label = "";
 

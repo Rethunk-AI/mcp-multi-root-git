@@ -49,7 +49,7 @@ type BlameJson = {
 
 interface ShaMetaCache {
   author: string;
-  authorMail?: string;
+  authorMail?: string | undefined;
   authorTime: number;
   authorTz: string;
   summary: string;

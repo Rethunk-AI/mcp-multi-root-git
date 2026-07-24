@@ -134,8 +134,8 @@ interface HunkInProgress {
   oursLines: string[];
   baseLines: string[];
   theirsLines: string[];
-  oursLabel?: string;
-  theirsLabel?: string;
+  oursLabel?: string | undefined;
+  theirsLabel?: string | undefined;
 }
 
 /**

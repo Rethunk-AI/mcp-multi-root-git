@@ -52,7 +52,7 @@ interface RunPickaxeOpts {
   top: string;
   mode: "S" | "G";
   term: string;
-  ref?: string;
+  ref?: string | undefined;
   paths: string[];
   ignoreCase: boolean;
   maxMatches: number;

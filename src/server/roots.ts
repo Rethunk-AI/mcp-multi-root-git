@@ -68,7 +68,7 @@ function pathMatchesWorkspaceRootHint(rootPath: string, hint: string): boolean {
  * - "*"      → every `file://` MCP root
  * - omitted  → preset-aware default (first MCP root / cwd)
  */
-export type RootPickArgs = { root?: string | string[] };
+export type RootPickArgs = { root?: string | string[] | undefined };
 
 type ResolveRootsResult =
   | { ok: true; roots: string[]; warning?: Record<string, unknown> }
@@ -282,7 +282,7 @@ type SingleRepoResult =
  */
 export function requireSingleRepo(
   server: FastMCP,
-  args: { workspaceRoot?: string },
+  args: { workspaceRoot?: string | undefined },
   sessionId?: string,
 ): SingleRepoResult {
   const gg = gateGit();

@@ -43,7 +43,7 @@ type PresetLoadFail =
   | { ok: false; reason: "invalid_json"; message: string }
   | { ok: false; reason: "schema"; issues: z.ZodIssue[] };
 
-type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
+type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string | undefined };
 
 type PresetLoadResult = PresetLoadOk | PresetLoadFail;
 
@@ -105,7 +105,7 @@ function schemaIssue(message: string, path: (string | number)[] = []): z.ZodIssu
  * - Wrapped: `{ "schemaVersion": "1", "presets": { "name": { ... } } }`
  * - Legacy: `{ "name": { ... }, ... }` with optional top-level `schemaVersion` / `$schema` (editor hints).
  */
-function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: string } {
+function splitPresetFileRaw(raw: unknown): { mapRaw: unknown; schemaVersion?: string | undefined } {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("invalid_root");
   }
@@ -220,7 +220,7 @@ function getPresetEntry(
   gitTop: string,
   presetName: string,
 ):
-  | { ok: true; entry: PresetEntry; presetSchemaVersion?: string }
+  | { ok: true; entry: PresetEntry; presetSchemaVersion?: string | undefined }
   | { ok: false; error: Record<string, unknown> } {
   const loaded = loadPresetsFromGitTop(gitTop);
   if (!loaded.ok) {
@@ -268,7 +268,7 @@ function mergeNestedRoots(
   return out;
 }
 
-function mergePairs<T extends { left: string; right: string; label?: string }>(
+function mergePairs<T extends { left: string; right: string; label?: string | undefined }>(
   preset: T[] | undefined,
   inline: T[] | undefined,
 ): T[] | undefined {
@@ -287,7 +287,7 @@ function mergePairs<T extends { left: string; right: string; label?: string }>(
   return out;
 }
 
-export type ParityPair = { left: string; right: string; label?: string };
+export type ParityPair = { left: string; right: string; label?: string | undefined };
 
 export function applyPresetNestedRoots(
   gitTop: string,
@@ -295,7 +295,7 @@ export function applyPresetNestedRoots(
   presetMerge: boolean,
   inlineNestedRoots: string[] | undefined,
 ):
-  | { ok: true; nestedRoots: string[] | undefined; presetSchemaVersion?: string }
+  | { ok: true; nestedRoots: string[] | undefined; presetSchemaVersion?: string | undefined }
   | { ok: false; error: Record<string, unknown> } {
   const got = getPresetEntry(gitTop, presetName);
   if (!got.ok) return { ok: false, error: got.error };
@@ -315,7 +315,7 @@ export function applyPresetParityPairs(
   presetMerge: boolean,
   inlinePairs: ParityPair[] | undefined,
 ):
-  | { ok: true; pairs: ParityPair[] | undefined; presetSchemaVersion?: string }
+  | { ok: true; pairs: ParityPair[] | undefined; presetSchemaVersion?: string | undefined }
   | { ok: false; error: Record<string, unknown> } {
   const got = getPresetEntry(gitTop, presetName);
   if (!got.ok) return { ok: false, error: got.error };
@@ -339,7 +339,7 @@ type PresetRootBase = {
   gitTop: string | null;
   presetFile: string;
   fileExists: boolean;
-  presetSchemaVersion?: string;
+  presetSchemaVersion?: string | undefined;
   error?: Record<string, unknown>;
 };
 

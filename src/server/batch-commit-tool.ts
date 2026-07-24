@@ -225,7 +225,7 @@ async function stageFile(
   gitTop: string,
   filePath: string,
   lines?: { from: number; to: number },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string | undefined }> {
   const absPath = resolvePathForRepo(filePath, gitTop);
   const fileOnDisk = existsSync(absPath);
 
@@ -316,12 +316,12 @@ async function stageFile(
 interface CommitResult {
   index: number;
   ok: boolean;
-  sha?: string;
+  sha?: string | undefined;
   message: string;
   files: string[]; // File paths only (for display)
   error?: string;
   detail?: string;
-  output?: string;
+  output?: string | undefined;
   staged?: string[]; // For dry-run: files that were staged
   diffStat?: string; // For dry-run: diff stat output
 }
@@ -552,8 +552,8 @@ async function stageEntryFiles(
 }
 
 type CommitOutcome =
-  | { ok: true; sha?: string; output?: string }
-  | { ok: false; error: string; detail: string; output?: string };
+  | { ok: true; sha?: string | undefined; output?: string | undefined }
+  | { ok: false; error: string; detail: string; output?: string | undefined };
 
 /**
  * Commits a staged entry, isolating it from any unrelated pre-staged index

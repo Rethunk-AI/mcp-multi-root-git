@@ -33,16 +33,16 @@ function dedupePairs(pairs: ParityPair[]): ParityPair[] {
 
 type ParityResultRow = {
   workspaceRoot: string;
-  presetSchemaVersion?: string;
+  presetSchemaVersion?: string | undefined;
   status: "OK" | "MISMATCH";
   pairs: Array<{
     label: string;
     leftPath: string;
     rightPath: string;
     match: boolean;
-    sha?: string;
-    leftSha?: string;
-    rightSha?: string;
+    sha?: string | undefined;
+    leftSha?: string | undefined;
+    rightSha?: string | undefined;
     error?: string;
   }>;
   pairsTruncated?: boolean;
@@ -102,9 +102,9 @@ export function registerGitParityTool(server: FastMCP): void {
         leftPath: string;
         rightPath: string;
         match: boolean;
-        sha?: string;
-        leftSha?: string;
-        rightSha?: string;
+        sha?: string | undefined;
+        leftSha?: string | undefined;
+        rightSha?: string | undefined;
         error?: string;
       };
       type PairSlot = { type: "pending" } | { type: "result"; result: PairResult };

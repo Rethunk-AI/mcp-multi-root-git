@@ -44,8 +44,8 @@ type ShowJson = {
 async function runGitShow(opts: {
   top: string;
   ref: string;
-  paths?: string[];
-  stat?: boolean;
+  paths?: string[] | undefined;
+  stat?: boolean | undefined;
   maxBytes: number;
 }): Promise<ShowJson | { error: string; detail?: string }> {
   const { top, ref, paths, stat, maxBytes } = opts;

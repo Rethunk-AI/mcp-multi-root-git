@@ -50,7 +50,7 @@ interface SourceResult {
   source: string;
   ok: boolean;
   outcome?: SourceOutcome;
-  mergedSha?: string;
+  mergedSha?: string | undefined;
   conflictStage?: "rebase" | "merge";
   conflicts?: string[];
   branchDeleted?: boolean;

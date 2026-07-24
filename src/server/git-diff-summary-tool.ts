@@ -119,7 +119,7 @@ export function extractFileInfo(
   body: string,
 ): {
   path: string;
-  oldPath?: string;
+  oldPath?: string | undefined;
   status: FileDiff["status"];
 } {
   // Parse "diff --git a/X b/Y". For non-renames X === Y; use midpoint split so

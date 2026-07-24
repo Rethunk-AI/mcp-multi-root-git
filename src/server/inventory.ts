@@ -71,7 +71,9 @@ function buildEntry(params: {
   if (params.branchStatus) out.branchStatus = params.branchStatus;
   if (params.branchStatusTruncated) {
     out.branchStatusTruncated = true;
-    out.branchStatusOmittedLines = params.branchStatusOmittedLines;
+    if (params.branchStatusOmittedLines !== undefined) {
+      out.branchStatusOmittedLines = params.branchStatusOmittedLines;
+    }
   }
   if (params.detached) out.detached = true;
   if (params.headAbbrev) out.headAbbrev = params.headAbbrev;

@@ -168,7 +168,7 @@ export function resetGitPathStateForTests(): void {
 }
 
 interface GitVersionProbeResult {
-  error?: NodeJS.ErrnoException;
+  error?: NodeJS.ErrnoException | undefined;
   status: number | null;
 }
 
