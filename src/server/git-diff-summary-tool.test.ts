@@ -174,6 +174,16 @@ describe("extractFileInfo", () => {
     expect(path).toBe("src/b/widget.ts");
     expect(oldPath).toBe("src/old.ts");
   });
+
+  test("detects copied file (git diff -C output)", () => {
+    const { path, status, oldPath } = extractFileInfo(
+      "diff --git a/original.ts b/copy.ts",
+      "similarity index 100%\ncopy from original.ts\ncopy to copy.ts",
+    );
+    expect(path).toBe("copy.ts");
+    expect(status).toBe("copied");
+    expect(oldPath).toBe("original.ts");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -448,6 +458,55 @@ describe("git_diff_summary execute handler", () => {
     expect(renamed?.status).toBe("renamed");
     expect(renamed?.oldPath).toBe("old.ts");
     expect((renamed?.additions ?? 0) + (renamed?.deletions ?? 0)).toBeGreaterThan(0);
+  });
+
+  test("findCopies: true detects a copy from a source file modified in the same diff", async () => {
+    // Plain `-C` (unlike `--find-copies-harder`) only considers a file as a
+    // copy source when it is *also* modified within the same diff — so the
+    // source must be touched here too, not left byte-identical to HEAD.
+    const dir = makeRepoWithSeed();
+    const content = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
+    addCommit(dir, "original.ts", content, "chore: original");
+    writeFileSync(join(dir, "original.ts"), `${content}// trivial touch\n`);
+    writeFileSync(join(dir, "copy.ts"), content);
+    gitCmd(dir, "add", "original.ts", "copy.ts");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      staged: true,
+      findCopies: true,
+      excludePatterns: [],
+    });
+    const parsed = JSON.parse(text) as {
+      files: Array<{ path: string; status: string; oldPath?: string }>;
+    };
+    const copied = parsed.files.find((f) => f.path === "copy.ts");
+    expect(copied?.status).toBe("copied");
+    expect(copied?.oldPath).toBe("original.ts");
+  });
+
+  test("findCopies: false (default) reports the copy as a plain addition", async () => {
+    const dir = makeRepoWithSeed();
+    const content = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
+    addCommit(dir, "original.ts", content, "chore: original");
+    writeFileSync(join(dir, "copy.ts"), content);
+    gitCmd(dir, "add", "copy.ts");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      staged: true,
+      excludePatterns: [],
+    });
+    const parsed = JSON.parse(text) as {
+      files: Array<{ path: string; status: string; oldPath?: string }>;
+    };
+    const copy = parsed.files.find((f) => f.path === "copy.ts");
+    expect(copy?.status).toBe("added");
+    expect(copy?.oldPath).toBeUndefined();
   });
 
   test("subprocess-level buffer truncation returns partial summary + truncated:true, not git_diff_failed", async () => {

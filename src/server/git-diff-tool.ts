@@ -59,6 +59,7 @@ export function buildDiffArgs(opts: {
   paths?: string[];
   unified?: number;
   staged?: boolean;
+  findCopies?: boolean;
 }): { ok: true; args: string[] } | { ok: false; error: string } {
   const rangeResult = buildDiffRangeArgs(opts);
   if (!rangeResult.ok) return rangeResult;
@@ -68,6 +69,11 @@ export function buildDiffArgs(opts: {
   // Apply unified context width if specified
   if (typeof opts.unified === "number") {
     args.push(`-U${opts.unified}`);
+  }
+
+  // Copy detection (git -C), alongside git's default rename detection.
+  if (opts.findCopies === true) {
+    args.push("-C");
   }
 
   // Scope to paths if provided
@@ -142,7 +148,8 @@ export function registerGitDiffTool(server: FastMCP): void {
     name: "git_diff",
     description:
       "Raw diff text for scoped file(s) or range. `staged: true` for staged changes, " +
-      "`base`/`head` for revision ranges, `paths` to scope, `unified` for context lines. " +
+      "`base`/`head` for revision ranges, `paths` to scope, `unified` for context lines, " +
+      "`findCopies` for copy detection (`-C`). " +
       "Output is capped by `maxBytes` (default 512000) to bound agent context.",
     annotations: {
       title: "Git Diff",
@@ -179,6 +186,13 @@ export function registerGitDiffTool(server: FastMCP): void {
         .max(100)
         .optional()
         .describe("Context lines around each change (`-U<n>`). Default: 3. Use 0 for no context."),
+      findCopies: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+        ),
       maxBytes: z
         .number()
         .int()
@@ -220,6 +234,7 @@ export function registerGitDiffTool(server: FastMCP): void {
         paths: dedupedPaths.length > 0 ? dedupedPaths : undefined,
         unified: typeof args.unified === "number" ? args.unified : undefined,
         staged: args.staged,
+        findCopies: args.findCopies,
       });
       if (!diffArgsResult.ok) {
         return jsonRespond({ error: diffArgsResult.error });

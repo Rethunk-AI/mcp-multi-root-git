@@ -17,8 +17,8 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `list_presets` | `rethunk-git_list_presets` | List presets (name, `nestedRoots`, `parityPairs`, `workspaceRootHint`) from `.rethunk/git-mcp-presets.json`; invalid JSON/schema surface as errors. `root` only. **Read-only.** |
 | `git_log` | `rethunk-git_git_log` | Path-filtered, time-windowed `git log` across one or more roots. Returns commit history with author, date, subject, and shortstat. Optional `follow: true` follows renames (`git log --follow`; requires exactly one `paths` entry). Args: `since`, `paths`, `follow?`, `grep`, `author`, `maxCommits`, `ref`, plus `root`. **Read-only.** |
 | `git_grep` | `rethunk-git_git_grep` | Read-only pickaxe history search across one or more roots (`pickaxe: { mode: "S"\|"G", term }` → `git log -S`/`-G`, `commits[]` per root). `pickaxe` is required — content-mode working-tree search was removed in v6 (use the client's native grep/rg tooling). Args: `pickaxe`, `ref?`, `paths?`, `ignoreCase?`, `maxMatches?`, plus `root`. **Read-only.** |
-| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `base?`, `head?`, `staged?` (same explicit range shape as `git_diff`), `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot`. **Read-only.** |
-| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Optional `maxBytes` caps returned UTF-8 bytes (`truncated: true` when cut). Args: `workspaceRoot`, `base?`, `head?`, `path?`, `paths?`, `unified?`, `staged?`, `maxBytes?`. **Read-only.** |
+| `git_diff_summary` | `rethunk-git_git_diff_summary` | Structured, token-efficient diff viewer. Returns per-file diffs with additions/deletions counts, truncated to configurable line limits, with lock files/dist/vendor excluded by default. Args: `base?`, `head?`, `staged?` (same explicit range shape as `git_diff`), `findCopies?`, `fileFilter`, `maxLinesPerFile`, `maxFiles`, `excludePatterns`, plus `workspaceRoot`. **Read-only.** |
+| `git_diff` | `rethunk-git_git_diff` | Raw diff text for a single repo. Supports unstaged, staged, or `base..head` ranges, scoped to one or more paths with configurable context width. Optional `maxBytes` caps returned UTF-8 bytes (`truncated: true` when cut). Args: `workspaceRoot`, `base?`, `head?`, `paths?`, `unified?`, `staged?`, `findCopies?`, `maxBytes?`. **Read-only.** |
 | `git_show` | `rethunk-git_git_show` | Inspect one commit or ref. Returns commit message plus patch (or `--stat` diffstat). Optional `path`/`paths` filter the patch to those paths (`git show <ref> -- <path>`), not a raw blob checkout. Args: `ref`, `path?`, `paths?`, `stat?`, plus `workspaceRoot`. **Read-only.** |
 | `git_conflicts` | `rethunk-git_git_conflicts` | Inspect an in-progress conflicted merge/cherry-pick/revert/rebase in the working tree (markers under the git dir). Per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` into ours/theirs (and base, for diff3-style) hunks. **Note:** `git_merge` and `git_cherry_pick` always attempt `--abort` before returning a conflict report, so a successful abort leaves a clean tree — call this tool for conflicts still in progress (manual ops, failed abort, or other tools), not as a follow-up to those tools' conflict payloads. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot`. **Read-only.** |
 | `git_blame` | `rethunk-git_git_blame` | File authorship grouped into contiguous same-commit line runs (SHA, author, date, summary once per run). Args: `path` (required), `ref?`, `startLine?`, `endLine?`, `maxLines?`, plus `workspaceRoot`. **Read-only.** |
@@ -299,6 +299,10 @@ v7 is a breaking wire-contract pass: markdown output removed, several params/fie
 | `git_status` | per-entry `mcpRoot` | `workspaceRoot` | |
 | `git_show` | `path` (singular, present only when `paths` omitted) | *(removed — always `paths[]` when any path filter applied)* | |
 
+**Additions (non-breaking)**
+
+- `git_diff` and `git_diff_summary` gained `findCopies?: boolean` (maps to `git diff -C`) for copy detection alongside the existing rename handling. `git_diff_summary`'s per-file `status` gained a `"copied"` value (with `oldPath` set) when a copy is detected.
+
 The package also ships **`tool-parameters.schema.json`**, generated from the registered Zod parameter schemas via `bun run schema:tools`, plus the published **`schemas/`** directory (`schemas/index.json` + one JSON Schema per tool) via `bun run schema:individual`. Connected MCP clients should still prefer live schema discovery from `initialize` / tool listing; the shipped artifacts are for offline inspection, drift checks, and code generation.
 
 ### Field omission (consumer contract, v2+)
@@ -453,6 +457,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | `base` | string | — | Base ref for a revision diff. When omitted with no `staged`, the tool shows unstaged changes. Ancestor notation (`HEAD~3`, `main^2`) is accepted. Same canonical shape as `git_diff` (v7). |
 | `head` | string | `HEAD` | Head ref for a revision diff. Used only when `base` is provided. Ancestor notation accepted. |
 | `staged` | boolean | `false` | When `true`, diffs the index (`git diff --staged`). Ignored when `base` is provided. |
+| `findCopies` | boolean | `false` | Detect copies from other files (`git diff -C`), alongside git's default rename detection. Plain `-C` only considers a file a copy source when it is also modified in the same diff. Copied files get `status: "copied"` with `oldPath` set. |
 | `fileFilter` | string | — | Glob pattern to restrict output to matching files (e.g. `"*.ts"`, `"src/**"`). |
 | `maxLinesPerFile` | int | `50` | Max diff lines to include per file (1–2000). |
 | `maxFiles` | int | `30` | Max files to include in output (1–500). |
@@ -479,7 +484,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 }
 ```
 
-`status` is one of `"modified"`, `"added"`, `"deleted"`, `"renamed"`. `oldPath` is present only for renamed files. Per-file `truncated` is present (`true`) only when the diff body was cut at `maxLinesPerFile` (v4). `totalFiles` / `totalAdditions` / `totalDeletions` count the post-`excludePatterns`+`fileFilter` set (before `maxFiles` display truncation). `excludedFiles` includes both exclude-pattern hits and `fileFilter` drops. `truncatedFiles` is the count omitted by `maxFiles`. A top-level `truncated: true` is also present when the underlying `git diff`/`git diff --stat` subprocess itself hit the output buffer cap (`GIT_SUBPROCESS_MAX_BUFFER_BYTES`) — the tool still returns whatever partial output it parsed rather than failing. `truncatedFiles`, `truncated`, and `excludedFiles` are omitted when zero/false/empty (field-omission contract).
+`status` is one of `"modified"`, `"added"`, `"deleted"`, `"renamed"`, `"copied"` (`"copied"` only when `findCopies: true`). `oldPath` is present only for renamed/copied files. Per-file `truncated` is present (`true`) only when the diff body was cut at `maxLinesPerFile` (v4). `totalFiles` / `totalAdditions` / `totalDeletions` count the post-`excludePatterns`+`fileFilter` set (before `maxFiles` display truncation). `excludedFiles` includes both exclude-pattern hits and `fileFilter` drops. `truncatedFiles` is the count omitted by `maxFiles`. A top-level `truncated: true` is also present when the underlying `git diff`/`git diff --stat` subprocess itself hit the output buffer cap (`GIT_SUBPROCESS_MAX_BUFFER_BYTES`) — the tool still returns whatever partial output it parsed rather than failing. `truncatedFiles`, `truncated`, and `excludedFiles` are omitted when zero/false/empty (field-omission contract).
 
 ### `git_diff_summary` — error codes
 
@@ -501,6 +506,7 @@ The response contains one **`parity[]`** entry per resolved git toplevel. An arr
 | `paths` | string[] | — | File paths to scope the diff. Each confined to the repo. |
 | `unified` | integer | — | Context lines around each change (passed as `-U<n>`, 0–100). Omit for git's default (3). |
 | `staged` | boolean | `false` | When `true`, runs `git diff --staged`. Ignored when `base` is provided. |
+| `findCopies` | boolean | `false` | Detect copies from other files (`git diff -C`), alongside git's default rename detection. Plain `-C` only considers a file a copy source when it is also modified in the same diff. |
 | `maxBytes` | integer | `512000` | Cap on UTF-8 bytes of returned diff text (1024–10000000), cut at a line boundary (never mid-line) — even a single line exceeding `maxBytes` is dropped whole rather than truncated mid-line. Oversized output is truncated; JSON emits `truncated: true` (omitted when false). |
 | `workspaceRoot` | string | — | Repo path. Default: first MCP root / cwd. |
 

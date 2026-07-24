@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ZodTypeAny } from "zod";
 
@@ -169,6 +169,27 @@ describe("git_diff execute handler", () => {
 
     expect(parsed.error).toBe("path_escapes_repo");
     expect(parsed.path).toBe("../../etc/passwd");
+  });
+
+  test("findCopies: true reports a copy-from-source-file diff header", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const content = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
+    addCommit(repo, "original.ts", content, "chore: original");
+    writeFileSync(join(repo, "original.ts"), `${content}// trivial touch\n`);
+    writeFileSync(join(repo, "copy.ts"), content);
+    gitCmd(repo, "add", "original.ts", "copy.ts");
+
+    const run = captureTool(registerGitDiffTool);
+    const text = await run({
+      workspaceRoot: repo,
+      staged: true,
+      findCopies: true,
+      format: "json",
+    });
+    const parsed = JSON.parse(text) as { diff: string };
+
+    expect(parsed.diff).toContain("copy from original.ts");
+    expect(parsed.diff).toContain("copy to copy.ts");
   });
 
   test("base takes precedence over staged (docs: staged ignored when base set)", async () => {

@@ -34,7 +34,7 @@ const DEFAULT_EXCLUDE_PATTERNS = [
 
 interface FileDiff {
   path: string;
-  status: "modified" | "added" | "deleted" | "renamed";
+  status: "modified" | "added" | "deleted" | "renamed" | "copied";
   additions: number;
   deletions: number;
   oldPath?: string;
@@ -160,6 +160,16 @@ export function extractFileInfo(
     if (toMatch?.[1]) {
       bPath = toMatch[1];
     }
+  } else if (/^copy from /m.test(body)) {
+    // Only emitted with findCopies (git diff -C); the source file is
+    // unchanged, so unlike a rename there is no matching "deleted file".
+    status = "copied";
+    const fromMatch = /^copy from (.+)$/m.exec(body);
+    oldPath = fromMatch?.[1];
+    const toMatch = /^copy to (.+)$/m.exec(body);
+    if (toMatch?.[1]) {
+      bPath = toMatch[1];
+    }
   }
 
   const path = status === "deleted" ? aPath : bPath;
@@ -236,7 +246,8 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
     name: "git_diff_summary",
     description:
       "Structured diff viewer: per-file diffs with counts, truncated to configurable limits. " +
-      "Noise files (lock files, dist, etc.) excluded by default. Use `staged`/`base`/`head` to target staged, a revision range, or (default) unstaged changes.",
+      "Noise files (lock files, dist, etc.) excluded by default. Use `staged`/`base`/`head` to target staged, a revision range, or (default) unstaged changes. " +
+      "`findCopies` detects copies from other files (`-C`), alongside default rename detection.",
     annotations: {
       title: "Git Diff Summary",
       readOnlyHint: true,
@@ -260,6 +271,13 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         .optional()
         .default(false)
         .describe("Show staged changes (`git diff --staged`). Ignored if `base` is set."),
+      findCopies: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+        ),
       fileFilter: z
         .string()
         .optional()
@@ -300,13 +318,16 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         return jsonRespond({ error: diffArgsResult.error });
       }
       const diffArgs = diffArgsResult.args;
+      const copyArgs = args.findCopies ? ["-C"] : [];
 
       const maxBufferBytes = resolveGitSubprocessMaxBufferBytes();
 
       // --- Run git diff --numstat for exact addition/deletion counts ---
-      const statResult = await spawnGitAsync(gitTop, ["diff", "--numstat", ...diffArgs], {
-        maxBufferBytes,
-      });
+      const statResult = await spawnGitAsync(
+        gitTop,
+        ["diff", "--numstat", ...copyArgs, ...diffArgs],
+        { maxBufferBytes },
+      );
       if (!statResult.ok && !statResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
@@ -316,7 +337,9 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       const statMap = parseNumstatOutput(statResult.stdout);
 
       // --- Run git diff ---
-      const diffResult = await spawnGitAsync(gitTop, ["diff", ...diffArgs], { maxBufferBytes });
+      const diffResult = await spawnGitAsync(gitTop, ["diff", ...copyArgs, ...diffArgs], {
+        maxBufferBytes,
+      });
       if (!diffResult.ok && !diffResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
