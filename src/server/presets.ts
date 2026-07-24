@@ -34,7 +34,6 @@ type PresetFile = z.infer<typeof PresetFileSchema>;
 
 export const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
 
-const PRESET_ENTRY_FIELD_NAMES = new Set(["nestedRoots", "parityPairs", "workspaceRootHint"]);
 const WRAPPED_META_KEYS = new Set(["$schema", "schemaVersion", "presets"]);
 const PRESET_SCHEMA_VERSION = "1";
 
@@ -47,10 +46,31 @@ type PresetLoadOk = { ok: true; data: PresetFile; schemaVersion?: string };
 
 type PresetLoadResult = PresetLoadOk | PresetLoadFail;
 
-function looksLikePresetEntryObject(obj: Record<string, unknown>): boolean {
-  const keys = Object.keys(obj);
-  if (keys.length === 0) return true;
-  return keys.every((k) => PRESET_ENTRY_FIELD_NAMES.has(k));
+/**
+ * Structural (not key-name) check for "does this object's own value shapes match a
+ * PresetEntry" — i.e. `nestedRoots`/`parityPairs` values must be arrays and
+ * `workspaceRootHint` must be a string, with no other keys. This disambiguates a legacy
+ * preset literally named "presets" (`{ presets: { nestedRoots: [...] } }`) from a wrapped
+ * file whose *preset name* happens to collide with an entry field name (e.g. a preset
+ * named "nestedRoots": `{ presets: { nestedRoots: { nestedRoots: [...] } } }`). In the
+ * latter, the value under the "nestedRoots" key is an object, not an array, so it fails
+ * this shape check and is correctly treated as a preset-name key in a wrapped map.
+ */
+function looksLikePresetEntryShape(obj: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(obj)) {
+    switch (key) {
+      case "nestedRoots":
+      case "parityPairs":
+        if (!Array.isArray(value)) return false;
+        break;
+      case "workspaceRootHint":
+        if (typeof value !== "string") return false;
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
 }
 
 function isWrappedLayout(o: Record<string, unknown>): boolean {
@@ -61,15 +81,15 @@ function isWrappedLayout(o: Record<string, unknown>): boolean {
   }
   const innerObj = inner as Record<string, unknown>;
 
-  // Non-empty inner with only PresetEntry field names → legacy preset named "presets".
-  if (looksLikePresetEntryObject(innerObj) && Object.keys(innerObj).length > 0) {
-    return false;
-  }
-
   // Empty inner: wrapped when top level has only metadata + presets.
   if (Object.keys(innerObj).length === 0) {
     const topKeys = Object.keys(o);
     return topKeys.every((k) => WRAPPED_META_KEYS.has(k));
+  }
+
+  // Non-empty inner whose own value shapes match a PresetEntry → legacy preset named "presets".
+  if (looksLikePresetEntryShape(innerObj)) {
+    return false;
   }
 
   return true;

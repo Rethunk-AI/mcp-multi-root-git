@@ -218,6 +218,43 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
       expect(result.data.presets?.nestedRoots).toEqual(["packages/a"]);
     }
   });
+
+  test("wrapped format supports a preset literally named nestedRoots", () => {
+    const dir = makeDir();
+    writePresetJson(dir, {
+      schemaVersion: "1",
+      presets: { nestedRoots: { nestedRoots: ["packages/a", "packages/b"] } },
+    });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.nestedRoots?.nestedRoots).toEqual(["packages/a", "packages/b"]);
+    }
+  });
+
+  test("wrapped format supports a preset literally named parityPairs", () => {
+    const dir = makeDir();
+    writePresetJson(dir, {
+      presets: { parityPairs: { parityPairs: [{ left: "a", right: "b" }] } },
+    });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.parityPairs?.parityPairs).toEqual([{ left: "a", right: "b" }]);
+    }
+  });
+
+  test("wrapped format supports a preset literally named workspaceRootHint", () => {
+    const dir = makeDir();
+    writePresetJson(dir, {
+      presets: { workspaceRootHint: { workspaceRootHint: "my-workspace" } },
+    });
+    const result = loadPresetsFromGitTop(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.workspaceRootHint?.workspaceRootHint).toBe("my-workspace");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
