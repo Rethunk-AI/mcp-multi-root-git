@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { spawnGitAsync } from "./git.js";
+import { GIT_SUBPROCESS_MAX_BUFFER_BYTES, GIT_SYNC_TIMEOUT_MS, spawnGitAsync } from "./git.js";
 
 // ---------------------------------------------------------------------------
 // Merge conflict helpers (shared between git_merge and git_cherry_pick)
@@ -158,23 +158,60 @@ export async function isFullyMergedInto(
   return r.ok;
 }
 
+/** Test/caller hook to shrink commitPatchId's execFileSync bounds. */
+export interface CommitPatchIdOpts {
+  /** Overrides the execFileSync `timeout` (ms). Default: GIT_SYNC_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /** Overrides the execFileSync `maxBuffer` (bytes). Default: GIT_SUBPROCESS_MAX_BUFFER_BYTES. */
+  maxBufferBytes?: number;
+  /**
+   * Test-only: overrides the child process environment (e.g. to shadow PATH
+   * with a fake `git` binary that simulates a wedged process). Never set by
+   * production callers — omit to inherit `process.env` as execFileSync does
+   * by default.
+   */
+  env?: NodeJS.ProcessEnv;
+}
+
 /**
  * Returns the git patch-id for a single commit, or undefined on failure.
  * Uses execFileSync to pipe `git diff-tree --patch -r <sha>` into `git patch-id --stable`.
+ *
+ * Both execFileSync calls are bounded by `timeout`/`maxBuffer` (defaulting to the
+ * same GIT_SYNC_TIMEOUT_MS / GIT_SUBPROCESS_MAX_BUFFER_BYTES convention every other
+ * sync/async git call in this codebase uses) so a wedged git process can never hang
+ * the single-threaded server, and oversized diff/patch-id output can never be
+ * silently truncated into a bogus match — either case throws, is caught below, and
+ * yields `undefined`, which callers treat as a definite "not equivalent" result.
  */
-function commitPatchId(cwd: string, sha: string): string | undefined {
+export function commitPatchId(
+  cwd: string,
+  sha: string,
+  opts?: CommitPatchIdOpts,
+): string | undefined {
+  const timeout = opts?.timeoutMs ?? GIT_SYNC_TIMEOUT_MS;
+  const maxBuffer = opts?.maxBufferBytes ?? GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+  const env = opts?.env;
   try {
     const diff = execFileSync("git", ["diff-tree", "--patch", "-r", sha], {
       cwd,
       encoding: "utf8",
+      timeout,
+      maxBuffer,
+      ...(env ? { env } : {}),
     });
     const out = execFileSync("git", ["patch-id", "--stable"], {
       cwd,
       encoding: "utf8",
       input: diff,
+      timeout,
+      maxBuffer,
+      ...(env ? { env } : {}),
     });
     return out.trim().split(" ")[0] || undefined;
   } catch {
+    // Timeout (wedged git) and maxBuffer overflow both throw here; either way we
+    // return undefined rather than risk building a match from partial output.
     return undefined;
   }
 }

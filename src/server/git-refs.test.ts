@@ -6,10 +6,11 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  commitPatchId,
   isContentEquivalentlyMergedInto,
   isProtectedBranch,
   isSafeGitAncestorRef,
@@ -83,6 +84,63 @@ describe("isContentEquivalentlyMergedInto", () => {
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
     expect(await isContentEquivalentlyMergedInto(dir, "-bad-branch", "main")).toBe(false);
     expect(await isContentEquivalentlyMergedInto(dir, "main", "-bad-target")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// commitPatchId: timeout / overflow hardening (Task #3)
+// ---------------------------------------------------------------------------
+
+describe("commitPatchId", () => {
+  test("returns a stable patch-id for a real commit under default bounds", () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+    const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    const id = commitPatchId(dir, sha);
+    expect(id).toBeTruthy();
+    expect(typeof id).toBe("string");
+  });
+
+  test("returns undefined (never hangs) when timeoutMs is exceeded — wedged-git simulation", () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+    const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    // Simulate a wedged `git diff-tree` by shadowing PATH (via the env test
+    // hook, not process.env — Bun's execFileSync resolves the executable
+    // once from the options.env it's given, not a live process.env read) with
+    // a fake `git` binary that sleeps well past a short timeoutMs —
+    // deterministic (no reliance on real git's fork/exec speed) and fast
+    // (killed promptly, never waits out the sleep or the real 30s default).
+    const fakeBinDir = mkTmpDir("mcp-git-refs-fakebin-");
+    const fakeGit = join(fakeBinDir, "git");
+    writeFileSync(fakeGit, "#!/bin/sh\nsleep 5\n");
+    chmodSync(fakeGit, 0o755);
+
+    const id = commitPatchId(dir, sha, {
+      timeoutMs: 100,
+      env: { ...process.env, PATH: `${fakeBinDir}:${process.env.PATH ?? ""}` },
+    });
+    expect(id).toBeUndefined();
+  });
+
+  test("returns undefined (no silent partial-output match) when maxBufferBytes is exceeded", () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\nconst b = 2;\nconst c = 3;\n", "feat: sizable diff");
+    const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    // Any real diff-tree header already exceeds this — deterministic overflow.
+    const id = commitPatchId(dir, sha, { maxBufferBytes: 8 });
+    expect(id).toBeUndefined();
+  });
+
+  test("returns undefined for an unknown sha instead of throwing", () => {
+    const dir = makeRepo();
+    addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
+
+    const id = commitPatchId(dir, "0000000000000000000000000000000000000000");
+    expect(id).toBeUndefined();
   });
 });
 
