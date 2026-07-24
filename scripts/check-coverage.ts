@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { parseAllFilesLineCoverage } from "../src/server/coverage.js";
 
-export interface CheckCoverageResult {
+interface CheckCoverageResult {
   exitCode: number;
   message: string;
 }

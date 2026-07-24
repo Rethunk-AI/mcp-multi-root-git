@@ -327,7 +327,7 @@ interface CommitResult {
   diffStat?: string; // For dry-run: diff stat output
 }
 
-export interface PushReport {
+interface PushReport {
   ok: boolean;
   branch?: string;
   upstream?: string;
@@ -340,7 +340,7 @@ export interface PushReport {
  * After all commits succeed, push the current branch to its upstream.
  * Commits are already applied at this point — do NOT attempt rollback on push failure.
  */
-export async function runPushAfter(gitTop: string): Promise<PushReport> {
+async function runPushAfter(gitTop: string): Promise<PushReport> {
   const branch = await getCurrentBranch(gitTop);
   if (!branch) {
     return { ok: false, error: ERROR_CODES.PUSH_DETACHED_HEAD };

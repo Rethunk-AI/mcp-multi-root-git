@@ -31,7 +31,7 @@ const PresetEntrySchema = z
 const PresetFileSchema = z.record(z.string(), PresetEntrySchema);
 
 export type PresetEntry = z.infer<typeof PresetEntrySchema>;
-export type PresetFile = z.infer<typeof PresetFileSchema>;
+type PresetFile = z.infer<typeof PresetFileSchema>;
 
 export const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
 
@@ -334,7 +334,7 @@ export function applyPresetParityPairs(
 // ---------------------------------------------------------------------------
 
 /** Per-root fields both list_presets and the presets resource emit before their own `presets` shape. */
-export type PresetRootBase = {
+type PresetRootBase = {
   workspaceRoot: string;
   gitTop: string | null;
   presetFile: string;

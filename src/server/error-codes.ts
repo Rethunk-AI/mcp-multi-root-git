@@ -136,5 +136,3 @@ export const ERROR_CODES = {
   NO_PAIRS: "no_pairs",
   REMOTE_BRANCH_MISMATCH: "remote_branch_mismatch",
 } as const;
-
-export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

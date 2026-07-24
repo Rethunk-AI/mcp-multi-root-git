@@ -177,7 +177,7 @@ export async function isFullyMergedInto(
 }
 
 /** Test/caller hook to shrink commitPatchId's execFileSync bounds. */
-export interface CommitPatchIdOpts {
+interface CommitPatchIdOpts {
   /** Overrides the execFileSync `timeout` (ms). Default: GIT_SYNC_TIMEOUT_MS. */
   timeoutMs?: number;
   /** Overrides the execFileSync `maxBuffer` (bytes). Default: GIT_SUBPROCESS_MAX_BUFFER_BYTES. */

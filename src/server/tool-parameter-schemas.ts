@@ -57,7 +57,7 @@ export const ALL_PARAMETER_SCHEMA_TOOLS = [
 
 type ExecuteFn = (args: Record<string, unknown>, context: Record<string, unknown>) => unknown;
 
-export type CapturedFastMcpTool = {
+type CapturedFastMcpTool = {
   name: string;
   parameters: z.ZodType;
   execute?: ExecuteFn;
@@ -88,14 +88,14 @@ export function makeFakeFastMcpServer(roots: string[] = []): {
   return { server, tools };
 }
 
-export type JsonObjectSchema = {
+type JsonObjectSchema = {
   type?: string;
   properties: Record<string, unknown>;
   required?: string[];
   [key: string]: unknown;
 };
 
-export type ToolParameterSchemaDocument = {
+type ToolParameterSchemaDocument = {
   $schema: string;
   title: string;
   description: string;

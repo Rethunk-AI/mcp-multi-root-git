@@ -72,7 +72,7 @@ export function resolveGitSubprocessMaxBufferBytes(
 export const GIT_SUBPROCESS_MAX_BUFFER_BYTES = resolveGitSubprocessMaxBufferBytes();
 
 /** Delay after SIGTERM before escalating to SIGKILL (spawnGitAsync timeout/abort/overflow). */
-export const GIT_SUBPROCESS_SIGKILL_ESCALATION_MS = 2_000;
+const GIT_SUBPROCESS_SIGKILL_ESCALATION_MS = 2_000;
 
 /** Timeout for sync spawnSync helpers (gateGit, rev-parse). */
 export const GIT_SYNC_TIMEOUT_MS = 30_000;
@@ -167,7 +167,7 @@ export function resetGitPathStateForTests(): void {
   gitMissingAt = 0;
 }
 
-export interface GitVersionProbeResult {
+interface GitVersionProbeResult {
   error?: NodeJS.ErrnoException;
   status: number | null;
 }
@@ -381,7 +381,7 @@ export async function asyncPool<T, R>(
   return results;
 }
 
-export interface SpawnGitResult {
+interface SpawnGitResult {
   ok: boolean;
   stdout: string;
   stderr: string;
@@ -391,7 +391,7 @@ export interface SpawnGitResult {
   truncated?: boolean;
 }
 
-export interface SpawnGitOpts {
+interface SpawnGitOpts {
   timeoutMs?: number;
   signal?: AbortSignal;
   /**
