@@ -23,7 +23,7 @@ MCP clients expose tools as `{serverName}_{toolName}`. With the server registere
 | `git_conflicts` | `rethunk-git_git_conflicts` | Inspect an in-progress conflicted merge/cherry-pick/revert/rebase in the working tree (markers under the git dir). Per conflicted file, parses `<<<<<<</\|\|\|\|\|\|\|/=======/>>>>>>>` into ours/theirs (and base, for diff3-style) hunks. **Note:** `git_merge` and `git_cherry_pick` always attempt `--abort` before returning a conflict report, so a successful abort leaves a clean tree — call this tool for conflicts still in progress (manual ops, failed abort, or other tools), not as a follow-up to those tools' conflict payloads. Args: `withHunks?` (default `true`), `maxLinesPerFile?` (default `200`, max `2000`), plus `workspaceRoot` + `format`. **Read-only.** |
 | `git_blame` | `rethunk-git_git_blame` | File authorship grouped into contiguous same-commit line runs (SHA, author, date, summary once per run). Args: `path` (required), `ref?`, `startLine?`, `endLine?`, `maxLines?`, plus `workspaceRoot` + `format`. **Read-only.** |
 | `batch_commit` | `rethunk-git_batch_commit` | Create multiple sequential git commits in a single call. Each entry stages the listed files or line-ranged file hunks, then commits with the given message. Stops on first failure. Optional `push: "after"` pushes once every commit lands; optional `dryRun: true` previews staged content without writing commits. Args: `commits` (array of `{message, files}`), `push?`, `dryRun?`, plus `workspaceRoot` + `format`. **Mutating — not idempotent.** |
-| `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Refuses on detached HEAD; never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
+| `git_push` | `rethunk-git_git_push` | Push the current branch to its upstream. Optional `remote`, `branch`, `setUpstream` (passes `-u`). Omitting `branch` on a detached HEAD fails (`push_detached_head`) — an explicit `branch` is accepted regardless of HEAD state. Never force-pushes. `workspaceRoot` + `format`. **Mutating.** |
 | `git_merge` | `rethunk-git_git_merge` | Merge one or more source branches into a destination. Default strategy `auto` cascades fast-forward → rebase → merge-commit per source, preferring linear history. **`auto`/`rebase` rewrite the source branch tip in place** when rebasing (new SHAs on the source ref), then fast-forward the destination — not destination-only. Refuses on dirty tree; stops on first conflict and attempts `--abort` (abort failure surfaces `rebase_abort_failed` / `merge_abort_failed`). Optional `deleteMergedBranches` / `deleteMergedWorktrees` cascade cleanup, always skipping protected names (main/master/dev/develop/stable/trunk/prod/production/head, plus `release/*`/`release-*`/`hotfix/*`/`hotfix-*` with separator + suffix). Args: `sources`, `into?`, `strategy?`, `message?`, cleanup flags + `workspaceRoot` + `format`. **Mutating.** |
 | `git_cherry_pick` | `rethunk-git_git_cherry_pick` | Play commits from one or more sources onto a destination. Sources may be SHAs, `A..B` ranges, or branch names (expanded to `onto..<branch>`, oldest-first). Hard-caps expanded/deduped picks at **100** commits per call (`cherry_pick_too_many_commits`). Uses `--empty=drop` so patch-equivalent re-applies add nothing. Refuses on dirty tree; refuses when a cherry-pick is already in progress (`cherry_pick_in_progress`). Stops on first conflict: `onConflict: "abort"` (default) attempts `--abort` (abort failure → `cherry_pick_abort_failed`); `onConflict: "pause"` leaves the conflict and native sequencer state in place (`conflict.paused: true`) for `git_cherry_pick_continue`. Same cleanup flags as `git_merge` (branch-kind sources only, protected names skipped, and only run on full success); branch deletion uses patch-id equivalence by default so cherry-pick workflows (where SHA differs but diff is identical) clean up correctly. Pass `strictMergedRefEquality: true` for strict `git branch -d` ancestry semantics. Args: `sources`, `onto?`, cleanup flags, `strictMergedRefEquality?`, `onConflict?` + `workspaceRoot` + `format`. **Mutating.** |
 | `git_cherry_pick_continue` | `rethunk-git_git_cherry_pick_continue` | Resume or abort a cherry-pick left in progress (by `git_cherry_pick`'s `onConflict: "pause"` or any other means — reads `CHERRY_PICK_HEAD` live off `.git`, stateless). `action: "continue"` (default) requires no remaining unmerged paths (`cherry_pick_unresolved_paths` otherwise), then runs `git -c core.editor=true cherry-pick --continue`; if a later pick then conflicts, reports it the same shape as a paused `git_cherry_pick` call (`conflict.paused: true`) so this tool can be called again. `action: "abort"` rolls back via `git cherry-pick --abort` (same abort helper/reporting as `git_cherry_pick`). Errors `no_cherry_pick_in_progress` when nothing is in progress. Args: `action?` + `workspaceRoot` + `format`. **Mutating.** |
@@ -86,7 +86,7 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 | ----------- | ------ | --------- | ------- |
 | `nestedRoots` | string[] | — | Relative paths (from the workspace git toplevel) to treat as independent git repos to inventory. Each must be a valid git work tree; invalid paths produce skip entries rather than errors. Cannot combine with an array `root`. May be combined with `preset` when `presetMerge: true` (merged) or when `presetMerge` is false (inline list replaces the preset's `nestedRoots`). |
 | `preset` | string | — | Preset name from `.rethunk/git-mcp-presets.json`. Loads `nestedRoots` from the preset's entry. Cannot combine with an array `root`. |
-| `presetMerge` | boolean | `false` | When `true`, merge inline `nestedRoots` with preset roots instead of replacing. |
+| `presetMerge` | boolean | `false` | When `true`, merge inline `nestedRoots` with preset roots instead of replacing. Merge order is preset entries first, then inline entries; exact string duplicates are deduped, keeping the first (preset) occurrence. When `false` (default): a non-empty inline `nestedRoots` fully replaces the preset's list; an empty/absent inline list falls back to the preset's. |
 | `remote` | string | — | Fixed remote for ahead/behind tracking. Must be paired with `branch`. |
 | `branch` | string | — | Fixed branch for ahead/behind tracking. Must be paired with `remote`. When both are absent the tool uses each repo's `@{u}` upstream. |
 | `compareRefs` | `{ left: string, right: string }` | — | Optional ahead/behind between arbitrary local refs (independent of upstream). Ahead = commits reachable as `left..right`; behind = `right..left`. Each side validated with `isSafeGitAncestorRef` → `unsafe_ref_token` on rejection. |
@@ -138,7 +138,7 @@ Error payloads appear as top-level JSON or inline in individual repo rows (`ok: 
 | `root_list_too_many` | More than 256 entries in the `root` array. |
 | `root_list_empty` | The `root` array resolved to zero git toplevels. |
 | `preset_not_found` | Named preset does not exist in the preset file. |
-| `preset_file_invalid` | Preset file failed to load. Discriminator `kind`: `"invalid_json"` (parse failure; may include `message`) or `"schema"` (Zod validation failure; may include `issues`). Always includes `presetFile`. |
+| `preset_file_invalid` | Preset file failed to load. Discriminator `kind`: `"invalid_json"` (`JSON.parse` failure, **or** syntactically valid JSON whose root is not an object — an array/string/number/null top level; `message` describes the parse error or the shape requirement) or `"schema"` (valid JSON object that fails Zod validation, e.g. wrong `schemaVersion`, empty preset map, or extra keys in a wrapped file; may include `issues`). Always includes `presetFile`. |
 
 Skip entries (individual repos that could not be inventoried) appear inline in `entries[*]` with `skipReason` rather than as top-level errors.
 
@@ -150,7 +150,7 @@ Skip entries (individual repos that could not be inventoried) appear inline in `
 | ----------- | ------ | ------- |
 | `pairs` | `{left: string, right: string, label?: string}[]` | Path pairs to compare. `left` and `right` are relative to the workspace git toplevel. `label` is optional display name; defaults to `"left / right"`. At least one pair required (via inline `pairs` or `preset`). |
 | `preset` | string | Preset name from `.rethunk/git-mcp-presets.json`. Loads `parityPairs` from the preset's entry. |
-| `presetMerge` | boolean | Default `false`. When `true`, merge inline `pairs` with preset pairs instead of replacing. |
+| `presetMerge` | boolean | Default `false`. When `true`, merge inline `pairs` with preset pairs instead of replacing (preset pairs first, then inline). Dedupe key is `left`+`right` only (`label` is not part of the key) — when both sides define a pair with the same `left`/`right`, the preset's entry (including its `label`) wins and the inline duplicate is dropped. When `false` (default): a non-empty inline `pairs` fully replaces the preset's list; an empty/absent inline list falls back to the preset's. |
 | `root` | string \| string[] \| `"*"` | Repo path (string), explicit list of repo paths (array, max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | Output format. Default: `"json"`. |
 
@@ -274,7 +274,7 @@ To keep responses compact, **optional fields are usually omitted when they would
 
 **Errors** (any tool)
 
-- Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`, `kind`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). For preset load failures the wire code is always `preset_file_invalid` with discriminator `kind` (`"invalid_json"` or `"schema"`); `message` is retained on the `invalid_json` kind (parse output) and `issues` on the `schema` kind.
+- Error payloads carry an `error` code string and any structured context (e.g. `preset`, `presetFile`, `kind`). The old free-text `message` field is **removed** for self-describing codes (`git_not_found`, `remote_branch_mismatch`, `invalid_remote_or_branch`, `no_pairs`, `preset_not_found` *missing* case). For preset load failures the wire code is always `preset_file_invalid` with discriminator `kind` (`"invalid_json"` — parse failure or a valid-JSON-but-wrong-root-shape document; `"schema"` — valid JSON object failing Zod validation); `message` is retained on the `invalid_json` kind and `issues` on the `schema` kind.
 
 **When to bump `MCP_JSON_FORMAT_VERSION` or change payload shape:** [AGENTS.md](../AGENTS.md) — *Changing contracts*. The constant lives in `src/server.ts` and is surfaced via the server `instructions` field (discoverable from the MCP `initialize` response).
 
@@ -342,7 +342,7 @@ v2 field-omission rules still apply: `filesChanged`, `insertions`, `deletions` o
 | `pickaxe` | `{ mode: "S" \| "G", term: string }` | — | **Required.** Pickaxe history search (`git log -S` / `-G`): `S` finds commits that changed the occurrence count of `term`; `G` finds commits whose diff lines match the `term` regex. JSON results are `commits[]` of `{ sha, subject }` per root. |
 | `ref` | string | — | Commit/branch/tag to use as the history tip. Validated as a safe ref token (`isSafeGitAncestorRef`); rejects `--`-prefixed or otherwise unsafe tokens. |
 | `paths` | string[] | — | Limit history to these paths. Each must resolve within the repo root (`resolvePathForRepo` / `assertRelativePathUnderTop`); escaping paths are rejected per-root. |
-| `ignoreCase` | boolean | `false` | Case-insensitive match (`-i`; affects `G` mode regexes). |
+| `ignoreCase` | boolean | `false` | Case-insensitive match (`-i`). Confirmed to affect both `S` and `G` pickaxe modes (not `G`-only). |
 | `maxMatches` | integer | `200` | Cap on commits per root. Hard cap `1000`. |
 | `root` | string \| string[] \| `"*"` | — | Repo path, array of paths (max 256), or `"*"` for every MCP root. Default: first MCP root / cwd. |
 | `format` | `"markdown"` \| `"json"` | `"json"` | Output format. |
@@ -915,7 +915,7 @@ For already-committed work, call **`git_push`** directly instead of creating an 
 | Parameter | Type | Notes |
 | ----------- | ------ | ------- |
 | `remote` | string | Remote to push to. Defaults to the remote inferred from the upstream tracking ref, or `origin` when `setUpstream` is true. |
-| `branch` | string | Branch to push. Defaults to the currently checked-out branch. Rejected on detached HEAD. |
+| `branch` | string | Branch to push. Defaults to the currently checked-out branch. When omitted, a detached HEAD (no current branch) fails with `push_detached_head`; an explicit `branch` value is used as given regardless of HEAD state (the tool does not separately reject detached HEAD once a branch name is supplied). |
 | `setUpstream` | boolean | Default `false`. Pass `-u` to set the upstream tracking ref; remote defaults to `origin`. |
 | `workspaceRoot`, `format` | — | Standard single-repo pick + output format. |
 
@@ -1052,13 +1052,27 @@ Success (`noCommit: true` — no commits made):
 { "ok": true, "staged": true, "sources": ["a1b2c3d"], "stagedCount": 1 }
 ```
 
-Conflict (aborted, tree left clean):
+Conflict, abort succeeds (tree left clean, no `error` field):
 
 ```json
 { "ok": false, "aborted": true, "commit": "a1b2c3d…", "conflicts": ["shared.txt"], "detail": "..." }
 ```
 
-`commit`/`detail` are omitted when unavailable. `reverted[].sha` is the new commit created by reverting `source`, in the same order as `sources` (one new commit per source when `noCommit` is `false`).
+Conflict, abort itself fails (tree may still be mid-revert):
+
+```json
+{
+  "ok": false,
+  "aborted": false,
+  "commit": "a1b2c3d…",
+  "conflicts": ["shared.txt"],
+  "detail": "...",
+  "error": "revert_abort_failed",
+  "abortDetail": "..."
+}
+```
+
+`commit`/`detail`/`abortDetail` are omitted when unavailable. `reverted[].sha` is the new commit created by reverting `source`, in the same order as `sources` (one new commit per source when `noCommit` is `false`).
 
 ### `git_revert` — error codes
 
@@ -1066,9 +1080,10 @@ Conflict (aborted, tree left clean):
 | ------ | --------- |
 | `unsafe_ref_token` | A `sources` entry contains characters outside the ancestor-safe token set. |
 | `working_tree_dirty` | Working tree has uncommitted/unstaged changes; clean up before reverting. |
+| `revert_abort_failed` | On conflict, `git revert --abort` itself failed; tree may still be mid-revert. `aborted: false`, `abortDetail` carries abort stderr. |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
-Conflict / other `git revert` failures do **not** use the `error` field — see the `aborted: true` shape above (mirrors `git_cherry_pick`'s conflict reporting).
+On conflict, the tool always attempts `git revert --abort`. When abort succeeds the tree is clean (`aborted: true`, no `error` field — mirrors `git_cherry_pick`'s conflict reporting). When abort itself fails, `aborted: false` and the top-level `error` field carries `revert_abort_failed`.
 
 ---
 
@@ -1219,17 +1234,30 @@ Nothing to stash (git exits 0 printing "No local changes to save"):
 
 | URI | Purpose |
 |-----|---------|
-| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json` at the resolved git toplevel (or structured errors). |
+| `rethunk-git://presets` | JSON snapshot of `.rethunk/git-mcp-presets.json`, fanned out across **every MCP file root** (same internal resolution as `root: "*"`), not a single resolved toplevel. |
 
-Error payloads from this resource may include:
+### `rethunk-git://presets` — JSON shape
 
-| Code | Meaning |
-| ------ | --------- |
-| `no_workspace_root` | No MCP workspace root could be resolved for the session. |
-| `not_a_git_repository` | The resolved path is not inside a git repository. |
-| `preset_file_invalid` | Preset file failed to load (`kind`: `"invalid_json"` or `"schema"`). |
+```json
+{
+  "roots": [
+    {
+      "workspaceRoot": "/abs/workspace",
+      "gitTop": "/abs/workspace",
+      "presetFile": "/abs/workspace/.rethunk/git-mcp-presets.json",
+      "fileExists": true,
+      "presetSchemaVersion": "1",
+      "presets": { "push-prep": { "nestedRoots": ["packages/a"] } }
+    }
+  ]
+}
+```
 
-When the file is missing, the resource returns `fileExists: false` with an empty `presets` object (not an error).
+One `roots` entry per resolved MCP root (not per preset). `gitTop` is `null` when that root is not inside a git repository. `presetSchemaVersion` is omitted when absent. `presets` is the raw preset-name-keyed map from the file (same shape as the file itself, not the summarized `name`/`nestedRootsCount`/`parityPairsCount` array `list_presets` returns) — empty (`{}`) when the file is missing, not readable as a git repo, or fails to load. A per-root optional `error` carries a structured error object (`not_a_git_repository`, or `preset_file_invalid` with `kind`) when that root's preset file couldn't be loaded.
+
+Top-level `error: no_workspace_root` when no MCP workspace root could be resolved for the session at all (zero `roots`).
+
+When a root's file is missing, that entry's `fileExists: false` with an empty `presets` object (not an error).
 
 ## Root resolution
 
