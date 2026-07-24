@@ -25,9 +25,7 @@
           "description": "Named preset entries for git_inventory / git_parity."
         }
       },
-      "required": [
-        "presets"
-      ]
+      "required": ["presets"]
     },
     {
       "type": "object",
@@ -47,9 +45,7 @@
       "minProperties": 1,
       "not": {
         "type": "object",
-        "required": [
-          "presets"
-        ],
+        "required": ["presets"],
         "properties": {
           "presets": {
             "type": "object",
@@ -88,10 +84,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "left",
-              "right"
-            ]
+            "required": ["left", "right"]
           },
           "description": "Path pairs for git_parity (paths relative to git toplevel unless absolute)."
         },
