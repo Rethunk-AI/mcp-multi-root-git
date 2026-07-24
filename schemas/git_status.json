@@ -29,11 +29,27 @@
     "includeSubmodules": {
       "default": true,
       "type": "boolean"
+    },
+    "maxChangedFiles": {
+      "default": 500,
+      "description": "Cap changed-file lines per repo (hard cap 20000).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20000
+    },
+    "maxSubmodules": {
+      "default": 64,
+      "description": "Cap submodules fanned out to per root (hard cap 256).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
     }
   },
   "required": [
     "format",
-    "includeSubmodules"
+    "includeSubmodules",
+    "maxChangedFiles",
+    "maxSubmodules"
   ],
   "additionalProperties": false
 }

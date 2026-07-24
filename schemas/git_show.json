@@ -26,7 +26,8 @@
       "type": "string"
     },
     "paths": {
-      "description": "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
+      "description": "Optional list of file paths (max 256) to filter the shown diff/stat. Merged with `path` when both are provided.",
+      "maxItems": 256,
       "type": "array",
       "items": {
         "type": "string"
@@ -35,11 +36,19 @@
     "stat": {
       "description": "When true, show --stat diffstat (files changed summary) instead of the full patch.",
       "type": "boolean"
+    },
+    "maxBytes": {
+      "default": 512000,
+      "description": "Max UTF-8 bytes of diff/stat content to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 10000000
     }
   },
   "required": [
     "format",
-    "ref"
+    "ref",
+    "maxBytes"
   ],
   "additionalProperties": false
 }

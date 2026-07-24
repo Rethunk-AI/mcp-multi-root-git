@@ -29,7 +29,8 @@
       "type": "string"
     },
     "paths": {
-      "description": "Scope to multiple files (must be within repo root). Unioned with `path` if both given.",
+      "description": "Scope to multiple files (must be within repo root, max 256). Unioned with `path` if both given.",
+      "maxItems": 256,
       "type": "array",
       "items": {
         "type": "string"
@@ -48,7 +49,7 @@
     },
     "maxBytes": {
       "default": 512000,
-      "description": "Max UTF-8 bytes of diff text to return (default 512000). Oversized output is truncated with truncated:true.",
+      "description": "Max UTF-8 bytes of diff text to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
       "type": "integer",
       "minimum": 1024,
       "maximum": 10000000

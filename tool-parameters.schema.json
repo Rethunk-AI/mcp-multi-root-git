@@ -33,11 +33,27 @@
         "includeSubmodules": {
           "default": true,
           "type": "boolean"
+        },
+        "maxChangedFiles": {
+          "default": 500,
+          "description": "Cap changed-file lines per repo (hard cap 20000).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "maxSubmodules": {
+          "default": 64,
+          "description": "Cap submodules fanned out to per root (hard cap 256).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
         }
       },
       "required": [
         "format",
-        "includeSubmodules"
+        "includeSubmodules",
+        "maxChangedFiles",
+        "maxSubmodules"
       ],
       "additionalProperties": false
     },
@@ -113,12 +129,20 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 256
+        },
+        "maxBranchStatusLines": {
+          "default": 500,
+          "description": "Cap raw branchStatus lines per repo (default 500).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
         }
       },
       "required": [
         "format",
         "presetMerge",
-        "maxRoots"
+        "maxRoots",
+        "maxBranchStatusLines"
       ],
       "additionalProperties": false
     },
@@ -176,11 +200,19 @@
         "presetMerge": {
           "default": false,
           "type": "boolean"
+        },
+        "maxPairs": {
+          "default": 64,
+          "description": "Max pairs evaluated per root (hard cap 256).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
         }
       },
       "required": [
         "format",
-        "presetMerge"
+        "presetMerge",
+        "maxPairs"
       ],
       "additionalProperties": false
     },
@@ -248,20 +280,42 @@
           "description": "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
           "type": "string"
         },
+        "until": {
+          "description": "Passed to `--until=`. Same format as `since`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Limit to commits touching this path. Unioned with `paths`.",
+          "type": "string"
+        },
         "paths": {
-          "description": "Limit to commits touching these paths (`-- <paths>`).",
+          "description": "Limit to commits touching these paths (max 256, `-- <paths>`).",
+          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "grep": {
-          "description": "Filter by commit message regex (git `--grep`, case-insensitive).",
+          "description": "Filter by commit message regex (git `--grep`). Case-insensitive by default — see `ignoreCase`.",
           "type": "string"
+        },
+        "ignoreCase": {
+          "default": true,
+          "description": "Case-sensitivity of `grep` (`-i`). Default true (case-insensitive); set false for case-sensitive matching, aligning with `git_grep`'s case-sensitive-by-default pickaxe.",
+          "type": "boolean"
         },
         "author": {
           "description": "Filter by author name or email (`--author=`).",
           "type": "string"
+        },
+        "merges": {
+          "description": "`only`: merge commits only (`--merges`). `exclude`: no merge commits (`--no-merges`). Omit to include both.",
+          "type": "string",
+          "enum": [
+            "only",
+            "exclude"
+          ]
         },
         "maxCommits": {
           "default": 50,
@@ -282,6 +336,7 @@
       },
       "required": [
         "format",
+        "ignoreCase",
         "maxCommits",
         "follow"
       ],
@@ -342,8 +397,13 @@
           "description": "Commit/branch/tag to use as the history tip. Must be a safe ref token.",
           "type": "string"
         },
+        "path": {
+          "description": "Limit history to this path. Unioned with `paths`.",
+          "type": "string"
+        },
         "paths": {
-          "description": "Limit history to these paths (must resolve within the repo root).",
+          "description": "Limit history to these paths (max 256, must resolve within the repo root).",
+          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
@@ -351,7 +411,7 @@
         },
         "ignoreCase": {
           "default": false,
-          "description": "Case-insensitive match (`-i`; affects `G` mode regexes).",
+          "description": "Case-insensitive match (`-i`; affects `G` mode regexes). Default false (case-sensitive) — see `git_log`'s `grep`/`ignoreCase` for the opposite default.",
           "type": "boolean"
         },
         "maxMatches": {
@@ -452,7 +512,8 @@
           "type": "string"
         },
         "paths": {
-          "description": "Scope to multiple files (must be within repo root). Unioned with `path` if both given.",
+          "description": "Scope to multiple files (must be within repo root, max 256). Unioned with `path` if both given.",
+          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
@@ -471,7 +532,7 @@
         },
         "maxBytes": {
           "default": 512000,
-          "description": "Max UTF-8 bytes of diff text to return (default 512000). Oversized output is truncated with truncated:true.",
+          "description": "Max UTF-8 bytes of diff text to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
           "type": "integer",
           "minimum": 1024,
           "maximum": 10000000
@@ -510,7 +571,8 @@
           "type": "string"
         },
         "paths": {
-          "description": "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
+          "description": "Optional list of file paths (max 256) to filter the shown diff/stat. Merged with `path` when both are provided.",
+          "maxItems": 256,
           "type": "array",
           "items": {
             "type": "string"
@@ -519,11 +581,19 @@
         "stat": {
           "description": "When true, show --stat diffstat (files changed summary) instead of the full patch.",
           "type": "boolean"
+        },
+        "maxBytes": {
+          "default": 512000,
+          "description": "Max UTF-8 bytes of diff/stat content to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 10000000
         }
       },
       "required": [
         "format",
-        "ref"
+        "ref",
+        "maxBytes"
       ],
       "additionalProperties": false
     },
@@ -606,12 +676,30 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 10000
+        },
+        "ignoreWhitespace": {
+          "default": false,
+          "description": "Ignore whitespace-only changes when assigning blame (`-w`).",
+          "type": "boolean"
+        },
+        "detectMoves": {
+          "default": false,
+          "description": "Detect lines moved or copied within the same file (`-M`).",
+          "type": "boolean"
+        },
+        "detectCopies": {
+          "default": false,
+          "description": "Detect lines moved or copied from other files in the same commit (`-C`).",
+          "type": "boolean"
         }
       },
       "required": [
         "format",
         "path",
-        "maxLines"
+        "maxLines",
+        "ignoreWhitespace",
+        "detectMoves",
+        "detectCopies"
       ],
       "additionalProperties": false
     },
@@ -944,11 +1032,17 @@
           "type": "string",
           "minLength": 1,
           "description": "Commit to reset to: ancestor notation (`HEAD~1`, `HEAD~3`), branch name, or SHA."
+        },
+        "force": {
+          "default": false,
+          "description": "Skip the ancestor check and allow resetting to a ref that is not an ancestor of HEAD.",
+          "type": "boolean"
         }
       },
       "required": [
         "format",
-        "ref"
+        "ref",
+        "force"
       ],
       "additionalProperties": false
     },
@@ -988,12 +1082,54 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
+        },
+        "onConflict": {
+          "default": "abort",
+          "description": "`abort` (default): on conflict, run `revert --abort` and roll back the whole in-progress revert sequence (unchanged behavior). `pause`: on conflict, leave the conflict and native revert sequencer state in place — commits already made stay applied — so it can be resolved and resumed via `git_revert_continue`.",
+          "type": "string",
+          "enum": [
+            "abort",
+            "pause"
+          ]
         }
       },
       "required": [
         "format",
         "sources",
-        "noCommit"
+        "noCommit",
+        "onConflict"
+      ],
+      "additionalProperties": false
+    },
+    "git_revert_continue": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "workspaceRoot": {
+          "description": "Repo path. Default: first MCP root / cwd.",
+          "type": "string"
+        },
+        "format": {
+          "default": "json",
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json"
+          ]
+        },
+        "action": {
+          "default": "continue",
+          "description": "\"continue\" (default): resolve conflicts, stage them, then resume the sequencer. \"abort\": roll back to the pre-revert HEAD.",
+          "type": "string",
+          "enum": [
+            "continue",
+            "abort"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "action"
       ],
       "additionalProperties": false
     },

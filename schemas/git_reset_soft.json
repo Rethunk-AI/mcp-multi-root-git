@@ -20,11 +20,17 @@
       "type": "string",
       "minLength": 1,
       "description": "Commit to reset to: ancestor notation (`HEAD~1`, `HEAD~3`), branch name, or SHA."
+    },
+    "force": {
+      "default": false,
+      "description": "Skip the ancestor check and allow resetting to a ref that is not an ancestor of HEAD.",
+      "type": "boolean"
     }
   },
   "required": [
     "format",
-    "ref"
+    "ref",
+    "force"
   ],
   "additionalProperties": false
 }

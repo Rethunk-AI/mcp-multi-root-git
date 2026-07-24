@@ -43,12 +43,30 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 10000
+    },
+    "ignoreWhitespace": {
+      "default": false,
+      "description": "Ignore whitespace-only changes when assigning blame (`-w`).",
+      "type": "boolean"
+    },
+    "detectMoves": {
+      "default": false,
+      "description": "Detect lines moved or copied within the same file (`-M`).",
+      "type": "boolean"
+    },
+    "detectCopies": {
+      "default": false,
+      "description": "Detect lines moved or copied from other files in the same commit (`-C`).",
+      "type": "boolean"
     }
   },
   "required": [
     "format",
     "path",
-    "maxLines"
+    "maxLines",
+    "ignoreWhitespace",
+    "detectMoves",
+    "detectCopies"
   ],
   "additionalProperties": false
 }

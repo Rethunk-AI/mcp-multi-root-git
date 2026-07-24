@@ -55,8 +55,13 @@
       "description": "Commit/branch/tag to use as the history tip. Must be a safe ref token.",
       "type": "string"
     },
+    "path": {
+      "description": "Limit history to this path. Unioned with `paths`.",
+      "type": "string"
+    },
     "paths": {
-      "description": "Limit history to these paths (must resolve within the repo root).",
+      "description": "Limit history to these paths (max 256, must resolve within the repo root).",
+      "maxItems": 256,
       "type": "array",
       "items": {
         "type": "string"
@@ -64,7 +69,7 @@
     },
     "ignoreCase": {
       "default": false,
-      "description": "Case-insensitive match (`-i`; affects `G` mode regexes).",
+      "description": "Case-insensitive match (`-i`; affects `G` mode regexes). Default false (case-sensitive) — see `git_log`'s `grep`/`ignoreCase` for the opposite default.",
       "type": "boolean"
     },
     "maxMatches": {

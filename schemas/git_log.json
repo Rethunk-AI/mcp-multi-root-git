@@ -32,20 +32,42 @@
       "description": "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
       "type": "string"
     },
+    "until": {
+      "description": "Passed to `--until=`. Same format as `since`.",
+      "type": "string"
+    },
+    "path": {
+      "description": "Limit to commits touching this path. Unioned with `paths`.",
+      "type": "string"
+    },
     "paths": {
-      "description": "Limit to commits touching these paths (`-- <paths>`).",
+      "description": "Limit to commits touching these paths (max 256, `-- <paths>`).",
+      "maxItems": 256,
       "type": "array",
       "items": {
         "type": "string"
       }
     },
     "grep": {
-      "description": "Filter by commit message regex (git `--grep`, case-insensitive).",
+      "description": "Filter by commit message regex (git `--grep`). Case-insensitive by default — see `ignoreCase`.",
       "type": "string"
+    },
+    "ignoreCase": {
+      "default": true,
+      "description": "Case-sensitivity of `grep` (`-i`). Default true (case-insensitive); set false for case-sensitive matching, aligning with `git_grep`'s case-sensitive-by-default pickaxe.",
+      "type": "boolean"
     },
     "author": {
       "description": "Filter by author name or email (`--author=`).",
       "type": "string"
+    },
+    "merges": {
+      "description": "`only`: merge commits only (`--merges`). `exclude`: no merge commits (`--no-merges`). Omit to include both.",
+      "type": "string",
+      "enum": [
+        "only",
+        "exclude"
+      ]
     },
     "maxCommits": {
       "default": 50,
@@ -66,6 +88,7 @@
   },
   "required": [
     "format",
+    "ignoreCase",
     "maxCommits",
     "follow"
   ],

@@ -95,6 +95,11 @@
       "description": "Parameter schema for the 'git_revert' MCP tool."
     },
     {
+      "name": "git_revert_continue",
+      "file": "git_revert_continue.json",
+      "description": "Parameter schema for the 'git_revert_continue' MCP tool."
+    },
+    {
       "name": "git_tag",
       "file": "git_tag.json",
       "description": "Parameter schema for the 'git_tag' MCP tool."
