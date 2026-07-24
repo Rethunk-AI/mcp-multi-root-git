@@ -75,18 +75,6 @@ describe("git_stash_apply execute handler", () => {
     expect(parsed.conflictPaths).toBeUndefined();
   });
 
-  test("apply markdown success output contains stash ref", async () => {
-    const dir = makeRepoWithSeed();
-    writeFileSync(join(dir, "md.ts"), "const m = 3;\n");
-    gitCmd(dir, "add", "md.ts");
-    gitCmd(dir, "stash", "push", "-m", "wip: md");
-
-    const run = captureTool(registerGitStashApplyTool);
-    const text = await run({ workspaceRoot: dir, index: 0 });
-    expect(text).toContain("stash@{0}");
-    expect(text).toContain("applied");
-  });
-
   test("conflicted apply returns applied=false with conflictPaths; pop retains stash", async () => {
     const dir = makeRepoWithSeed();
     // Commit base → stash divergent edit → commit a different edit → apply conflicts (UU).

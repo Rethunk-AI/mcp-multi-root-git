@@ -34,7 +34,7 @@ describe("git_tag execute handler", () => {
     });
   });
 
-  test("creates an annotated tag in markdown format", async () => {
+  test("creates an annotated tag", async () => {
     const repo = makeRepoWithSeed("mcp-git-tag-test-");
     const headSha = gitCmd(repo, "rev-parse", "HEAD").trim();
     const run = captureTool(registerGitTagTool);
@@ -44,11 +44,9 @@ describe("git_tag execute handler", () => {
       tag: "v1.1.0",
       message: "Release 1.1.0",
     });
+    const parsed = JSON.parse(text) as { tag: string; type: string; sha: string };
 
-    expect(text).toContain("# Tag: v1.1.0");
-    expect(text).toContain("**Type:** annotated");
-    expect(text).toContain(`**SHA:** \`${headSha}\``);
-    expect(text).toContain("Release 1.1.0");
+    expect(parsed).toEqual({ tag: "v1.1.0", type: "annotated", sha: headSha });
   });
 
   test("deletes an existing tag in json format", async () => {

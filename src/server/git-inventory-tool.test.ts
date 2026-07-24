@@ -44,15 +44,6 @@ describe("git_inventory execute handler", () => {
     expect(parsed.inventories[0]?.entries[0]?.label).toBe(".");
   });
 
-  test("basic single-repo inventory markdown", async () => {
-    const dir = makeRepoWithSeed("mcp-inv-md-");
-
-    const run = captureTool(registerGitInventoryTool);
-    const text = await run({ root: dir });
-    expect(text).toContain("# Git inventory");
-    expect(text).toContain(dir);
-  });
-
   test("root_list_nested_or_preset_conflict when root array + nestedRoots", async () => {
     const dir = makeRepoWithSeed("mcp-inv-conflict-");
 

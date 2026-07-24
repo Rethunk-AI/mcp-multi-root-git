@@ -66,21 +66,6 @@ describe("git_worktree_add", () => {
     expect(parsed.created).toBe(false);
   });
 
-  test("markdown format shows the new worktree path and branch", async () => {
-    const dir = makeRepoWithSeed();
-    const wtPath = trackTmpPath(join(dir, "../wt-feature-md"));
-
-    const run = captureTool(registerGitWorktreeAddTool);
-    const text = await run({
-      workspaceRoot: dir,
-      path: wtPath,
-      branch: "feature/md-test",
-    });
-
-    expect(text).toContain("# Worktree added");
-    expect(text).toContain("feature/md-test");
-  });
-
   test("adds worktree with explicit baseRef", async () => {
     const dir = makeRepoWithSeed();
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
@@ -255,18 +240,6 @@ describe("git_worktree_remove", () => {
 
     expect(parsed.ok).toBe(true);
     expect(existsSync(wtPath)).toBe(false);
-  });
-
-  test("markdown format shows removed path", async () => {
-    const dir = makeRepoWithSeed();
-    const wtPath = trackTmpPath(join(dir, "../wt-to-remove-md"));
-    gitCmd(dir, "worktree", "add", "-b", "feature/remove-md", wtPath);
-
-    const run = captureTool(registerGitWorktreeRemoveTool);
-    const text = await run({ workspaceRoot: dir, path: wtPath });
-
-    expect(text).toContain("# Worktree removed");
-    expect(text).toContain(wtPath);
   });
 
   test("cannot_remove_main_worktree refuses to remove the main worktree", async () => {

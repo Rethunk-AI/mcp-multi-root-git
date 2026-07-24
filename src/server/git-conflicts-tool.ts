@@ -294,48 +294,6 @@ export function readConflictFile(
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering
-// ---------------------------------------------------------------------------
-
-function renderConflictsMarkdown(result: ConflictsJson): string {
-  const lines: string[] = ["# Git conflicts"];
-  if (result.state) lines.push(`_state: ${result.state}_`);
-  lines.push("");
-
-  if (result.files.length === 0) {
-    lines.push("_(no conflicts)_");
-    return lines.join("\n");
-  }
-
-  for (const f of result.files) {
-    lines.push(`## ${f.path}`);
-    if (f.conflictType) lines.push(`_type: ${f.conflictType}_`);
-    if (f.error) lines.push(`_error: ${f.error}_`);
-    if (f.truncated) lines.push("_(truncated)_");
-    if (!f.hunks || f.hunks.length === 0) {
-      lines.push("_(no parsed hunks — unreadable, binary, or no markers found)_", "");
-      continue;
-    }
-    for (const h of f.hunks) {
-      lines.push(`### hunk @ line ${h.startLine}`);
-      lines.push(`**ours${h.oursLabel ? ` (${h.oursLabel})` : ""}:**`, "```", h.ours, "```");
-      if (h.base !== undefined) {
-        lines.push("**base:**", "```", h.base, "```");
-      }
-      lines.push(
-        `**theirs${h.theirsLabel ? ` (${h.theirsLabel})` : ""}:**`,
-        "```",
-        h.theirs,
-        "```",
-      );
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n").trimEnd();
-}
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -394,10 +352,7 @@ export function registerGitConflictsTool(server: FastMCP): void {
         files,
       };
 
-      if (args.format === "json") {
-        return jsonRespond(result);
-      }
-      return renderConflictsMarkdown(result);
+      return jsonRespond(result);
     },
   });
 }

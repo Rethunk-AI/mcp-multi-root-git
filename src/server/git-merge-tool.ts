@@ -488,61 +488,28 @@ export function registerGitMergeTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: allOk,
-          into,
-          strategy,
-          ...spreadDefined("headSha", headSha),
-          applied: results.filter((r) => r.ok).length,
-          total: args.sources.length,
-          results: results.map((r) => ({
-            source: r.source,
-            ok: r.ok,
-            ...spreadDefined("outcome", r.outcome),
-            ...spreadDefined("mergedSha", r.mergedSha),
-            ...spreadDefined("conflictStage", r.conflictStage),
-            ...spreadWhen((r.conflictPaths?.length ?? 0) > 0, {
-              conflictPaths: r.conflictPaths,
-            }),
-            ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
-            ...spreadDefined("worktreeRemoved", r.worktreeRemoved),
-            ...spreadDefined("error", r.error),
-            ...spreadDefined("detail", r.detail),
-          })),
-        });
-      }
-
-      // --- Markdown ---
-      const lines: string[] = [];
-      const applied = results.filter((r) => r.ok).length;
-      const header = allOk
-        ? `# Merge into \`${into}\`: ${applied}/${args.sources.length} sources applied`
-        : `# Merge into \`${into}\`: ${applied}/${args.sources.length} sources applied (stopped on conflict)`;
-      lines.push(header, "");
-
-      for (const r of results) {
-        const icon = r.ok ? "✓" : "✗";
-        const tail: string[] = [];
-        if (r.outcome) tail.push(r.outcome);
-        if (r.mergedSha) tail.push(`\`${r.mergedSha.slice(0, 7)}\``);
-        if (r.branchDeleted) tail.push("branch deleted");
-        if (r.worktreeRemoved) tail.push(`worktree removed: ${r.worktreeRemoved}`);
-        lines.push(`${icon} ${r.source}${tail.length ? `  —  ${tail.join(", ")}` : ""}`);
-        if (!r.ok) {
-          if (r.conflictPaths?.length) {
-            for (const p of r.conflictPaths) lines.push(`  conflict: ${p}`);
-          }
-          if (r.error) lines.push(`  Error: ${r.error}${r.detail ? ` — ${r.detail}` : ""}`);
-        }
-      }
-
-      if (!allOk) {
-        const skipped = args.sources.length - results.length;
-        if (skipped > 0) lines.push("", `${skipped} remaining source(s) skipped.`);
-      }
-
-      return lines.join("\n");
+      return jsonRespond({
+        ok: allOk,
+        into,
+        strategy,
+        ...spreadDefined("headSha", headSha),
+        applied: results.filter((r) => r.ok).length,
+        total: args.sources.length,
+        results: results.map((r) => ({
+          source: r.source,
+          ok: r.ok,
+          ...spreadDefined("outcome", r.outcome),
+          ...spreadDefined("mergedSha", r.mergedSha),
+          ...spreadDefined("conflictStage", r.conflictStage),
+          ...spreadWhen((r.conflictPaths?.length ?? 0) > 0, {
+            conflictPaths: r.conflictPaths,
+          }),
+          ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
+          ...spreadDefined("worktreeRemoved", r.worktreeRemoved),
+          ...spreadDefined("error", r.error),
+          ...spreadDefined("detail", r.detail),
+        })),
+      });
     },
   });
 }

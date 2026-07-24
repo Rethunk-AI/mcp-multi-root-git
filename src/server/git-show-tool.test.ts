@@ -39,12 +39,12 @@ describe("git_show_tool", () => {
     const result = await tool({
       workspaceRoot: repo,
       ref: "HEAD",
-      format: "markdown",
     });
+    const parsed = JSON.parse(result);
 
     // Result should contain commit message and diff info
-    expect(result).toContain("feat: add file");
-    expect(result).toContain("git show HEAD");
+    expect(parsed.message).toContain("feat: add file");
+    expect(parsed.ref).toBe("HEAD");
   });
 
   test("git show with path shows file content at ref", async () => {
@@ -57,12 +57,12 @@ describe("git_show_tool", () => {
       workspaceRoot: repo,
       ref: "HEAD~1",
       path: "file.txt",
-      format: "markdown",
     });
+    const parsed = JSON.parse(result);
 
     // Result should contain the file path and content from the previous commit
-    expect(result).toContain("file.txt");
-    expect(result).toContain("first content");
+    expect(parsed.path).toBe("file.txt");
+    expect(parsed.diff).toContain("first content");
   });
 
   test("git show returns JSON format", async () => {

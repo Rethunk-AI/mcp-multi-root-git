@@ -127,7 +127,7 @@ describe("git_revert_continue", () => {
     expect(gitCmd(dir, "status", "--porcelain").trim()).toBe("");
   });
 
-  test("markdown format reports the completed continue", async () => {
+  test("continue reports the completed continue", async () => {
     const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
@@ -150,9 +150,11 @@ describe("git_revert_continue", () => {
     gitCmd(dir, "add", "seed.txt");
 
     const runContinue = captureTool(registerGitRevertContinueTool);
-    const text = await runContinue({ workspaceRoot: dir, format: "markdown" });
+    const text = await runContinue({ workspaceRoot: dir });
+    const parsed = JSON.parse(text) as { ok: boolean; action: string; applied: number };
 
-    expect(text).toContain("# Revert continue");
-    expect(text).toContain("1 commit(s) applied");
+    expect(parsed.ok).toBe(true);
+    expect(parsed.action).toBe("continue");
+    expect(parsed.applied).toBe(1);
   });
 });

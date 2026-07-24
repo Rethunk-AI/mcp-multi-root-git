@@ -12,7 +12,6 @@ import {
 } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import {
-  buildInventorySectionMarkdown,
   collectInventoryEntry,
   type InventoryEntryJson,
   MAX_BRANCH_STATUS_LINES_DEFAULT,
@@ -131,7 +130,6 @@ export function registerGitInventoryTool(server: FastMCP): void {
 
       const maxBranchStatusLines = args.maxBranchStatusLines ?? MAX_BRANCH_STATUS_LINES_DEFAULT;
 
-      const mdChunks: string[] = [];
       const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
 
       // ---------------------------------------------------------------------
@@ -355,37 +353,27 @@ export function registerGitInventoryTool(server: FastMCP): void {
       // -----------------------------------------------------------------------
       for (const plan of plans) {
         if (plan.kind === "notRepo") {
-          if (args.format === "json") {
-            allJson.push({
-              workspaceRoot: plan.workspaceRoot,
-              ...spreadDefined("upstream", fixedUpstream),
-              entries: [
-                makeSkipEntry(
-                  plan.workspaceRoot,
-                  plan.workspaceRoot,
-                  upstream.mode,
-                  "(not a git repository)",
-                ),
-              ],
-            });
-          } else {
-            mdChunks.push(`### ${plan.workspaceRoot}\n(not a git repository)`);
-          }
+          allJson.push({
+            workspaceRoot: plan.workspaceRoot,
+            ...spreadDefined("upstream", fixedUpstream),
+            entries: [
+              makeSkipEntry(
+                plan.workspaceRoot,
+                plan.workspaceRoot,
+                upstream.mode,
+                "(not a git repository)",
+              ),
+            ],
+          });
           continue;
         }
         if (plan.kind === "presetError") {
-          if (args.format === "json") {
-            allJson.push({
-              workspaceRoot: plan.top,
-              ...spreadDefined("upstream", fixedUpstream),
-              entries: [],
-              error: plan.error,
-            });
-          } else {
-            mdChunks.push(
-              [`### ${plan.top}`, "```json", JSON.stringify(plan.error), "```"].join("\n"),
-            );
-          }
+          allJson.push({
+            workspaceRoot: plan.top,
+            ...spreadDefined("upstream", fixedUpstream),
+            entries: [],
+            error: plan.error,
+          });
           continue;
         }
 
@@ -400,39 +388,19 @@ export function registerGitInventoryTool(server: FastMCP): void {
         const nestedRootsTruncated = plan.kind === "nested" && plan.nestedRootsTruncated;
         const nestedRootsOmittedCount = plan.kind === "nested" ? plan.nestedRootsOmittedCount : 0;
 
-        if (args.format === "json") {
-          allJson.push({
-            workspaceRoot: plan.top,
-            ...spreadDefined("presetSchemaVersion", plan.presetSchemaVersion),
-            ...spreadWhen(nestedRootsTruncated, {
-              nestedRootsTruncated: true,
-              nestedRootsOmittedCount,
-            }),
-            ...spreadDefined("upstream", fixedUpstream),
-            entries,
-          });
-        } else {
-          const sections: string[] = [`### ${plan.top}`, plan.headerNote];
-          if (plan.kind === "nested" && plan.nestedRootsTruncated) {
-            sections.push(
-              `nested_roots_truncated: ${plan.nestedRootsOmittedCount} path(s) not listed (maxRoots=${maxRoots})`,
-            );
-          }
-          for (const e of entries) {
-            sections.push(...buildInventorySectionMarkdown(e));
-          }
-          mdChunks.push(sections.join("\n"));
-        }
+        allJson.push({
+          workspaceRoot: plan.top,
+          ...spreadDefined("presetSchemaVersion", plan.presetSchemaVersion),
+          ...spreadWhen(nestedRootsTruncated, {
+            nestedRootsTruncated: true,
+            nestedRootsOmittedCount,
+          }),
+          ...spreadDefined("upstream", fixedUpstream),
+          entries,
+        });
       }
 
-      if (args.format === "json") {
-        return jsonRespond({ ...spreadDefined("warning", warning), inventories: allJson });
-      }
-      return [
-        "# Git inventory",
-        ...(warning ? [`_(warning: ${JSON.stringify(warning)})_`] : []),
-        ...mdChunks,
-      ].join("\n\n");
+      return jsonRespond({ ...spreadDefined("warning", warning), inventories: allJson });
     },
   });
 }

@@ -419,50 +419,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         ...spreadWhen(subprocessTruncated, { truncated: true }),
       };
 
-      // --- Format output ---
-      if (args.format === "json") {
-        return jsonRespond(summary);
-      }
-
-      // --- Markdown output ---
-      const lines: string[] = [];
-      lines.push(`# Diff: ${rangeStr}`, "");
-
-      // Summary line
-      const fileWord = totalFiles === 1 ? "file" : "files";
-      let summaryLine = `**${totalFiles} ${fileWord} changed** (+${totalAdditions} \u2212${totalDeletions})`;
-      if (excludedFiles.length > 0) {
-        const excWord = excludedFiles.length === 1 ? "file" : "files";
-        summaryLine += `, ${excludedFiles.length} ${excWord} excluded (${excludedFiles.join(", ")})`;
-      }
-      if (truncatedFileCount > 0) {
-        summaryLine += `, ${truncatedFileCount} more file(s) omitted (maxFiles=${maxFiles})`;
-      }
-      if (subprocessTruncated) {
-        summaryLine += ", underlying git output truncated (buffer cap) — result may be partial";
-      }
-      lines.push(summaryLine, "");
-
-      for (const file of files) {
-        // Section header
-        const statusTag = file.status !== "modified" ? `, ${file.status}` : "";
-        const renameTag = file.oldPath ? ` (from ${file.oldPath})` : "";
-        lines.push(
-          `## ${file.path}${renameTag} (+${file.additions} \u2212${file.deletions}${statusTag})`,
-        );
-
-        if (file.diff) {
-          lines.push("```diff", file.diff.trimEnd(), "```");
-        } else {
-          lines.push("_(no diff content)_");
-        }
-        if (file.truncated) {
-          lines.push(`_(diff truncated at ${maxLinesPerFile} lines)_`);
-        }
-        lines.push("");
-      }
-
-      return lines.join("\n");
+      return jsonRespond(summary);
     },
   });
 }

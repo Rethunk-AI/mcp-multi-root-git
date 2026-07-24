@@ -321,7 +321,7 @@ describe("resolveDiffRangeArgs", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_diff_summary execute handler", () => {
-  test("unstaged changes appear in markdown output", async () => {
+  test("unstaged changes appear in the diff summary output", async () => {
     const dir = makeRepoWithSeed();
     addCommit(dir, "foo.ts", "const x = 1;\n", "chore: initial");
     writeFileSync(join(dir, "foo.ts"), "const x = 2;\n");

@@ -1,18 +1,13 @@
 /**
  * Tests for src/server/inventory.ts.
  *
- * Pure helpers (makeSkipEntry, buildInventorySectionMarkdown) are tested as
- * unit tests; collectInventoryEntry is tested with real on-disk repos.
+ * Pure helpers (makeSkipEntry) are tested as unit tests; collectInventoryEntry
+ * is tested with real on-disk repos.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import {
-  buildInventorySectionMarkdown,
-  collectInventoryEntry,
-  MAX_INVENTORY_ROOTS_DEFAULT,
-  makeSkipEntry,
-} from "./inventory.js";
+import { collectInventoryEntry, MAX_INVENTORY_ROOTS_DEFAULT, makeSkipEntry } from "./inventory.js";
 import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
@@ -37,96 +32,6 @@ describe("makeSkipEntry", () => {
 
     const fixed = makeSkipEntry("label", "/p", "fixed", "reason");
     expect(fixed.upstreamMode).toBe("fixed");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildInventorySectionMarkdown
-// ---------------------------------------------------------------------------
-
-describe("buildInventorySectionMarkdown", () => {
-  test("skip entry returns [empty, header, skipReason]", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/a",
-      path: "/abs/path",
-      upstreamMode: "auto",
-      skipReason: "not_a_git_repo",
-    });
-    expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe("");
-    expect(lines[1]).toContain("pkg/a");
-    expect(lines[2]).toBe("not_a_git_repo");
-  });
-
-  test("single-line clean entry returns [empty, header, statusLine]", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/b",
-      path: "/abs/path",
-      upstreamMode: "auto",
-      branchStatus: "## main",
-    });
-    expect(lines).toHaveLength(3);
-    expect(lines[2]).toBe("## main");
-  });
-
-  test("entry with detached HEAD includes detached note (code block)", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/c",
-      path: "/abs/path",
-      upstreamMode: "auto",
-      branchStatus: "HEAD (no branch)",
-      detached: true,
-    });
-    const body = lines.join("\n");
-    expect(body).toContain("detached HEAD");
-    expect(lines).toContain("```text");
-  });
-
-  test("entry with ahead/behind/upstreamRef renders tracking info in code block", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/d",
-      path: "/abs/path",
-      upstreamMode: "auto",
-      branchStatus: "## main...origin/main",
-      ahead: "2",
-      behind: "0",
-      upstreamRef: "origin/main",
-    });
-    const body = lines.join("\n");
-    expect(body).toContain("ahead 2");
-    expect(body).toContain("origin/main");
-    expect(lines).toContain("```text");
-  });
-
-  test("entry with upstreamNote (no ref counts) renders note", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/e",
-      path: "/abs/path",
-      upstreamMode: "auto",
-      branchStatus: "## main",
-      upstreamNote: "no upstream configured",
-    });
-    const body = lines.join("\n");
-    expect(body).toContain("no upstream configured");
-  });
-
-  test("multi-line branchStatus triggers code block", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/f",
-      path: "/abs",
-      upstreamMode: "auto",
-      branchStatus: "## main\n M file.ts",
-    });
-    expect(lines).toContain("```text");
-  });
-
-  test("missing branchStatus defaults to (clean)", () => {
-    const lines = buildInventorySectionMarkdown({
-      label: "pkg/g",
-      path: "/abs",
-      upstreamMode: "auto",
-    });
-    expect(lines.join("\n")).toContain("(clean)");
   });
 });
 

@@ -211,36 +211,7 @@ export function registerGitStatusTool(server: FastMCP): void {
         (groups[job.rootIndex] as Group).repos.push(row);
       }
 
-      if (args.format === "json") {
-        return jsonRespond({ groups });
-      }
-
-      const sections: string[] = [groups.length > 1 ? "# Multi-root git status" : "# Git status"];
-      for (const g of groups) {
-        if (groups.length > 1) {
-          sections.push("", `### MCP root: ${g.mcpRoot}`);
-        }
-        if (g.submodulesTruncated) {
-          sections.push(
-            "",
-            `submodules_truncated: ${g.submodulesOmittedCount} submodule(s) not shown (maxSubmodules=${maxSubmodules})`,
-          );
-        }
-        for (const row of g.repos) {
-          const body = row.statusText || "(clean)";
-          if (body.includes("\n")) {
-            sections.push("", `## ${row.label} — ${row.path}`, "```text", body, "```");
-          } else {
-            sections.push("", `## ${row.label} — ${row.path}`, body);
-          }
-          if (row.changedFilesTruncated) {
-            sections.push(
-              `changed_files_truncated: ${row.changedFilesOmittedCount} file(s) not shown (maxChangedFiles=${maxChangedFiles})`,
-            );
-          }
-        }
-      }
-      return sections.join("\n");
+      return jsonRespond({ groups });
     },
   });
 }

@@ -249,28 +249,11 @@ export function registerGitDiffTool(server: FastMCP): void {
         staged: args.staged,
       });
 
-      if (args.format === "json") {
-        return jsonRespond({
-          range: label,
-          diff: diffText,
-          ...spreadWhen(truncated, { truncated: true }),
-        });
-      }
-
-      // Markdown output
-      const lines: string[] = [];
-      lines.push(`# Diff: ${label}`, "");
-
-      if (diffText.trim()) {
-        lines.push("```diff", diffText.trimEnd(), "```");
-      } else {
-        lines.push("_(no changes)_");
-      }
-      if (truncated) {
-        lines.push("", `_(diff truncated at ${maxBytes} bytes)_`);
-      }
-
-      return lines.join("\n");
+      return jsonRespond({
+        range: label,
+        diff: diffText,
+        ...spreadWhen(truncated, { truncated: true }),
+      });
     },
   });
 }

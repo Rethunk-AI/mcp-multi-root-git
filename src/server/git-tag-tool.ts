@@ -113,15 +113,11 @@ export function registerGitTagTool(server: FastMCP): void {
           });
         }
 
-        if (args.format === "json") {
-          return jsonRespond({
-            tag,
-            type: "deleted",
-            sha: "", // Deleted tags have no SHA
-          });
-        }
-
-        return `Deleted tag: ${tag}`;
+        return jsonRespond({
+          tag,
+          type: "deleted",
+          sha: "", // Deleted tags have no SHA
+        });
       }
 
       // Determine the ref to tag (default HEAD). Commit-ish allows HEAD~1 / main^2.
@@ -174,26 +170,7 @@ export function registerGitTagTool(server: FastMCP): void {
         sha,
       };
 
-      if (args.format === "json") {
-        return jsonRespond(result);
-      }
-
-      // Markdown output
-      const lines: string[] = [];
-      lines.push(`# Tag: ${tag}`);
-      lines.push("");
-      lines.push(`**Type:** ${tagType}`);
-      lines.push(`**SHA:** \`${sha}\``);
-      if (args.message) {
-        lines.push("");
-        lines.push("**Message:**");
-        lines.push("");
-        lines.push("```");
-        lines.push(args.message);
-        lines.push("```");
-      }
-
-      return lines.join("\n");
+      return jsonRespond(result);
     },
   });
 }

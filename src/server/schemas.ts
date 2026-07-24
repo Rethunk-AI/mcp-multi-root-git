@@ -1,18 +1,15 @@
 import { z } from "zod";
 
-const FormatSchema = z.enum(["markdown", "json"]).optional().default("json");
-
 /** Max entries when `root` is an array (matches `git_inventory` `maxRoots` hard cap). */
 export const MAX_ROOT_PATHS = 256;
 
-/** Single-repo tools: one optional repo-path override plus output format. */
+/** Single-repo tools: one optional repo-path override. Output is always JSON (v7+). */
 export const WorkspacePickSchema = z.object({
   workspaceRoot: z.string().optional().describe("Repo path. Default: first MCP root / cwd."),
-  format: FormatSchema,
 });
 
 /**
- * Fan-out tools: one polymorphic routing param plus output format.
+ * Fan-out tools: one polymorphic routing param. Output is always JSON (v7+).
  *
  * Array length is intentionally uncapped here so `resolveRootPathList` can
  * return the structured `{ error: root_list_too_many, max, count }` JSON
@@ -24,5 +21,4 @@ export const RootPickSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Repo path, array of paths, or "*" for all MCP roots.'),
-  format: FormatSchema,
 });

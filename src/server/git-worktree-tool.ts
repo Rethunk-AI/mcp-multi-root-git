@@ -148,18 +148,13 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
         });
       }
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          path: wtPath,
-          branch,
-          created: !branchExists,
-          ...spreadDefined("baseRef", !branchExists ? (baseRef ?? "HEAD") : undefined),
-        });
-      }
-
-      const createdNote = branchExists ? "" : ` (new branch from ${baseRef ?? "HEAD"})`;
-      return `# Worktree added\n✓ ${wtPath}  →  ${branch}${createdNote}`;
+      return jsonRespond({
+        ok: true,
+        path: wtPath,
+        branch,
+        created: !branchExists,
+        ...spreadDefined("baseRef", !branchExists ? (baseRef ?? "HEAD") : undefined),
+      });
     },
   });
 }
@@ -248,10 +243,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
         });
       }
 
-      if (args.format === "json") {
-        return jsonRespond({ ok: true, path: wtPath });
-      }
-      return `# Worktree removed\n✓ ${wtPath}`;
+      return jsonRespond({ ok: true, path: wtPath });
     },
   });
 }

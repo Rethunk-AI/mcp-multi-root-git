@@ -233,82 +233,33 @@ export function registerGitParityTool(server: FastMCP): void {
         pairsOmittedCount?: number;
         error?: Record<string, unknown>;
       }[] = [];
-      const mdParts: string[] = [];
 
       for (const plan of plans) {
         if (plan.kind === "notRepo") {
           const errDesc = `not a git repository: ${plan.workspaceRoot}`;
-          if (args.format === "json") {
-            results.push({
-              workspaceRoot: plan.workspaceRoot,
-              status: "MISMATCH",
-              pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: errDesc }],
-            });
-          } else {
-            mdParts.push(
-              [
-                "# Git HEAD parity",
-                "",
-                `status: MISMATCH`,
-                "",
-                `## — — error`,
-                "```text",
-                errDesc,
-                "```",
-                "",
-              ].join("\n"),
-            );
-          }
+          results.push({
+            workspaceRoot: plan.workspaceRoot,
+            status: "MISMATCH",
+            pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: errDesc }],
+          });
           continue;
         }
         if (plan.kind === "presetError") {
-          if (args.format === "json") {
-            results.push({
-              workspaceRoot: plan.top,
-              status: "MISMATCH",
-              pairs: [],
-              error: plan.error,
-            });
-          } else {
-            mdParts.push(
-              [
-                "# Git HEAD parity",
-                "",
-                "status: MISMATCH",
-                "",
-                `## ${plan.top} — preset error`,
-                "```json",
-                JSON.stringify(plan.error),
-                "```",
-                "",
-              ].join("\n"),
-            );
-          }
+          results.push({
+            workspaceRoot: plan.top,
+            status: "MISMATCH",
+            pairs: [],
+            error: plan.error,
+          });
           continue;
         }
         if (plan.kind === "noPairs") {
-          if (args.format === "json") {
-            results.push({
-              workspaceRoot: plan.top,
-              status: "MISMATCH",
-              pairs: [],
-              error: plan.error,
-            });
-          } else {
-            mdParts.push(
-              [
-                "# Git HEAD parity",
-                "",
-                "status: MISMATCH",
-                "",
-                `## ${plan.top} — error`,
-                "```json",
-                JSON.stringify(plan.error),
-                "```",
-                "",
-              ].join("\n"),
-            );
-          }
+          results.push({
+            workspaceRoot: plan.top,
+            status: "MISMATCH",
+            pairs: [],
+            error: plan.error,
+          });
           continue;
         }
 
@@ -327,46 +278,9 @@ export function registerGitParityTool(server: FastMCP): void {
             pairsOmittedCount: plan.pairsOmittedCount,
           }),
         });
-
-        if (args.format !== "json") {
-          const lines: string[] = [
-            "# Git HEAD parity",
-            "",
-            `status: ${allOk ? "OK" : "MISMATCH"}`,
-            "",
-          ];
-          if (plan.pairsTruncated) {
-            lines.push(
-              `pairs_truncated: ${plan.pairsOmittedCount} pair(s) not evaluated (maxPairs=${maxPairs})`,
-              "",
-            );
-          }
-          for (const pr of pairResults) {
-            if (pr.error) {
-              lines.push(`## ${pr.label} — error`, "```text", pr.error, "```", "");
-            } else if (pr.match) {
-              lines.push(`## ${pr.label} — OK`, "```text", `SHA: ${pr.sha}`, "```", "");
-            } else {
-              lines.push(
-                `## ${pr.label} — MISMATCH`,
-                "```text",
-                `left:  ${pr.leftSha}`,
-                `right: ${pr.rightSha}`,
-                "```",
-                "",
-              );
-            }
-          }
-          mdParts.push(lines.join("\n"));
-        }
       }
 
-      if (args.format === "json") {
-        return jsonRespond({ ...spreadDefined("warning", warning), parity: results });
-      }
-      return [...(warning ? [`_(warning: ${JSON.stringify(warning)})_`] : []), ...mdParts].join(
-        "\n\n---\n\n",
-      );
+      return jsonRespond({ ...spreadDefined("warning", warning), parity: results });
     },
   });
 }

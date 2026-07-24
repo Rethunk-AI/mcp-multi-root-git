@@ -39,18 +39,6 @@ describe("git_reset_soft", () => {
     expect(parsed.beforeSha).not.toBe(parsed.afterSha);
   });
 
-  test("markdown format contains before→after SHAs", async () => {
-    const dir = makeRepoWithSeed();
-    addCommit(dir, "x.ts", "export const x = 0;\n", "feat: x");
-
-    const run = captureTool(registerGitResetSoftTool);
-    const text = await run({ workspaceRoot: dir, ref: "HEAD~1" });
-
-    expect(text).toContain("# Reset (soft)");
-    expect(text).toMatch(/→/);
-    expect(text).toContain("file(s) staged");
-  });
-
   test("refuses when working tree has untracked changes", async () => {
     const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "dirty.ts"), "dirty\n");

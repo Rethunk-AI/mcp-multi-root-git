@@ -456,76 +456,39 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: allOk,
-          onto,
-          ...spreadDefined("headSha", headSha),
-          applied: appliedCount,
-          picked: picks.length,
-          results: perSourceReport.map((s) => ({
-            source: s.raw,
-            kind: s.kind,
-            resolvedCommits: s.commits.length,
-            keptCommits: perSourceKept.get(s.raw)?.length ?? 0,
-            ...spreadWhen(s.branchDeleted === true, { branchDeleted: true }),
-            ...spreadDefined("worktreeRemoved", s.worktreeRemoved),
-          })),
-          ...spreadWhen(conflict !== undefined, {
-            conflict: {
-              stage: conflict?.stage ?? "cherry-pick",
-              ...spreadWhen(conflict?.paused === true, { paused: true }),
-              ...spreadDefined("commit", conflict?.commit),
-              paths: conflict?.paths ?? [],
-              ...spreadDefined("detail", conflict?.detail),
-              ...spreadDefined("error", conflict?.error),
-              ...spreadWhen(conflict?.abortFailed === true, {
-                abortFailed: true,
-                ...spreadDefined("abortDetail", conflict?.abortDetail),
-              }),
-            },
-          }),
-          ...spreadWhen(conflict?.abortFailed === true, {
-            error: ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
-            ...spreadDefined("abortDetail", conflict?.abortDetail),
-          }),
-        });
-      }
-
-      // --- Markdown ---
-      const lines: string[] = [];
-      const header = allOk
-        ? `# Cherry-pick onto \`${onto}\`: ${appliedCount} commit(s) applied`
-        : conflict?.paused
-          ? `# Cherry-pick onto \`${onto}\`: paused on conflict after ${appliedCount} commit(s)`
-          : `# Cherry-pick onto \`${onto}\`: stopped on conflict after ${appliedCount} commit(s)`;
-      lines.push(header, "");
-
-      for (const s of perSourceReport) {
-        const kept = perSourceKept.get(s.raw)?.length ?? 0;
-        const tail: string[] = [`${s.kind}`, `${kept}/${s.commits.length} picked`];
-        if (s.branchDeleted) tail.push("branch deleted");
-        if (s.worktreeRemoved) tail.push(`worktree removed: ${s.worktreeRemoved}`);
-        lines.push(`- ${s.raw}  —  ${tail.join(", ")}`);
-      }
-
-      if (conflict) {
-        lines.push("", `Conflict at commit \`${conflict.commit ?? "?"}\` (${conflict.stage}):`);
-        for (const p of conflict.paths) lines.push(`  conflict: ${p}`);
-        if (conflict.detail) lines.push(`  detail: ${conflict.detail}`);
-        if (conflict.paused) {
-          lines.push(
-            "  Paused: cherry-pick left in progress. Resolve the conflict, then call `git_cherry_pick_continue`.",
-          );
-        }
-        if (conflict.error) {
-          lines.push(
-            `  Error: ${conflict.error}${conflict.abortDetail ? ` — ${conflict.abortDetail}` : ""}`,
-          );
-        }
-      }
-
-      return lines.join("\n");
+      return jsonRespond({
+        ok: allOk,
+        onto,
+        ...spreadDefined("headSha", headSha),
+        applied: appliedCount,
+        picked: picks.length,
+        results: perSourceReport.map((s) => ({
+          source: s.raw,
+          kind: s.kind,
+          resolvedCommits: s.commits.length,
+          keptCommits: perSourceKept.get(s.raw)?.length ?? 0,
+          ...spreadWhen(s.branchDeleted === true, { branchDeleted: true }),
+          ...spreadDefined("worktreeRemoved", s.worktreeRemoved),
+        })),
+        ...spreadWhen(conflict !== undefined, {
+          conflict: {
+            stage: conflict?.stage ?? "cherry-pick",
+            ...spreadWhen(conflict?.paused === true, { paused: true }),
+            ...spreadDefined("commit", conflict?.commit),
+            paths: conflict?.paths ?? [],
+            ...spreadDefined("detail", conflict?.detail),
+            ...spreadDefined("error", conflict?.error),
+            ...spreadWhen(conflict?.abortFailed === true, {
+              abortFailed: true,
+              ...spreadDefined("abortDetail", conflict?.abortDetail),
+            }),
+          },
+        }),
+        ...spreadWhen(conflict?.abortFailed === true, {
+          error: ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
+          ...spreadDefined("abortDetail", conflict?.abortDetail),
+        }),
+      });
     },
   });
 }
@@ -540,34 +503,6 @@ interface ContinueConflictReport {
   commit?: string;
   paths: string[];
   detail?: string;
-}
-
-function renderCherryPickContinueMarkdown(
-  action: "continue" | "abort",
-  ok: boolean,
-  applied: number,
-  headSha: string | undefined,
-  conflict?: ContinueConflictReport,
-): string {
-  if (action === "abort") {
-    return ok
-      ? `# Cherry-pick abort\nAborted. HEAD restored to \`${headSha ?? "?"}\`.`
-      : "# Cherry-pick abort\nAbort failed — see error.";
-  }
-  if (conflict) {
-    const lines = [
-      `# Cherry-pick continue: paused on conflict after ${applied} commit(s)`,
-      "",
-      `Conflict at commit \`${conflict.commit ?? "?"}\` (${conflict.stage}):`,
-    ];
-    for (const p of conflict.paths) lines.push(`  conflict: ${p}`);
-    if (conflict.detail) lines.push(`  detail: ${conflict.detail}`);
-    lines.push(
-      "  Paused: cherry-pick still in progress. Resolve the conflict, then call `git_cherry_pick_continue` again.",
-    );
-    return lines.join("\n");
-  }
-  return `# Cherry-pick continue: ${applied} commit(s) applied\nHEAD now \`${headSha ?? "?"}\`.`;
 }
 
 export function registerGitCherryPickContinueTool(server: FastMCP): void {
@@ -626,10 +561,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
         }
         const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
         const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
-        if (args.format === "json") {
-          return jsonRespond({ ok: true, action: "abort", ...spreadDefined("headSha", headSha) });
-        }
-        return renderCherryPickContinueMarkdown("abort", true, 0, headSha);
+        return jsonRespond({ ok: true, action: "abort", ...spreadDefined("headSha", headSha) });
       }
 
       // --- continue: precheck no unmerged paths remain ---
@@ -664,10 +596,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
             paths,
             ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
-          if (args.format === "json") {
-            return jsonRespond({ ok: false, action: "continue", applied, conflict });
-          }
-          return renderCherryPickContinueMarkdown("continue", false, applied, undefined, conflict);
+          return jsonRespond({ ok: false, action: "continue", applied, conflict });
         }
         // Not a new conflict (e.g. the resolved pick would produce an empty commit) —
         // surface a generic, non-resumable-loop error with whatever detail git gave.
@@ -684,15 +613,12 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          action: "continue",
-          applied,
-          ...spreadDefined("headSha", headSha),
-        });
-      }
-      return renderCherryPickContinueMarkdown("continue", true, applied, headSha);
+      return jsonRespond({
+        ok: true,
+        action: "continue",
+        applied,
+        ...spreadDefined("headSha", headSha),
+      });
     },
   });
 }

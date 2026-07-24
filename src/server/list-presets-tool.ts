@@ -62,46 +62,7 @@ export function registerListPresetsTool(server: FastMCP): void {
         };
       });
 
-      if (args.format === "json") {
-        return jsonRespond({ roots: out });
-      }
-      const lines: string[] = ["# Git MCP presets", ""];
-      for (const row of out) {
-        lines.push(
-          `## ${row.workspaceRoot}`,
-          `git_top: ${row.gitTop ?? "(none)"}`,
-          `preset_file: ${row.presetFile}`,
-          "",
-        );
-        if (row.error) {
-          lines.push("```json", JSON.stringify(row.error, null, 2), "```", "");
-          continue;
-        }
-        if (!row.fileExists) {
-          lines.push("(no preset file)", "");
-          continue;
-        }
-        if (row.presets.length === 0) {
-          lines.push("(empty preset file)", "");
-          continue;
-        }
-        if (row.presetSchemaVersion !== undefined) {
-          lines.push(`preset_schema_version: ${row.presetSchemaVersion}`, "");
-        }
-        for (const p of row.presets) {
-          const parts: string[] = [];
-          if (p.nestedRoots?.length) parts.push(`nestedRoots=${p.nestedRoots.join(",")}`);
-          if (p.parityPairs?.length) {
-            parts.push(
-              `parityPairs=${p.parityPairs.map((pp) => `${pp.left}->${pp.right}`).join(",")}`,
-            );
-          }
-          if (p.workspaceRootHint) parts.push(`hint=${p.workspaceRootHint}`);
-          lines.push(`- **${p.name}**${parts.length ? `: ${parts.join(", ")}` : ""}`);
-        }
-        lines.push("");
-      }
-      return lines.join("\n");
+      return jsonRespond({ roots: out });
     },
   });
 }

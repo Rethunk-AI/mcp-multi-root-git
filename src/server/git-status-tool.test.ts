@@ -43,23 +43,6 @@ describe("git_status execute handler", () => {
     expect(parsed.groups[0]?.repos[0]?.statusText).toContain("not a git repository");
   });
 
-  test("markdown format output contains # Git status header", async () => {
-    const dir = makeRepoWithSeed("mcp-status-md-");
-
-    const run = captureTool(registerGitStatusTool);
-    const text = await run({ root: dir });
-    expect(text).toContain("# Git status");
-  });
-
-  test("multi-root markdown output contains # Multi-root git status", async () => {
-    const dir1 = makeRepoWithSeed("mcp-status-mr1-");
-    const dir2 = makeRepoWithSeed("mcp-status-mr2-");
-
-    const run = captureTool(registerGitStatusTool);
-    const text = await run({ root: [dir1, dir2] });
-    expect(text).toContain("# Multi-root git status");
-  });
-
   test("includeSubmodules: false skips submodule discovery", async () => {
     const dir = makeRepoWithSeed("mcp-status-nosub-");
     writeFileSync(

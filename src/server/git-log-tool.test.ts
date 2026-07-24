@@ -7,9 +7,8 @@
  *
  * We test:
  *  1. parseShortstat (unit)
- *  2. git_log execute handler: json/markdown/oneline output, maxCommits
- *     truncation, paths/grep/author/since filters, unsafe branch token,
- *     not_a_git_repository, multi-root oneline headers
+ *  2. git_log execute handler: json output, maxCommits truncation,
+ *     paths/grep/author/since filters, unsafe branch token, not_a_git_repository
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -105,15 +104,6 @@ describe("git_log execute handler", () => {
     const subjects = commits.map((c) => c.subject);
     expect(subjects).toContain("feat: commit B");
     expect(subjects).toContain("feat: commit A");
-  });
-
-  test("markdown output contains commit subjects", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "x.txt", "chore: markdown test");
-
-    const run = captureTool(registerGitLogTool);
-    const text = await run({ root: dir, since: SINCE_WIDE, format: "markdown" });
-    expect(text).toContain("chore: markdown test");
   });
 
   test("maxCommits caps number of commits returned", async () => {
@@ -243,23 +233,6 @@ describe("git_log execute handler", () => {
     expect(commits[0]?.subject).toBe("fix: handle 100% edge case");
   });
 
-  test("format: oneline returns sha7 + subject lines, no headers (single root)", async () => {
-    const dir = makeRepo();
-    addCommit(dir, "a.ts", "feat: alpha");
-    addCommit(dir, "b.ts", "feat: beta");
-
-    const run = captureTool(registerGitLogTool);
-    const text = await run({ root: dir, format: "oneline", since: SINCE_WIDE });
-
-    const lines = text.split("\n").filter((l) => l.trim());
-    // Most recent first: beta then alpha
-    expect(lines[0]).toMatch(/^[0-9a-f]{7} feat: beta$/);
-    expect(lines[1]).toMatch(/^[0-9a-f]{7} feat: alpha$/);
-    // No markdown headers or root paths
-    expect(text).not.toContain("#");
-    expect(text).not.toContain("_root:");
-  });
-
   test("leading-dash branch is rejected with unsafe_ref_token", async () => {
     const dir = makeRepo();
     addCommit(dir, "a.txt", "feat: commit A");
@@ -273,24 +246,6 @@ describe("git_log execute handler", () => {
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_ref_token");
-  });
-
-  test("format: oneline multi-root prefixes each group with ### repo (branch)", async () => {
-    const dir1 = makeRepo();
-    const dir2 = makeRepo();
-    addCommit(dir1, "x.ts", "feat: in-repo1");
-    addCommit(dir2, "y.ts", "feat: in-repo2");
-
-    const run = captureTool(registerGitLogTool);
-    const text = await run({
-      root: [dir1, dir2],
-      format: "oneline",
-      since: SINCE_WIDE,
-    });
-
-    expect(text).toContain("### ");
-    expect(text).toContain("feat: in-repo1");
-    expect(text).toContain("feat: in-repo2");
   });
 
   test("path-escape rejection: ../../etc/passwd → path_escapes_repo", async () => {

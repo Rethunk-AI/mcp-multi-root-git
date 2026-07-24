@@ -96,17 +96,6 @@ describe("git_conflicts merge state and hunks", () => {
     expect(parsed.files[0]?.conflictType).toBe("both-modified");
   });
 
-  test("markdown format includes state and conflict path", async () => {
-    const dir = makeMergeConflictRepo();
-    const run = captureTool(registerGitConflictsTool);
-
-    const text = await run({ workspaceRoot: dir });
-    expect(text).toContain("state: merge");
-    expect(text).toContain("shared.txt");
-    expect(text).toContain("BETA");
-    expect(text).toContain("ALPHA");
-  });
-
   test("withHunks: false returns paths without parsed hunk content", async () => {
     const dir = makeMergeConflictRepo();
     const run = captureTool(registerGitConflictsTool);

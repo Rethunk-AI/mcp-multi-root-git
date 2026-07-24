@@ -13,31 +13,27 @@ describe("MAX_ROOT_PATHS", () => {
 });
 
 describe("WorkspacePickSchema", () => {
-  test("defaults format to json", () => {
+  test("workspaceRoot is optional", () => {
     const parsed = WorkspacePickSchema.parse({});
-    expect(parsed.format).toBe("json");
     expect(parsed.workspaceRoot).toBeUndefined();
   });
 
-  test("accepts workspaceRoot and json format", () => {
+  test("accepts workspaceRoot", () => {
     const parsed = WorkspacePickSchema.parse({
       workspaceRoot: "/tmp/repo",
-      format: "json",
     });
     expect(parsed.workspaceRoot).toBe("/tmp/repo");
-    expect(parsed.format).toBe("json");
   });
 });
 
 describe("RootPickSchema", () => {
-  test("defaults format to json when root omitted", () => {
+  test("root is optional", () => {
     const parsed = RootPickSchema.parse({});
-    expect(parsed.format).toBe("json");
     expect(parsed.root).toBeUndefined();
   });
 
   test('accepts root "*" as a string (no separate literal branch required)', () => {
-    const parsed = RootPickSchema.parse({ root: "*", format: "json" });
+    const parsed = RootPickSchema.parse({ root: "*" });
     expect(parsed.root).toBe("*");
   });
 

@@ -89,20 +89,6 @@ describe("git_parity", () => {
     expect(parsed.parity.map((p) => p.workspaceRoot)).toEqual([a.root, b, c.root]);
   });
 
-  test("markdown format contains parity status and pair labels", async () => {
-    const w = makeParityWorkspace("parity-md-");
-    const run = captureTool(registerGitParityTool);
-
-    const text = await run({
-      root: [w.root],
-      pairs: [{ left: "left", right: "right", label: "test pair" }],
-    });
-
-    expect(text).toContain("# Git HEAD parity");
-    expect(text).toContain("test pair");
-    expect(text).toContain("OK");
-  });
-
   test("no_pairs error when pairs omitted", async () => {
     const w = makeParityWorkspace("parity-nopairs-");
     const run = captureTool(registerGitParityTool);
@@ -152,7 +138,7 @@ describe("git_parity", () => {
     expect(pair?.rightSha).toBe(rightSha);
   });
 
-  test("SHA mismatch markdown output shows MISMATCH with both SHAs", async () => {
+  test("SHA mismatch shows MISMATCH with both SHAs", async () => {
     const root = mkTmpDir("parity-mismatch-md-");
     gitInitMain(root);
     commitFile(root, "root.txt", "root\n");

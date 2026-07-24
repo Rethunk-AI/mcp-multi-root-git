@@ -42,7 +42,7 @@ describe("git_branch execute handler", () => {
     expect(gitCmd(repo, "branch", "--list", "feature/a").trim()).toBe("");
   });
 
-  test("renames a branch and returns the tip SHA in markdown format", async () => {
+  test("renames a branch and returns the tip SHA", async () => {
     const repo = makeRepoWithSeed("mcp-git-branch-test-");
     const headSha = gitCmd(repo, "rev-parse", "HEAD").trim();
     gitCmd(repo, "branch", "old-name");
@@ -54,9 +54,9 @@ describe("git_branch execute handler", () => {
       name: "old-name",
       newName: "new-name",
     });
+    const parsed = JSON.parse(text) as { action: string; branch: string; sha: string };
 
-    expect(text).toContain("# Branch renamed: old-name → new-name");
-    expect(text).toContain(`**SHA:** \`${headSha}\``);
+    expect(parsed).toEqual({ action: "rename", branch: "new-name", sha: headSha });
     expect(gitCmd(repo, "branch", "--list", "old-name").trim()).toBe("");
     expect(gitCmd(repo, "branch", "--list", "new-name").trim()).not.toBe("");
   });

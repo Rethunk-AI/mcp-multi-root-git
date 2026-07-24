@@ -12,7 +12,7 @@ MCP git tools for any workspace. **How the server is installed and wired to clie
 
 **Implementation map (modules under `src/server/`, entry `src/server.ts`), symbols, and contract bumps** live in **`AGENTS.md`** at the repository root. This guide does not repeat those sections.
 
-**Registered tool ids, client naming (`rethunk-git_*`), `format` / JSON envelopes, resource URI, workspace root resolution:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; not duplicated here.
+**Registered tool ids, client naming (`rethunk-git_*`), JSON shape, resource URI, workspace root resolution:** **[docs/mcp-tools.md](docs/mcp-tools.md)** — canonical; not duplicated here.
 
 ## Workspace preset file
 

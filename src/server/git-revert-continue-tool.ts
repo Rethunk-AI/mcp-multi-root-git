@@ -25,34 +25,6 @@ interface ContinueConflictReport {
   detail?: string;
 }
 
-function renderRevertContinueMarkdown(
-  action: "continue" | "abort",
-  ok: boolean,
-  applied: number,
-  headSha: string | undefined,
-  conflict?: ContinueConflictReport,
-): string {
-  if (action === "abort") {
-    return ok
-      ? `# Revert abort\nAborted. HEAD restored to \`${headSha ?? "?"}\`.`
-      : "# Revert abort\nAbort failed — see error.";
-  }
-  if (conflict) {
-    const lines = [
-      `# Revert continue: paused on conflict after ${applied} commit(s)`,
-      "",
-      `Conflict at commit \`${conflict.commit ?? "?"}\`:`,
-    ];
-    for (const p of conflict.conflicts) lines.push(`  conflict: ${p}`);
-    if (conflict.detail) lines.push(`  detail: ${conflict.detail}`);
-    lines.push(
-      "  Paused: revert still in progress. Resolve the conflict, then call `git_revert_continue` again.",
-    );
-    return lines.join("\n");
-  }
-  return `# Revert continue: ${applied} commit(s) applied\nHEAD now \`${headSha ?? "?"}\`.`;
-}
-
 export function registerGitRevertContinueTool(server: FastMCP): void {
   server.addTool({
     name: "git_revert_continue",
@@ -111,10 +83,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
         }
         const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
         const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
-        if (args.format === "json") {
-          return jsonRespond({ ok: true, action: "abort", ...spreadDefined("headSha", headSha) });
-        }
-        return renderRevertContinueMarkdown("abort", true, 0, headSha);
+        return jsonRespond({ ok: true, action: "abort", ...spreadDefined("headSha", headSha) });
       }
 
       // --- continue: precheck no unmerged paths remain ---
@@ -143,10 +112,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
             conflicts: paths,
             ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
-          if (args.format === "json") {
-            return jsonRespond({ ok: false, action: "continue", applied, ...conflict });
-          }
-          return renderRevertContinueMarkdown("continue", false, applied, undefined, conflict);
+          return jsonRespond({ ok: false, action: "continue", applied, ...conflict });
         }
         // Not a new conflict (e.g. the resolved revert would produce an empty commit) —
         // surface a generic, non-resumable-loop error with whatever detail git gave.
@@ -163,15 +129,12 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          action: "continue",
-          applied,
-          ...spreadDefined("headSha", headSha),
-        });
-      }
-      return renderRevertContinueMarkdown("continue", true, applied, headSha);
+      return jsonRespond({
+        ok: true,
+        action: "continue",
+        applied,
+        ...spreadDefined("headSha", headSha),
+      });
     },
   });
 }

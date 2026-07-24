@@ -62,24 +62,14 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       // stash conflicts are not auto-aborted.
       const paths = applied ? [] : await conflictPaths(gitTop);
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
-          applied,
-          stashIndex: args.index,
-          popped: args.pop,
-          ...spreadDefined("output", output || undefined),
-          ...spreadWhen(paths.length > 0, { conflictPaths: paths }),
-        });
-      }
-
-      const verb = args.pop ? "popped" : "applied";
-      if (applied) {
-        return `# Stash ${verb}\n✓ ${stashRef}  → ${verb}`;
-      }
-      const conflictBlock =
-        paths.length > 0 ? `\n\nConflicts:\n${paths.map((p) => `- ${p}`).join("\n")}` : "";
-      return `# Stash ${verb} (failed)\n✗ ${stashRef}\n\n\`\`\`\n${output}\n\`\`\`${conflictBlock}`;
+      return jsonRespond({
+        ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
+        applied,
+        stashIndex: args.index,
+        popped: args.pop,
+        ...spreadDefined("output", output || undefined),
+        ...spreadWhen(paths.length > 0, { conflictPaths: paths }),
+      });
     },
   });
 }
@@ -166,10 +156,7 @@ export function registerGitStashPushTool(server: FastMCP): void {
 
       // `git stash push` exits 0 with this message when there is nothing to stash.
       if (/no local changes to save/i.test(output)) {
-        if (args.format === "json") {
-          return jsonRespond({ stashed: false, reason: "no_local_changes" });
-        }
-        return "# Stash push\n_(no local changes to save)_";
+        return jsonRespond({ stashed: false, reason: "no_local_changes" });
       }
 
       const shaResult = await spawnGitAsync(gitTop, ["rev-parse", "stash@{0}"]);
@@ -177,16 +164,12 @@ export function registerGitStashPushTool(server: FastMCP): void {
       const subjectResult = await spawnGitAsync(gitTop, ["log", "-1", "--format=%s", "stash@{0}"]);
       const message = subjectResult.ok ? subjectResult.stdout.trim() : "";
 
-      if (args.format === "json") {
-        return jsonRespond({
-          stashed: true,
-          ref: "stash@{0}",
-          sha,
-          message,
-        });
-      }
-
-      return `# Stash pushed\n✓ stash@{0} — ${message}${sha ? `  (\`${sha}\`)` : ""}`;
+      return jsonRespond({
+        stashed: true,
+        ref: "stash@{0}",
+        sha,
+        message,
+      });
     },
   });
 }

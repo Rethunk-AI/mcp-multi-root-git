@@ -334,21 +334,6 @@ describe("git_cherry_pick cleanup", () => {
     expect(parsed.results[0]?.branchDeleted).toBe(true);
     expect(existsSync(wtPath)).toBe(false);
   });
-
-  test("single branch source cherry-pick (markdown)", async () => {
-    const dir = makeRepoWithSeed();
-    createBranchWithCommits(dir, "feature/cp", [
-      { path: "cp.txt", body: "cp\n", message: "feat: cp" },
-    ]);
-
-    const run = captureTool(registerGitCherryPickTool);
-    const text = await run({ workspaceRoot: dir, sources: ["feature/cp"] });
-
-    expect(text).toContain("# Cherry-pick onto `main`");
-    expect(text).toContain("feature/cp");
-    expect(text).toContain("branch");
-    expect(text).toContain("picked");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -703,31 +688,6 @@ describe("git_cherry_pick onConflict: pause", () => {
     // Sequencer state left in place (not aborted): CHERRY_PICK_HEAD still set, tree still dirty.
     expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
     expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
-
-    gitCmd(dir, "cherry-pick", "--abort");
-  });
-
-  test("markdown format reports the paused state and points at git_cherry_pick_continue", async () => {
-    const dir = makeRepoWithSeed();
-    writeFileSync(join(dir, "shared.txt"), "common\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "chore: shared");
-
-    gitCmd(dir, "checkout", "-b", "feature/g");
-    writeFileSync(join(dir, "shared.txt"), "alpha\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "feat: alpha");
-    gitCmd(dir, "checkout", "main");
-
-    writeFileSync(join(dir, "shared.txt"), "beta\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "chore: beta");
-
-    const run = captureTool(registerGitCherryPickTool);
-    const text = await run({ workspaceRoot: dir, sources: ["feature/g"], onConflict: "pause" });
-
-    expect(text).toContain("paused on conflict");
-    expect(text).toContain("git_cherry_pick_continue");
 
     gitCmd(dir, "cherry-pick", "--abort");
   });

@@ -237,53 +237,6 @@ async function runGitLog(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering
-// ---------------------------------------------------------------------------
-
-function renderLogOneline(group: LogResult, multiRoot: boolean): string {
-  const lines: string[] = [];
-  if (multiRoot) {
-    lines.push(`### ${group.repo} (${group.branch})`);
-  }
-  for (const c of group.commits) {
-    lines.push(`${c.sha.slice(0, 7)} ${c.subject}`);
-  }
-  if (group.commits.length === 0) {
-    lines.push("(no commits)");
-  }
-  if (group.truncated) {
-    lines.push(`(+${group.omittedCount ?? 0} more)`);
-  }
-  return lines.join("\n");
-}
-
-function renderLogMarkdown(group: LogResult, filterSummary: string): string {
-  const lines: string[] = [];
-  lines.push(`### ${group.repo} (${group.branch})${filterSummary ? `  —  ${filterSummary}` : ""}`);
-  lines.push(`_root: ${group.workspaceRoot}_`);
-  lines.push("");
-
-  if (group.commits.length === 0) {
-    lines.push("_(no commits match)_");
-  } else {
-    for (const c of group.commits) {
-      lines.push(
-        `- \`${c.sha.slice(0, 7)}\`  ${c.date.slice(0, 10)}  ${c.subject}  —  ${c.author}`,
-      );
-    }
-  }
-
-  if (group.truncated) {
-    lines.push("");
-    lines.push(
-      `_(truncated — ${group.omittedCount ?? 0} more commit(s) not shown; lower \`since\` or \`maxCommits\`)_`,
-    );
-  }
-
-  return lines.join("\n");
-}
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -299,14 +252,6 @@ export function registerGitLogTool(server: FastMCP): void {
       openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
-      format: z
-        .enum(["markdown", "json", "oneline"])
-        .optional()
-        .default("json")
-        .describe(
-          "`json` (default): groups array. `markdown`: headed sections per root. " +
-            "`oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
-        ),
       since: z
         .string()
         .optional()
@@ -449,61 +394,20 @@ export function registerGitLogTool(server: FastMCP): void {
         return { _error: false as const, ...r };
       });
 
-      // Build filter summary string for markdown.
-      const filterParts: string[] = [`since: ${rawSince}`];
-      if (rawUntil) filterParts.push(`until: ${rawUntil}`);
-      if (rawPaths.length > 0) filterParts.push(`paths: ${rawPaths.join(", ")}`);
-      if (follow) filterParts.push("follow");
-      if (args.grep) filterParts.push(`grep: ${args.grep}`);
-      if (args.author) filterParts.push(`author: ${args.author}`);
-      if (args.merges) filterParts.push(`merges: ${args.merges}`);
-      const filterSummary = filterParts.join(" | ");
-
-      if (args.format === "json") {
-        const groups: LogGroupJson[] = results.map((r) => {
-          if (r._error) {
-            return {
-              workspaceRoot: r.workspaceRoot,
-              repo: basename(r.workspaceRoot ?? ""),
-              branch: "",
-              commits: [],
-              error: r.error,
-            };
-          }
-          const { _error: _e, ...rest } = r;
-          return rest;
-        });
-        return jsonRespond({ groups });
-      }
-
-      // Oneline
-      if (args.format === "oneline") {
-        const multiRoot = results.length > 1;
-        const chunks: string[] = [];
-        for (const r of results) {
-          if (r._error) {
-            chunks.push(
-              multiRoot ? `### ${r.workspaceRoot}\n(error: ${r.error})` : `(error: ${r.error})`,
-            );
-            continue;
-          }
-          const { _error: _e, ...group } = r;
-          chunks.push(renderLogOneline(group, multiRoot));
-        }
-        return chunks.join("\n\n");
-      }
-
-      // Markdown
-      const mdChunks: string[] = ["# Git log"];
-      for (const r of results) {
+      const groups: LogGroupJson[] = results.map((r) => {
         if (r._error) {
-          mdChunks.push(`### ${r.workspaceRoot}\n_error: ${r.error}_`);
-          continue;
+          return {
+            workspaceRoot: r.workspaceRoot,
+            repo: basename(r.workspaceRoot ?? ""),
+            branch: "",
+            commits: [],
+            error: r.error,
+          };
         }
-        const { _error: _e, ...group } = r;
-        mdChunks.push(renderLogMarkdown(group, filterSummary));
-      }
-      return mdChunks.join("\n\n");
+        const { _error: _e, ...rest } = r;
+        return rest;
+      });
+      return jsonRespond({ groups });
     },
   });
 }

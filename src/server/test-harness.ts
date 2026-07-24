@@ -14,7 +14,7 @@
  * Usage:
  *   const tool = captureTool(registerBatchCommitTool);
  *   const result = await tool({ workspaceRoot: dir, commits: [...] });
- *   // result is string (markdown) or JSON-parseable string
+ *   // result is a minified JSON string
  */
 
 import { afterEach } from "bun:test";

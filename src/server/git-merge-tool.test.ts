@@ -391,19 +391,6 @@ describe("git_merge cleanup", () => {
     expect(branches).toContain("dev");
   });
 
-  test("simple ff-merge (markdown)", async () => {
-    const dir = makeRepoWithSeed();
-    createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
-    gitCmd(dir, "checkout", "main");
-
-    const run = captureTool(registerGitMergeTool);
-    const text = await run({ workspaceRoot: dir, sources: ["feature/a"] });
-
-    expect(text).toContain("# Merge into `main`");
-    expect(text).toContain("feature/a");
-    expect(text).toMatch(/✓|✔/);
-  });
-
   test("deleteMergedWorktrees removes a worktree attached to merged source", async () => {
     const dir = makeRepoWithSeed();
     // Create branch + worktree for it.

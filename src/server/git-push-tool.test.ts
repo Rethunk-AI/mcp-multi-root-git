@@ -44,20 +44,6 @@ describe("git_push", () => {
     expect(parsed.upstream).toContain("origin");
   });
 
-  test("pushes to configured upstream (markdown)", async () => {
-    const { dir } = makeRepoWithRemote();
-    writeFileSync(join(dir, "new2.ts"), "export const n2 = 2;\n");
-    gitCmd(dir, "add", "new2.ts");
-    gitCmd(dir, "commit", "-m", "feat: new2");
-
-    const run = captureTool(registerGitPushTool);
-    const text = await run({ workspaceRoot: dir });
-
-    expect(text).toContain("# Push");
-    expect(text).toContain("main");
-    expect(text).toContain("→");
-  });
-
   test("setUpstream=true sets tracking on a branch with no upstream (json)", async () => {
     const dir = mkTmpDir("mcp-git-push-set-upstream-");
     const remote = mkTmpDir("mcp-git-push-set-upstream-remote-");

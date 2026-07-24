@@ -171,20 +171,12 @@ export function registerGitRevertTool(server: FastMCP): void {
               .filter((l) => l.length > 0)
           : [];
 
-        if (args.format === "json") {
-          return jsonRespond({
-            ok: true,
-            staged: true,
-            sources: args.sources,
-            stagedCount: stagedFiles.length,
-          });
-        }
-
-        return [
-          "# Revert (staged, not committed)",
-          `${args.sources.length} source(s) → ${stagedFiles.length} file(s) staged`,
-          ...args.sources.map((s) => `- ${s}`),
-        ].join("\n");
+        return jsonRespond({
+          ok: true,
+          staged: true,
+          sources: args.sources,
+          stagedCount: stagedFiles.length,
+        });
       }
 
       // --- Committed: one new commit per source, oldest-first ---
@@ -207,18 +199,10 @@ export function registerGitRevertTool(server: FastMCP): void {
         if (source !== undefined && sha !== undefined) reverted.push({ source, sha });
       }
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          reverted,
-        });
-      }
-
-      const lines = [`# Revert: ${reverted.length} commit(s)`, ""];
-      for (const item of reverted) {
-        lines.push(`- ${item.source} → ${item.sha.slice(0, 7)}`);
-      }
-      return lines.join("\n");
+      return jsonRespond({
+        ok: true,
+        reverted,
+      });
     },
   });
 }

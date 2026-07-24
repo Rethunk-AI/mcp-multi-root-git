@@ -109,34 +109,6 @@ async function runPickaxe(opts: RunPickaxeOpts): Promise<RunPickaxeResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering
-// ---------------------------------------------------------------------------
-
-function renderGrepMarkdown(group: GrepRootJson): string {
-  const lines: string[] = [`### ${group.repo}`, `_root: ${group.root}_`, ""];
-
-  if (group.error) {
-    lines.push(`_error: ${group.error}${group.detail ? ` — ${group.detail}` : ""}_`);
-    return lines.join("\n");
-  }
-
-  const commits = group.commits ?? [];
-  if (commits.length === 0) {
-    lines.push("_(no pickaxe hits)_");
-  } else {
-    for (const c of commits) {
-      lines.push(`- \`${c.sha.slice(0, 7)}\`  ${c.subject}`);
-    }
-  }
-
-  if (group.truncated) {
-    lines.push("", "_(truncated — raise `maxMatches` for the full result set)_");
-  }
-
-  return lines.join("\n");
-}
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -273,12 +245,7 @@ export function registerGitGrepTool(server: FastMCP): void {
         },
       );
 
-      if (args.format === "json") {
-        return jsonRespond({ results: groups });
-      }
-
-      const mdChunks = ["# git grep", ...groups.map((g) => renderGrepMarkdown(g))];
-      return mdChunks.join("\n\n");
+      return jsonRespond({ results: groups });
     },
   });
 }

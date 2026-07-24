@@ -227,31 +227,6 @@ function groupBlameLines(lines: BlameLine[]): BlameGroup[] {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering
-// ---------------------------------------------------------------------------
-
-function renderBlameMarkdown(result: BlameJson): string {
-  const header =
-    result.ref !== undefined
-      ? `# git blame ${result.ref} -- ${result.path}`
-      : `# git blame ${result.path}`;
-  const out: string[] = [header];
-  for (const g of result.groups) {
-    out.push(
-      "",
-      `## ${g.sha.slice(0, 7)} ${g.author} ${g.date} — ${g.summary} (lines ${g.startLine}–${g.endLine})`,
-      "```",
-      ...g.lines.map((l) => `${l.line}: ${l.content}`),
-      "```",
-    );
-  }
-  if (result.truncated) {
-    out.push("", `_(truncated — ${result.omittedLines} more line(s) not shown; raise maxLines)_`);
-  }
-  return out.join("\n");
-}
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -387,11 +362,7 @@ export function registerGitBlameTool(server: FastMCP): void {
         }),
       };
 
-      if (args.format === "json") {
-        return jsonRespond(blameJson);
-      }
-
-      return renderBlameMarkdown(blameJson);
+      return jsonRespond(blameJson);
     },
   });
 }

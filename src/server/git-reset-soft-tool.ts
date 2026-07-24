@@ -112,22 +112,13 @@ export function registerGitResetSoftTool(server: FastMCP): void {
             .filter((l) => l.length > 0)
         : [];
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          ref: args.ref,
-          ...spreadDefined("beforeSha", beforeSha),
-          ...spreadDefined("afterSha", afterSha),
-          stagedCount: stagedFiles.length,
-        });
-      }
-
-      const beforeShort = beforeSha?.slice(0, 7) ?? "?";
-      const afterShort = afterSha?.slice(0, 7) ?? "?";
-      return [
-        "# Reset (soft)",
-        `✓ ${beforeShort} → ${afterShort}  (${stagedFiles.length} file(s) staged)`,
-      ].join("\n");
+      return jsonRespond({
+        ok: true,
+        ref: args.ref,
+        ...spreadDefined("beforeSha", beforeSha),
+        ...spreadDefined("afterSha", afterSha),
+        stagedCount: stagedFiles.length,
+      });
     },
   });
 }

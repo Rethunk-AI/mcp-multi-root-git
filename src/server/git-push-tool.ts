@@ -118,22 +118,14 @@ export function registerGitPushTool(server: FastMCP): void {
       // Append condensed git output (ref updates + remote messages; hook noise dropped)
       const gitOutput = condensePushOutput(pushResult.stdout, pushResult.stderr);
 
-      if (args.format === "json") {
-        return jsonRespond({
-          ok: true,
-          branch,
-          remote,
-          upstream,
-          ...spreadDefined("setUpstream", args.setUpstream || undefined),
-          ...spreadDefined("output", gitOutput || undefined),
-        });
-      }
-
-      let result = `# Push\n✓ ${branch} → ${upstream}`;
-      if (gitOutput) {
-        result += `\n\n${gitOutput}`;
-      }
-      return result;
+      return jsonRespond({
+        ok: true,
+        branch,
+        remote,
+        upstream,
+        ...spreadDefined("setUpstream", args.setUpstream || undefined),
+        ...spreadDefined("output", gitOutput || undefined),
+      });
     },
   });
 }

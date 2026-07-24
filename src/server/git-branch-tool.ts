@@ -15,20 +15,6 @@ import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type BranchResult = {
-  action: "create" | "delete" | "rename";
-  branch: string;
-  sha: string;
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -98,7 +84,7 @@ export function registerGitBranchTool(server: FastMCP): void {
           });
         }
 
-        return respond(args.format, { action: "create", branch: name, sha }, fromRef);
+        return jsonRespond({ action: "create", branch: name, sha });
       }
 
       if (args.action === "delete") {
@@ -116,7 +102,7 @@ export function registerGitBranchTool(server: FastMCP): void {
           });
         }
 
-        return respond(args.format, { action: "delete", branch: name, sha });
+        return jsonRespond({ action: "delete", branch: name, sha });
       }
 
       // action === "rename"
@@ -147,35 +133,7 @@ export function registerGitBranchTool(server: FastMCP): void {
         });
       }
 
-      return respond(args.format, { action: "rename", branch: newName, sha }, undefined, name);
+      return jsonRespond({ action: "rename", branch: newName, sha });
     },
   });
-}
-
-// ---------------------------------------------------------------------------
-// Output rendering
-// ---------------------------------------------------------------------------
-
-function respond(
-  format: "markdown" | "json" | undefined,
-  result: BranchResult,
-  from?: string,
-  renamedFrom?: string,
-): string {
-  if (format === "json") {
-    return jsonRespond(result);
-  }
-
-  const lines: string[] = [];
-  if (result.action === "create") {
-    lines.push(`# Branch created: ${result.branch}`);
-    lines.push("");
-    lines.push(`**From:** ${from ?? "HEAD"}`);
-  } else if (result.action === "delete") {
-    lines.push(`# Branch deleted: ${result.branch}`);
-  } else {
-    lines.push(`# Branch renamed: ${renamedFrom ?? "?"} → ${result.branch}`);
-  }
-  lines.push(`**SHA:** \`${result.sha}\``);
-  return lines.join("\n");
 }

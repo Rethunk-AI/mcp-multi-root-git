@@ -36,17 +36,17 @@ describe("git_diff execute handler", () => {
     expect(parsed.diff).toContain("+changed");
   });
 
-  test("returns staged path-scoped diff in markdown format", async () => {
+  test("returns staged path-scoped diff", async () => {
     const repo = makeRepoWithSeed("mcp-git-diff-test-");
     appendFileSync(join(repo, "seed.txt"), "staged\n");
     gitCmd(repo, "add", "seed.txt");
     const run = captureTool(registerGitDiffTool);
 
     const text = await run({ workspaceRoot: repo, staged: true, path: "seed.txt" });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
 
-    expect(text).toContain("# Diff: staged changes (seed.txt)");
-    expect(text).toContain("```diff");
-    expect(text).toContain("+staged");
+    expect(parsed.range).toBe("staged changes (seed.txt)");
+    expect(parsed.diff).toContain("+staged");
   });
 
   test("returns range diff with implicit HEAD", async () => {
@@ -74,14 +74,15 @@ describe("git_diff execute handler", () => {
     expect(parsed.diff).toContain("later.txt");
   });
 
-  test("returns no changes message for clean unstaged markdown diff", async () => {
+  test("returns empty diff for clean unstaged tree", async () => {
     const repo = makeRepoWithSeed("mcp-git-diff-test-");
     const run = captureTool(registerGitDiffTool);
 
     const text = await run({ workspaceRoot: repo });
+    const parsed = JSON.parse(text) as { range: string; diff: string };
 
-    expect(text).toContain("# Diff: unstaged changes");
-    expect(text).toContain("_(no changes)_");
+    expect(parsed.range).toBe("unstaged changes");
+    expect(parsed.diff).toBe("");
   });
 
   test("rejects unsafe range tokens", async () => {

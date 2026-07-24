@@ -36,7 +36,7 @@ Full install, prerequisites, and MCP client wiring: [HUMANS.md](HUMANS.md) and [
 | Doc | Audience |
 | ----- | ---------- |
 | **[docs/install.md](docs/install.md)** | Single source for prerequisites, running the package, and every supported MCP client (plus from-source and troubleshooting) |
-| **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, `format` / JSON, resource URI, workspace root resolution (canonical reference) |
+| **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, JSON shape, resource URI, workspace root resolution (canonical reference) |
 | **[schemas/index.json](schemas/index.json)** | Published JSON schemas for all MCP tool parameters (JSON Schema draft 2020-12 format) |
 | **[HUMANS.md](HUMANS.md)** | Preset file, dev commands, CI, publishing |
 | **[AGENTS.md](AGENTS.md)** | Contributors: implementation map ([`src/server/`](src/server/) + entry [`src/server.ts`](src/server.ts)), contract bumps, CI |

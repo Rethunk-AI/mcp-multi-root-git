@@ -105,22 +105,6 @@ describe("path escape detection", () => {
 // ---------------------------------------------------------------------------
 
 describe("batch_commit execute handler", () => {
-  test("happy path: single commit returns markdown with sha and success header", async () => {
-    const dir = makeRepo();
-    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
-    gitCmd(dir, "add", "base.ts");
-    gitCmd(dir, "commit", "-m", "chore: base");
-    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
-
-    const run = captureTool(registerBatchCommitTool);
-    const text = await run({
-      workspaceRoot: dir,
-      commits: [{ message: "feat: add new", files: ["new.ts"] }],
-    });
-    expect(text).toContain("1/1 committed");
-    expect(text).toContain("feat: add new");
-  });
-
   test("json format returns structured result with ok:true", async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
@@ -499,23 +483,6 @@ describe("batch_commit dryRun mode", () => {
     expect(parsed.results[0]?.diffStat).toBeDefined();
     expect(parsed.results[0]?.diffStat).toContain("file1.ts");
     expect(parsed.results[0]?.diffStat).toContain("file2.ts");
-  });
-
-  test("dryRun: true markdown header indicates DRY RUN mode", async () => {
-    const dir = makeRepo();
-    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
-    gitCmd(dir, "add", "base.ts");
-    gitCmd(dir, "commit", "-m", "chore: base");
-    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
-
-    const run = captureTool(registerBatchCommitTool);
-    const text = await run({
-      workspaceRoot: dir,
-      dryRun: true,
-      commits: [{ message: "feat: add new", files: ["new.ts"] }],
-    });
-    expect(text).toContain("DRY RUN");
-    expect(text).toContain("no commits written");
   });
 
   test("dryRun: true with multiple commits shows all previews", async () => {

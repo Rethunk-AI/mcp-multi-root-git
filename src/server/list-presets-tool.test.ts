@@ -85,18 +85,6 @@ describe("list_presets", () => {
     expect(preset).not.toHaveProperty("parityPairs");
   });
 
-  test("lists presets from existing file (markdown)", async () => {
-    const dir = makeRepoWithPresets();
-
-    const run = captureTool(registerListPresetsTool);
-    const text = await run({ root: dir, format: "markdown" });
-
-    expect(text).toContain("# Git MCP presets");
-    expect(text).toContain("default");
-    expect(text).toContain("nestedRoots=packages/a,packages/b");
-    expect(text).toContain("parityPairs=go.mod->package.json");
-  });
-
   test("handles missing preset file", async () => {
     const dir = mkTmpDir("mcp-git-list-presets-no-file-");
     gitCmd(dir, "init", "-b", "main");

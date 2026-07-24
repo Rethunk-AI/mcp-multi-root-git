@@ -12,7 +12,7 @@
  *  5. Path-escape rejection (`paths` outside the repo root)
  *  6. ref limits history to that tip
  *  7. Unsafe ref token rejection
- *  8. Markdown rendering + multi-root fan-out
+ *  8. Multi-root fan-out
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -187,17 +187,6 @@ describe("git_grep_tool", () => {
     });
 
     expect(result).toContain("unsafe_ref_token");
-  });
-
-  test("markdown output lists commit subjects per root", async () => {
-    const repo = makeRepo();
-    addCommit(repo, "foo.txt", "needle here\n", "feat: add foo");
-
-    const tool = captureTool(registerGitGrepTool);
-    const result = await tool({ root: repo, pickaxe: { mode: "S", term: "needle" } });
-
-    expect(result).toContain("# git grep");
-    expect(result).toContain("feat: add foo");
   });
 
   test("multi-root fan-out returns one results entry per root", async () => {

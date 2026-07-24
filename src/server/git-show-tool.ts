@@ -170,51 +170,6 @@ async function runGitShow(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering
-// ---------------------------------------------------------------------------
-
-function renderShowMarkdown(result: ShowJson): string {
-  const lines: string[] = [];
-  lines.push(`# git show ${result.ref}`);
-  if (result.path) {
-    lines.push(`_path: ${result.path}_`);
-  } else if (result.paths && result.paths.length > 0) {
-    lines.push(`_paths: ${result.paths.join(", ")}_`);
-  }
-  if (result.stat) {
-    lines.push("_mode: stat_");
-  }
-  lines.push("");
-  lines.push("## Commit message");
-  lines.push("");
-  lines.push("```");
-  lines.push(result.message);
-  lines.push("```");
-
-  if (result.stat && result.statOutput) {
-    lines.push("");
-    lines.push("## Stat");
-    lines.push("");
-    lines.push("```");
-    lines.push(result.statOutput);
-    lines.push("```");
-  } else if (result.diff) {
-    lines.push("");
-    lines.push("## Diff");
-    lines.push("");
-    lines.push("```diff");
-    lines.push(result.diff);
-    lines.push("```");
-  }
-
-  if (result.truncated) {
-    lines.push("", "_(truncated — raise `maxBytes` or scope with `path`/`paths`)_");
-  }
-
-  return lines.join("\n");
-}
-
-// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -297,16 +252,7 @@ export function registerGitShowTool(server: FastMCP): void {
         maxBytes: typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES,
       });
 
-      if ("error" in result) {
-        return jsonRespond(result);
-      }
-
-      if (args.format === "json") {
-        return jsonRespond(result);
-      }
-
-      // Markdown
-      return renderShowMarkdown(result);
+      return jsonRespond(result);
     },
   });
 }

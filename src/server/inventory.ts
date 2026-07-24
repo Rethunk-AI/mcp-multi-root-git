@@ -45,40 +45,6 @@ export function makeSkipEntry(
   return { label, path: abs, upstreamMode, skipReason };
 }
 
-export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
-  const header = `## ${e.label} — ${e.path}`;
-  if (e.skipReason) {
-    return ["", header, e.skipReason];
-  }
-  const lines: string[] = [e.branchStatus || "(clean)"];
-  if (e.branchStatusTruncated) {
-    lines.push(
-      `branch_status_truncated: ${e.branchStatusOmittedLines} line(s) not shown (maxBranchStatusLines)`,
-    );
-  }
-  if (e.detached) lines.push("detached HEAD");
-  if (e.ahead !== undefined && e.behind !== undefined && e.upstreamRef) {
-    lines.push(`${e.upstreamRef}: ahead ${e.ahead}, behind ${e.behind}`);
-  } else if (e.upstreamNote) {
-    lines.push(`upstream: ${e.upstreamNote}`);
-  }
-  if (e.partial) lines.push("(partial ahead/behind data)");
-  if (e.compareRefs) {
-    const cr = e.compareRefs;
-    if (cr.ahead !== undefined && cr.behind !== undefined) {
-      lines.push(`${cr.left}...${cr.right}: ahead ${cr.ahead}, behind ${cr.behind}`);
-    } else if (cr.note) {
-      lines.push(`compareRefs ${cr.left}...${cr.right}: ${cr.note}`);
-    }
-    if (cr.partial) lines.push(`compareRefs ${cr.left}...${cr.right}: (partial ahead/behind data)`);
-  }
-  const single = lines.length === 1 ? lines[0] : undefined;
-  if (single !== undefined && !single.includes("\n")) {
-    return ["", header, single];
-  }
-  return ["", header, "```text", lines.join("\n"), "```"];
-}
-
 function upstreamNoteFor(ref: string, hasCounts: boolean): string {
   return hasCounts ? `tracking ${ref}` : `upstream ${ref} (counts unreadable)`;
 }

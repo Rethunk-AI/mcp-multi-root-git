@@ -687,62 +687,6 @@ function renderJson(
   });
 }
 
-function renderMarkdown(
-  args: BatchCommitArgs,
-  results: CommitResult[],
-  allOk: boolean,
-  push: PushReport | undefined,
-): string {
-  const lines: string[] = [];
-  const dryRunPrefix = args.dryRun ? "DRY RUN — " : "";
-  const header = allOk
-    ? `# Batch commit: ${dryRunPrefix}${results.length}/${args.commits.length} committed`
-    : `# Batch commit: ${dryRunPrefix}${results.filter((r) => r.ok).length}/${args.commits.length} committed (stopped on error)`;
-  lines.push(header, "");
-
-  for (const r of results) {
-    const icon = r.ok ? "✓" : "✗";
-    const sha = r.sha ? ` \`${r.sha}\`` : "";
-    lines.push(`${icon}${sha} ${r.message}`);
-    if (!r.ok && r.detail) {
-      lines.push(`  Error: ${r.error} — ${r.detail}`);
-    }
-    if (args.dryRun && r.staged) {
-      lines.push(`  Staged: ${r.staged.join(", ")}`);
-    }
-    if (args.dryRun && r.diffStat) {
-      lines.push(`  Diff stat:`);
-      lines.push(`  ${r.diffStat.replace(/\n/g, "\n  ")}`);
-    }
-    if (r.output) {
-      lines.push(`  Output: ${r.output.replace(/\n/g, "\n  ")}`);
-    }
-  }
-
-  if (!allOk && results.length < args.commits.length) {
-    const skipped = args.commits.length - results.length;
-    lines.push("", `${skipped} remaining commit(s) skipped.`);
-  }
-
-  if (args.dryRun) {
-    lines.push("", "**DRY RUN — no commits written. All staged files have been unstaged.**");
-  }
-
-  if (push) {
-    lines.push("");
-    if (push.ok) {
-      lines.push(`Push: ✓ ${push.branch} → ${push.upstream}`);
-    } else {
-      lines.push(`Push: ✗ ${push.error}${push.detail ? ` — ${push.detail}` : ""}`);
-    }
-    if (push.output) {
-      lines.push(`  Output: ${push.output.replace(/\n/g, "\n  ")}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
 // ---------------------------------------------------------------------------
 // Top-level orchestration (runs inside the per-repo lock)
 // ---------------------------------------------------------------------------
@@ -887,9 +831,7 @@ async function runBatchCommit(gitTop: string, args: BatchCommitArgs): Promise<st
   const push: PushReport | undefined =
     !args.dryRun && allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
 
-  return args.format === "json"
-    ? renderJson(args, results, allOk, push)
-    : renderMarkdown(args, results, allOk, push);
+  return renderJson(args, results, allOk, push);
 }
 
 export function registerBatchCommitTool(server: FastMCP): void {
