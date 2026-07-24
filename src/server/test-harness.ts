@@ -19,10 +19,13 @@
 
 import { afterEach } from "bun:test";
 import { type ExecSyncOptionsWithStringEncoding, execFileSync } from "node:child_process";
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastMCP } from "fastmcp";
+
+import { PRESET_FILE_PATH } from "./presets.js";
+import { makeFakeFastMcpServer } from "./tool-parameter-schemas.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,6 +95,12 @@ export function writeTestGitConfig(repo: string): void {
   );
 }
 
+/** Write a `.rethunk/git-mcp-presets.json` fixture under `gitTop`. */
+export function writePresetFixture(gitTop: string, content: unknown): void {
+  mkdirSync(join(gitTop, ".rethunk"), { recursive: true });
+  writeFileSync(join(gitTop, PRESET_FILE_PATH), JSON.stringify(content), "utf8");
+}
+
 // ---------------------------------------------------------------------------
 // Process mutation guards — env var / stderr monkey-patching that always
 // restores on throw. Extracted from duplicated per-file try/finally blocks;
@@ -143,21 +152,11 @@ export function withStderrCapture(fn: () => void): string[] {
 // ---------------------------------------------------------------------------
 
 function makeFakeServer(roots: string[] = []): { server: FastMCP; tools: CapturedTool[] } {
-  const tools: CapturedTool[] = [];
-  const server = {
-    sessions: [
-      {
-        roots: roots.map((uri) => ({ uri })),
-      },
-    ],
-    addTool(tool: { name: string; parameters?: unknown; execute: ExecuteFn }) {
-      tools.push({ name: tool.name, parameters: tool.parameters, execute: tool.execute });
-    },
-    addResource() {
-      // Resource tests do not need transport behavior; tool-surface tests only need registration to complete.
-    },
-  } as unknown as FastMCP;
-  return { server, tools };
+  const { server, tools } = makeFakeFastMcpServer(roots);
+  // Tool execute handlers are always registered synchronously by tools.ts's
+  // register* functions, so the shared factory's `execute?` is always
+  // present here — narrow it back to the harness's required-execute shape.
+  return { server, tools: tools as CapturedTool[] };
 }
 
 // ---------------------------------------------------------------------------

@@ -57,10 +57,36 @@ export const ALL_PARAMETER_SCHEMA_TOOLS = [
 
 type ExecuteFn = (args: Record<string, unknown>, context: Record<string, unknown>) => unknown;
 
-type CapturedTool = {
+export type CapturedFastMcpTool = {
   name: string;
   parameters: z.ZodType;
+  execute?: ExecuteFn;
 };
+
+/**
+ * Duck-typed fake FastMCP server: satisfies just enough of the interface
+ * (`sessions`, `addTool`, `addResource`) to drive a real registrar
+ * (`registerRethunkGitTools` or a single `register*Tool`) without a live
+ * transport. Shared by schema capture (this module) and the test harness
+ * (`test-harness.ts`) — the only difference between callers is whether
+ * `roots` is populated and whether `execute` is later invoked.
+ */
+export function makeFakeFastMcpServer(roots: string[] = []): {
+  server: FastMCP;
+  tools: CapturedFastMcpTool[];
+} {
+  const tools: CapturedFastMcpTool[] = [];
+  const server = {
+    sessions: [{ roots: roots.map((uri) => ({ uri })) }],
+    addTool(tool: CapturedFastMcpTool) {
+      tools.push(tool);
+    },
+    addResource() {
+      // Presets resource is always registered; capture only needs tools.
+    },
+  } as unknown as FastMCP;
+  return { server, tools };
+}
 
 export type JsonObjectSchema = {
   type?: string;
@@ -86,16 +112,7 @@ export type ToolParameterSchemaDocument = {
  * silently omit tools from published artifacts.
  */
 export function captureToolParameterSchemas(): Record<string, JsonObjectSchema> {
-  const tools: CapturedTool[] = [];
-  const server = {
-    sessions: [],
-    addTool(tool: { name: string; parameters: z.ZodType; execute: ExecuteFn }) {
-      tools.push({ name: tool.name, parameters: tool.parameters });
-    },
-    addResource() {
-      // Presets resource is always registered; capture only needs tools.
-    },
-  } as unknown as FastMCP;
+  const { server, tools } = makeFakeFastMcpServer();
 
   const prev = process.env.RETHUNK_GIT_TOOLS;
   delete process.env.RETHUNK_GIT_TOOLS;

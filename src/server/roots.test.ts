@@ -14,7 +14,13 @@ import { ERROR_CODES } from "./error-codes.js";
 import { registerGitStatusTool } from "./git-status-tool.js";
 import { requireGitAndRoots, requireSingleRepo, resolveRootPathList } from "./roots.js";
 import { MAX_ROOT_PATHS } from "./schemas.js";
-import { captureTool, cleanupTmpPaths, gitInitMain, mkTmpDir } from "./test-harness.js";
+import {
+  captureTool,
+  cleanupTmpPaths,
+  gitInitMain,
+  mkTmpDir,
+  writePresetFixture,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -36,11 +42,6 @@ function fakeServerWithSessions(groups: { roots: string[]; sessionId?: string }[
     addTool() {},
     addResource() {},
   } as unknown as FastMCP;
-}
-
-function writePresets(dir: string, json: unknown): void {
-  mkdirSync(join(dir, ".rethunk"), { recursive: true });
-  writeFileSync(join(dir, ".rethunk", "git-mcp-presets.json"), JSON.stringify(json));
 }
 
 describe("resolveRootPathList", () => {
@@ -259,7 +260,7 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
     const g2 = mkTmpDir("preset-route-g2-");
     gitInitMain(g1);
     gitInitMain(g2);
-    writePresets(g2, {
+    writePresetFixture(g2, {
       schemaVersion: "1",
       presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: basename(g2) } },
     });
@@ -278,7 +279,7 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
     gitInitMain(g2);
     mkdirSync(join(broken, ".rethunk"), { recursive: true });
     writeFileSync(join(broken, ".rethunk", "git-mcp-presets.json"), "{not valid json");
-    writePresets(g2, { schemaVersion: "1", presets: { p: { nestedRoots: ["pkg"] } } });
+    writePresetFixture(g2, { schemaVersion: "1", presets: { p: { nestedRoots: ["pkg"] } } });
 
     const result = requireGitAndRoots(fakeServer([`file://${broken}`, `file://${g2}`]), {}, "p");
     expect(result.ok).toBe(true);
@@ -291,7 +292,7 @@ describe("multi-root preset routing (resolveRootsForPreset)", () => {
     const g2 = mkTmpDir("preset-hint-mismatch-g2-");
     gitInitMain(g1);
     gitInitMain(g2);
-    writePresets(g1, {
+    writePresetFixture(g1, {
       schemaVersion: "1",
       presets: { p: { nestedRoots: ["pkg"], workspaceRootHint: "no-such-root-anywhere" } },
     });

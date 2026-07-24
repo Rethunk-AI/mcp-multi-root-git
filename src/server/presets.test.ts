@@ -4,9 +4,8 @@
  * Pure filesystem interactions — no git subprocess needed.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -16,26 +15,13 @@ import {
   PRESET_FILE_PATH,
   presetLoadErrorPayload,
 } from "./presets.js";
+import { mkTmpDir, registerTmpCleanup, writePresetFixture } from "./test-harness.js";
 
-const dirs: string[] = [];
+registerTmpCleanup();
 
 function makeDir(): string {
-  const d = mkdtempSync(join(tmpdir(), "mcp-preset-test-"));
-  dirs.push(d);
-  return d;
+  return mkTmpDir("mcp-preset-test-");
 }
-
-function writePresetJson(gitTop: string, content: unknown): void {
-  mkdirSync(join(gitTop, ".rethunk"), { recursive: true });
-  writeFileSync(join(gitTop, PRESET_FILE_PATH), JSON.stringify(content), "utf8");
-}
-
-afterEach(() => {
-  while (dirs.length > 0) {
-    const p = dirs.pop();
-    if (p) rmSync(p, { recursive: true, force: true });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // loadPresetsFromGitTop — missing file
@@ -69,7 +55,7 @@ describe("loadPresetsFromGitTop — invalid JSON", () => {
 
   test("returns invalid_json when root is an array", () => {
     const dir = makeDir();
-    writePresetJson(dir, [1, 2, 3]);
+    writePresetFixture(dir, [1, 2, 3]);
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("invalid_json");
@@ -77,7 +63,7 @@ describe("loadPresetsFromGitTop — invalid JSON", () => {
 
   test("returns invalid_json when root is null", () => {
     const dir = makeDir();
-    writePresetJson(dir, null);
+    writePresetFixture(dir, null);
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("invalid_json");
@@ -85,7 +71,7 @@ describe("loadPresetsFromGitTop — invalid JSON", () => {
 
   test("returns invalid_json when root is a string", () => {
     const dir = makeDir();
-    writePresetJson(dir, "just a string");
+    writePresetFixture(dir, "just a string");
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("invalid_json");
@@ -99,7 +85,7 @@ describe("loadPresetsFromGitTop — invalid JSON", () => {
 describe("loadPresetsFromGitTop — schema errors", () => {
   test("returns schema error when nestedRoots is not an array", () => {
     const dir = makeDir();
-    writePresetJson(dir, { myPreset: { nestedRoots: "not-an-array" } });
+    writePresetFixture(dir, { myPreset: { nestedRoots: "not-an-array" } });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
@@ -107,7 +93,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 
   test("returns schema error when parityPairs entry is missing required fields", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { parityPairs: [{ left: "a" }] } }); // missing right
+    writePresetFixture(dir, { p: { parityPairs: [{ left: "a" }] } }); // missing right
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
@@ -115,7 +101,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 
   test("returns schema error for unknown preset entry keys", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["a"], orphan: true } });
+    writePresetFixture(dir, { p: { nestedRoots: ["a"], orphan: true } });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
@@ -123,7 +109,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 
   test("returns schema error when schemaVersion is not 1", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       schemaVersion: "2",
       presets: { p: { nestedRoots: ["a"] } },
     });
@@ -134,7 +120,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 
   test("returns schema error for empty preset map", () => {
     const dir = makeDir();
-    writePresetJson(dir, { schemaVersion: "1", presets: {} });
+    writePresetFixture(dir, { schemaVersion: "1", presets: {} });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
@@ -142,7 +128,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 
   test("returns schema error when wrapped layout has extra top-level keys", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       presets: { a: { nestedRoots: ["x"] } },
       orphan: { nestedRoots: ["y"] },
     });
@@ -159,7 +145,7 @@ describe("loadPresetsFromGitTop — schema errors", () => {
 describe("loadPresetsFromGitTop — valid flat format", () => {
   test("loads nestedRoots, parityPairs, schemaVersion, $schema, and workspaceRootHint together", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       schemaVersion: "1",
       $schema: "https://example.com/schema.json",
       myPreset: { nestedRoots: ["packages/a", "packages/b"], workspaceRootHint: "my-workspace" },
@@ -187,7 +173,7 @@ describe("loadPresetsFromGitTop — valid flat format", () => {
 describe("loadPresetsFromGitTop — wrapped format", () => {
   test("loads wrapped format with presets key and schemaVersion 1", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       schemaVersion: "1",
       presets: { myPreset: { nestedRoots: ["packages/c"] } },
     });
@@ -201,7 +187,7 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
 
   test("wrapped format without schemaVersion still loads", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       presets: { p: { parityPairs: [{ left: "x", right: "y" }] } },
     });
     const result = loadPresetsFromGitTop(dir);
@@ -211,7 +197,7 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
 
   test("legacy flat map supports a preset literally named presets", () => {
     const dir = makeDir();
-    writePresetJson(dir, { presets: { nestedRoots: ["packages/a"] } });
+    writePresetFixture(dir, { presets: { nestedRoots: ["packages/a"] } });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -221,7 +207,7 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
 
   test("wrapped format supports a preset literally named nestedRoots", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       schemaVersion: "1",
       presets: { nestedRoots: { nestedRoots: ["packages/a", "packages/b"] } },
     });
@@ -234,7 +220,7 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
 
   test("wrapped format supports a preset literally named parityPairs", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       presets: { parityPairs: { parityPairs: [{ left: "a", right: "b" }] } },
     });
     const result = loadPresetsFromGitTop(dir);
@@ -246,7 +232,7 @@ describe("loadPresetsFromGitTop — wrapped format", () => {
 
   test("wrapped format supports a preset literally named workspaceRootHint", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       presets: { workspaceRootHint: { workspaceRootHint: "my-workspace" } },
     });
     const result = loadPresetsFromGitTop(dir);
@@ -309,7 +295,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("returns preset_not_found when preset name is absent from file", () => {
     const dir = makeDir();
-    writePresetJson(dir, { other: { nestedRoots: ["a"] } });
+    writePresetFixture(dir, { other: { nestedRoots: ["a"] } });
     const result = applyPresetNestedRoots(dir, "myPreset", false, undefined);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.error).toBe("preset_not_found");
@@ -317,7 +303,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("uses preset roots when no inline provided (presetMerge=false)", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["pkg/a", "pkg/b"] } });
+    writePresetFixture(dir, { p: { nestedRoots: ["pkg/a", "pkg/b"] } });
     const result = applyPresetNestedRoots(dir, "p", false, undefined);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.nestedRoots).toEqual(["pkg/a", "pkg/b"]);
@@ -325,7 +311,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("uses inline roots when provided (presetMerge=false)", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["pkg/a"] } });
+    writePresetFixture(dir, { p: { nestedRoots: ["pkg/a"] } });
     const result = applyPresetNestedRoots(dir, "p", false, ["inline/x"]);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.nestedRoots).toEqual(["inline/x"]);
@@ -333,7 +319,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("merges preset and inline when presetMerge=true", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["pkg/a"] } });
+    writePresetFixture(dir, { p: { nestedRoots: ["pkg/a"] } });
     const result = applyPresetNestedRoots(dir, "p", true, ["pkg/b"]);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -344,7 +330,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("deduplicates when merging overlapping roots", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["pkg/a", "pkg/b"] } });
+    writePresetFixture(dir, { p: { nestedRoots: ["pkg/a", "pkg/b"] } });
     const result = applyPresetNestedRoots(dir, "p", true, ["pkg/a", "pkg/c"]);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -364,7 +350,7 @@ describe("applyPresetNestedRoots", () => {
 
   test("exposes schemaVersion from a wrapped preset", () => {
     const dir = makeDir();
-    writePresetJson(dir, {
+    writePresetFixture(dir, {
       schemaVersion: "1",
       presets: { p: { nestedRoots: ["a"] } },
     });
@@ -387,7 +373,7 @@ describe("applyPresetParityPairs", () => {
 
   test("uses preset pairs when no inline provided", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
+    writePresetFixture(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
     const result = applyPresetParityPairs(dir, "p", false, undefined);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -398,7 +384,7 @@ describe("applyPresetParityPairs", () => {
 
   test("uses inline pairs when provided (presetMerge=false)", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
+    writePresetFixture(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
     const result = applyPresetParityPairs(dir, "p", false, [{ left: "x", right: "y" }]);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -409,7 +395,7 @@ describe("applyPresetParityPairs", () => {
 
   test("merges pairs when presetMerge=true", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
+    writePresetFixture(dir, { p: { parityPairs: [{ left: "a", right: "b" }] } });
     const result = applyPresetParityPairs(dir, "p", true, [{ left: "x", right: "y" }]);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.pairs).toHaveLength(2);
@@ -417,7 +403,9 @@ describe("applyPresetParityPairs", () => {
 
   test("deduplicates identical pairs when presetMerge=true", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { parityPairs: [{ left: "a", right: "b", label: "from preset" }] } });
+    writePresetFixture(dir, {
+      p: { parityPairs: [{ left: "a", right: "b", label: "from preset" }] },
+    });
     const result = applyPresetParityPairs(dir, "p", true, [
       { left: "a", right: "b", label: "inline" },
     ]);
@@ -445,7 +433,7 @@ describe("preset schema alignment gate", () => {
   test("rejects schemaVersion values other than 1", () => {
     for (const version of ["2", "3", "0"]) {
       const dir = makeDir();
-      writePresetJson(dir, { schemaVersion: version, presets: { p: { nestedRoots: ["a"] } } });
+      writePresetFixture(dir, { schemaVersion: version, presets: { p: { nestedRoots: ["a"] } } });
       const result = loadPresetsFromGitTop(dir);
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.reason).toBe("schema");
@@ -454,7 +442,7 @@ describe("preset schema alignment gate", () => {
 
   test("rejects unknown preset entry fields (strict Zod)", () => {
     const dir = makeDir();
-    writePresetJson(dir, { p: { nestedRoots: ["a"], extraField: 1 } });
+    writePresetFixture(dir, { p: { nestedRoots: ["a"], extraField: 1 } });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
@@ -462,7 +450,7 @@ describe("preset schema alignment gate", () => {
 
   test("rejects empty legacy map after stripping metadata", () => {
     const dir = makeDir();
-    writePresetJson(dir, { schemaVersion: "1", $schema: "https://example.com/schema.json" });
+    writePresetFixture(dir, { schemaVersion: "1", $schema: "https://example.com/schema.json" });
     const result = loadPresetsFromGitTop(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("schema");
