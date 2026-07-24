@@ -117,6 +117,12 @@ Git is invoked via argv arrays (`spawnGitAsync` in `src/server/git.ts`) — **no
 
 Untrusted tokens (refs, ranges, remotes, upstream names, etc.) must still pass validators such as `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitCommitIsh`, `isSafeGitAncestorRef`, and `isSafeGitUpstreamToken` before being placed on the argv. Callers and future tools must keep routing user-controlled strings through those gates.
 
+### Environment allowlist (git subprocess env)
+
+Git child processes no longer inherit the full ambient `process.env`. `spawnGitAsync` (and the remaining sync `spawnSync` probes in `src/server/git.ts`) build the child's env from a fixed allowlist — `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TZ`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, `GIT_SSH`, `GIT_SSH_COMMAND`, `GIT_ASKPASS`, `GIT_TERMINAL_PROMPT`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_NOSYSTEM` — plus whatever the deployer opts into via `RETHUNK_GIT_ENV_PASSTHROUGH`.
+
+**Threat model:** everything else ambient is dropped, including other `GIT_*` vars such as `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE`. An attacker (or a misconfigured co-process sharing the same environment) that could previously set one of these on the server's ambient environment could redirect a tool call believed to target `cwd` at a different repo, index, or work tree — a confused-deputy vector. The allowlist closes that off by construction rather than by enumerating unsafe names. Explicit env vars our own code passes per-call (`SpawnGitOpts.env` — e.g. `GIT_AUTHOR_*` in tests) still merge on top of the filtered base, so legitimate internal use is unaffected. `RETHUNK_GIT_ENV_PASSTHROUGH` is an explicit, deployer-controlled escape hatch — widening it re-opens whatever names are listed, so only add names you trust the deployment's ambient environment to hold safely.
+
 ### Content exfiltration (read tools)
 
 Read-only tools can surface secrets already present in tracked history or the working tree: `git_show` (file-at-ref), `git_blame`, `git_grep`, `git_log`, `git_diff` / `git_diff_summary`, and `git_conflicts` hunk text. Truncation reduces volume; it does **not** redact secrets. Treat any repo that may contain credentials as sensitive when exposing these tools to an LLM.
