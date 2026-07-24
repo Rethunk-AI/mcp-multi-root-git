@@ -25,6 +25,7 @@ import {
   hasGitMetadata,
   isSafeGitUpstreamToken,
   parseGitSubmodulePaths,
+  reapOrphanedGitChildrenForTests,
   resetGitPathStateForTests,
   resolveGitSubprocessMaxBufferBytes,
   resolveGitSubprocessParallelism,
@@ -425,5 +426,43 @@ describe("spawnGitAsync", () => {
     const result = await promise;
     expect(result.ok).toBe(false);
     expect(result.aborted).toBe(true);
+  });
+
+  test("child process spawn error (e.g. ENOENT) surfaces the real Node error in stderr", async () => {
+    const dir = makeRepo();
+    const savedPath = process.env.PATH;
+    process.env.PATH = "/nonexistent-mcp-git-test-path";
+    try {
+      const result = await spawnGitAsync(dir, ["--version"]);
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain("ENOENT");
+    } finally {
+      process.env.PATH = savedPath;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spawnGitAsync — orphan reaper (module-level live-children tracking)
+// ---------------------------------------------------------------------------
+
+describe("orphan reaper", () => {
+  test("reapOrphanedGitChildrenForTests kills a live spawnGitAsync child, settling its promise", async () => {
+    const dir = makeRepo();
+    // holdStdin keeps stdin open so `git cat-file --batch` hangs until killed —
+    // without the reaper sweep this would otherwise wait out the timeout.
+    const promise = spawnGitAsync(dir, ["cat-file", "--batch"], {
+      timeoutMs: 10_000,
+      holdStdin: true,
+      sigkillAfterMs: 50,
+    });
+    // Give the child a moment to actually spawn and register itself.
+    await new Promise((r) => setTimeout(r, 50));
+
+    reapOrphanedGitChildrenForTests();
+
+    const result = await promise;
+    expect(result.ok).toBe(false);
+    expect(result.timedOut).toBeFalsy();
   });
 });

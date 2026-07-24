@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -260,6 +260,49 @@ export interface SpawnGitOpts {
   sigkillAfterMs?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Orphan reaper — kills spawnGitAsync children left running on abrupt shutdown
+// (the SIGKILL escalation timer is unref'd, so it does not by itself keep a
+// child from being orphaned if the parent process exits first).
+// ---------------------------------------------------------------------------
+
+const liveGitChildren = new Set<ChildProcess>();
+
+function reapLiveGitChildren(): void {
+  for (const child of liveGitChildren) {
+    try {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    } catch {
+      /* already dead */
+    }
+  }
+}
+
+/** Test-only: run the orphan-reaper's kill sweep directly, without a real process exit/signal. */
+export function reapOrphanedGitChildrenForTests(): void {
+  reapLiveGitChildren();
+}
+
+let orphanReaperInstalled = false;
+
+function installOrphanReaper(): void {
+  if (orphanReaperInstalled) return;
+  orphanReaperInstalled = true;
+  process.once("exit", reapLiveGitChildren);
+  process.once("SIGTERM", () => {
+    reapLiveGitChildren();
+    process.exit(143);
+  });
+  process.once("SIGINT", () => {
+    reapLiveGitChildren();
+    process.exit(130);
+  });
+}
+
+installOrphanReaper();
+
 export function spawnGitAsync(
   cwd: string,
   args: string[],
@@ -267,6 +310,7 @@ export function spawnGitAsync(
 ): Promise<SpawnGitResult> {
   return new Promise((resolveP) => {
     const child = spawn("git", args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    liveGitChildren.add(child);
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -355,6 +399,7 @@ export function spawnGitAsync(
         opts.signal.removeEventListener("abort", abortListener);
         abortListener = undefined;
       }
+      liveGitChildren.delete(child);
       try {
         child.stdin?.destroy();
       } catch {
