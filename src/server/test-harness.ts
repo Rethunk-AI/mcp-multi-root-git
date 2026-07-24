@@ -156,6 +156,29 @@ export function captureToolDefinitions(register: (server: FastMCP) => void): Cap
 // Shared git test helpers (extracted from per-file duplication)
 // ---------------------------------------------------------------------------
 
+// Lazily created (once per process) isolated HOME for git test subprocesses.
+// A developer's real ~/.gitconfig, hooksPath, credential helpers, or aliases
+// must never leak into the ~250 git invocations the suite makes — GIT_CONFIG_
+// GLOBAL/SYSTEM below cover the config files themselves, but some git
+// subsystems (credential cache socket path, GPG homedir, XDG-relative
+// defaults) still consult $HOME directly.
+let isolatedGitHome: string | undefined;
+
+function getIsolatedGitHome(): string {
+  if (isolatedGitHome === undefined) {
+    const home = mkdtempSync(join(tmpdir(), "mcp-git-test-home-"));
+    isolatedGitHome = home;
+    process.once("exit", () => {
+      try {
+        rmSync(home, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup at process exit
+      }
+    });
+  }
+  return isolatedGitHome;
+}
+
 /** Execute git command with standard test environment and encoding. */
 export function gitCmd(cwd: string, ...args: string[]): string {
   const opts: ExecSyncOptionsWithStringEncoding = {
@@ -169,6 +192,11 @@ export function gitCmd(cwd: string, ...args: string[]): string {
       GIT_COMMITTER_EMAIL: "test@example.com",
       GIT_AUTHOR_DATE: "2025-01-01T00:00:00Z",
       GIT_COMMITTER_DATE: "2025-01-01T00:00:00Z",
+      // Hermeticity: never let a developer's global/system git config
+      // (hooksPath, credential helpers, aliases) leak into test subprocesses.
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      HOME: getIsolatedGitHome(),
     },
   };
   return execFileSync("git", args, opts);
