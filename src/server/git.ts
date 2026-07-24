@@ -78,6 +78,73 @@ export const GIT_SUBPROCESS_SIGKILL_ESCALATION_MS = 2_000;
 export const GIT_SYNC_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
+// Environment allowlist for git subprocesses
+// ---------------------------------------------------------------------------
+
+/**
+ * Ambient env vars always forwarded to git child processes. Everything else
+ * ambient is dropped — including other `GIT_*` vars such as `GIT_DIR`,
+ * `GIT_WORK_TREE`, and `GIT_INDEX_FILE`, which would otherwise let ambient
+ * process env smuggle a different repo/index context into a call the caller
+ * believes targets `cwd`. Explicit per-call `SpawnGitOpts.env` always merges
+ * on top of this filtered base. Extend via `RETHUNK_GIT_ENV_PASSTHROUGH`
+ * (comma-separated names) rather than widening this list.
+ */
+const GIT_ENV_ALLOWLIST_EXACT: ReadonlySet<string> = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "LANG",
+  "TZ",
+  "TMPDIR",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "SSH_AUTH_SOCK",
+  "SSH_AGENT_PID",
+  "GIT_SSH",
+  "GIT_SSH_COMMAND",
+  "GIT_ASKPASS",
+  "GIT_TERMINAL_PROMPT",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_NOSYSTEM",
+]);
+
+function parseGitEnvPassthroughNames(envValue: string | undefined): ReadonlySet<string> {
+  if (!envValue) return new Set();
+  return new Set(
+    envValue
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+}
+
+function isAllowlistedGitEnvName(name: string, extra: ReadonlySet<string>): boolean {
+  return name.startsWith("LC_") || GIT_ENV_ALLOWLIST_EXACT.has(name) || extra.has(name);
+}
+
+/**
+ * Build the filtered base env passed to every git child process: the fixed
+ * allowlist plus any `RETHUNK_GIT_ENV_PASSTHROUGH` names, copied from
+ * `ambientEnv`. Exported for tests; production call sites use the defaults
+ * (real `process.env` / `process.env.RETHUNK_GIT_ENV_PASSTHROUGH`).
+ */
+export function buildFilteredGitEnv(
+  ambientEnv: NodeJS.ProcessEnv = process.env,
+  passthroughEnvValue: string | undefined = process.env.RETHUNK_GIT_ENV_PASSTHROUGH,
+): Record<string, string> {
+  const extra = parseGitEnvPassthroughNames(passthroughEnvValue);
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(ambientEnv)) {
+    if (value === undefined) continue;
+    if (isAllowlistedGitEnvName(name, extra)) out[name] = value;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Git on PATH (lazy probe)
 // ---------------------------------------------------------------------------
 
@@ -109,6 +176,7 @@ function probeGitVersionSync(): GitVersionProbeResult {
   const r = spawnSync("git", ["--version"], {
     encoding: "utf8",
     timeout: GIT_SYNC_TIMEOUT_MS,
+    env: buildFilteredGitEnv(),
   });
   return { error: r.error as NodeJS.ErrnoException | undefined, status: r.status };
 }
@@ -147,35 +215,84 @@ export function gateGit(
 // Git helpers (sync — used where async batching not needed)
 // ---------------------------------------------------------------------------
 
+/**
+ * Sync git-toplevel probe. Kept alongside {@link gitTopLevelAsync} because
+ * out-of-fence callers (`presets.ts`, `git-log-tool.ts`) still call this
+ * synchronously — see git.ts change notes for the async fan-out paths.
+ */
 export function gitTopLevel(cwd: string): string | null {
   const r = spawnSync("git", ["rev-parse", "--show-toplevel"], {
     cwd,
     encoding: "utf8",
     timeout: GIT_SYNC_TIMEOUT_MS,
+    env: buildFilteredGitEnv(),
   });
   if (r.error || r.status !== 0) return null;
   return r.stdout.trim();
 }
 
-export function gitRevParseGitDir(cwd: string): boolean {
-  const r = spawnSync("git", ["rev-parse", "--git-dir"], {
-    cwd,
-    encoding: "utf8",
-    timeout: GIT_SYNC_TIMEOUT_MS,
-  });
-  return !r.error && r.status === 0;
+/**
+ * Async twin of {@link gitTopLevel}, built on {@link spawnGitAsync} — does not
+ * block the event loop. `opts` (e.g. `timeoutMs`) forwards straight through
+ * to `spawnGitAsync`; production callers normally omit it (falls back to
+ * `GIT_SUBPROCESS_TIMEOUT_MS`), tests use it to shrink the timeout for a
+ * deliberately-hanging repo.
+ */
+export async function gitTopLevelAsync(cwd: string, opts?: SpawnGitOpts): Promise<string | null> {
+  const r = await spawnGitAsync(cwd, ["rev-parse", "--show-toplevel"], opts);
+  if (!r.ok) return null;
+  return r.stdout.trim();
 }
 
-export function gitRevParseHead(cwd: string): { ok: boolean; sha?: string; text: string } {
-  const r = spawnSync("git", ["rev-parse", "HEAD"], {
-    cwd,
-    encoding: "utf8",
-    timeout: GIT_SYNC_TIMEOUT_MS,
-  });
-  if (r.error || r.status !== 0) {
+/** Async, non-blocking replacement for the former sync `gitRevParseGitDir` (no remaining sync callers). */
+export async function gitRevParseGitDirAsync(cwd: string, opts?: SpawnGitOpts): Promise<boolean> {
+  const r = await spawnGitAsync(cwd, ["rev-parse", "--git-dir"], opts);
+  return r.ok;
+}
+
+/** Async, non-blocking replacement for the former sync `gitRevParseHead` (no remaining sync callers). */
+export async function gitRevParseHeadAsync(
+  cwd: string,
+  opts?: SpawnGitOpts,
+): Promise<{ ok: boolean; sha?: string; text: string }> {
+  const r = await spawnGitAsync(cwd, ["rev-parse", "HEAD"], opts);
+  if (!r.ok) {
     return { ok: false, text: (r.stderr || r.stdout || "git rev-parse HEAD failed").trim() };
   }
   return { ok: true, sha: r.stdout.trim(), text: r.stdout.trim() };
+}
+
+/**
+ * Per-tool-invocation memoization for {@link gitTopLevelAsync}, keyed by
+ * `cwd`. Create one instance per tool `execute()` call — never module-scope
+ * — so repeated toplevel lookups for the same path within one call collapse
+ * to a single subprocess, with no cross-call staleness.
+ */
+export function createTopLevelMemo(): (cwd: string) => Promise<string | null> {
+  const cache = new Map<string, Promise<string | null>>();
+  return (cwd: string) => {
+    let p = cache.get(cwd);
+    if (p === undefined) {
+      p = gitTopLevelAsync(cwd);
+      cache.set(cwd, p);
+    }
+    return p;
+  };
+}
+
+/** Per-tool-invocation memoization for {@link gitRevParseHeadAsync}, keyed by `cwd`. See {@link createTopLevelMemo}. */
+export function createRevParseHeadMemo(): (
+  cwd: string,
+) => Promise<{ ok: boolean; sha?: string; text: string }> {
+  const cache = new Map<string, Promise<{ ok: boolean; sha?: string; text: string }>>();
+  return (cwd: string) => {
+    let p = cache.get(cwd);
+    if (p === undefined) {
+      p = gitRevParseHeadAsync(cwd);
+      cache.set(cwd, p);
+    }
+    return p;
+  };
 }
 
 export function parseGitSubmodulePaths(gitRoot: string): string[] {
@@ -286,6 +403,13 @@ export interface SpawnGitOpts {
   maxBufferBytes?: number;
   /** Override SIGKILL escalation delay after SIGTERM (default 2000 ms). */
   sigkillAfterMs?: number;
+  /**
+   * Explicit env vars for this call — merged ON TOP of the filtered ambient
+   * base (see `buildFilteredGitEnv`), so callers (and tests) can still inject
+   * e.g. `GIT_AUTHOR_*` / `GIT_CONFIG_*` even though ambient env is no longer
+   * passed through wholesale.
+   */
+  env?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +461,8 @@ export function spawnGitAsync(
   opts?: SpawnGitOpts,
 ): Promise<SpawnGitResult> {
   return new Promise((resolveP) => {
-    const child = spawn("git", args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    const childEnv = opts?.env ? { ...buildFilteredGitEnv(), ...opts.env } : buildFilteredGitEnv();
+    const child = spawn("git", args, { cwd, stdio: ["pipe", "pipe", "pipe"], env: childEnv });
     liveGitChildren.add(child);
     let stdout = "";
     let stderr = "";

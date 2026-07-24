@@ -13,16 +13,20 @@ import { join } from "node:path";
 import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
+  buildFilteredGitEnv,
+  createRevParseHeadMemo,
+  createTopLevelMemo,
   fetchAheadBehind,
   GIT_MISSING_RECHECK_MS,
   GIT_SUBPROCESS_MAX_BUFFER_BYTES,
   GIT_SUBPROCESS_PARALLELISM,
   gateGit,
-  gitRevParseGitDir,
-  gitRevParseHead,
+  gitRevParseGitDirAsync,
+  gitRevParseHeadAsync,
   gitStatusShortBranchAsync,
   gitStatusSnapshotAsync,
   gitTopLevel,
+  gitTopLevelAsync,
   hasGitMetadata,
   isSafeGitUpstreamToken,
   parseGitSubmodulePaths,
@@ -33,7 +37,7 @@ import {
   resolveGitSubprocessTimeoutMs,
   spawnGitAsync,
 } from "./git.js";
-import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
+import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir, withEnvVar } from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -111,39 +115,106 @@ describe("isSafeGitUpstreamToken", () => {
 });
 
 // ---------------------------------------------------------------------------
-// gitRevParseGitDir
+// gitRevParseGitDirAsync
 // ---------------------------------------------------------------------------
 
-describe("gitRevParseGitDir", () => {
-  test("returns true for a valid git repository", () => {
+describe("gitRevParseGitDirAsync", () => {
+  test("returns true for a valid git repository", async () => {
     const dir = makeRepo();
-    expect(gitRevParseGitDir(dir)).toBe(true);
+    expect(await gitRevParseGitDirAsync(dir)).toBe(true);
   });
 
-  test("returns false for a plain directory", () => {
+  test("returns false for a plain directory", async () => {
     const dir = mkTmpDir("mcp-nongit-");
-    expect(gitRevParseGitDir(dir)).toBe(false);
+    expect(await gitRevParseGitDirAsync(dir)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// gitRevParseHead
+// gitRevParseHeadAsync
 // ---------------------------------------------------------------------------
 
-describe("gitRevParseHead", () => {
-  test("returns ok=true with a SHA for a repo that has commits", () => {
+describe("gitRevParseHeadAsync", () => {
+  test("returns ok=true with a SHA for a repo that has commits", async () => {
     const dir = makeRepo();
-    const result = gitRevParseHead(dir);
+    const result = await gitRevParseHeadAsync(dir);
     expect(result.ok).toBe(true);
     expect(result.sha).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  test("returns ok=false for a plain directory", () => {
+  test("returns ok=false for a plain directory", async () => {
     const dir = mkTmpDir("mcp-nongit-");
-    const result = gitRevParseHead(dir);
+    const result = await gitRevParseHeadAsync(dir);
     expect(result.ok).toBe(false);
     expect(result.sha).toBeUndefined();
     expect(typeof result.text).toBe("string");
+  });
+
+  test("timeoutMs opt lets a caller shrink the wait for a deliberately-hanging repo", async () => {
+    // Not an actual hang (rev-parse HEAD is instant) — exercises that the opts
+    // param reaches spawnGitAsync at all, independent of the real timeout path
+    // covered by the spawnGitAsync describe block below.
+    const dir = makeRepo();
+    const result = await gitRevParseHeadAsync(dir, { timeoutMs: 5_000 });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gitTopLevelAsync
+// ---------------------------------------------------------------------------
+
+describe("gitTopLevelAsync", () => {
+  test("returns toplevel for a git repo", async () => {
+    const dir = makeRepo();
+    expect(await gitTopLevelAsync(dir)).toBe(dir);
+  });
+
+  test("returns null for a non-git directory", async () => {
+    const dir = mkTmpDir("mcp-nongit-toplevel-async-");
+    expect(await gitTopLevelAsync(dir)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createTopLevelMemo / createRevParseHeadMemo — per-call memoization
+// ---------------------------------------------------------------------------
+
+describe("createTopLevelMemo", () => {
+  test("resolves the same toplevel for repeated lookups of the same path", async () => {
+    const dir = makeRepo();
+    const memo = createTopLevelMemo();
+    const [a, b] = await Promise.all([memo(dir), memo(dir)]);
+    expect(a).toBe(dir);
+    expect(b).toBe(dir);
+  });
+
+  test("caches the promise so a second call does not spawn a second subprocess", async () => {
+    const dir = makeRepo();
+    const memo = createTopLevelMemo();
+    const first = memo(dir);
+    const second = memo(dir);
+    // Same in-flight promise object — the second call never called gitTopLevelAsync again.
+    expect(second).toBe(first);
+    await first;
+  });
+
+  test("a fresh memo instance does not share cache with a prior one (no cross-call cache)", async () => {
+    const dir = makeRepo();
+    const memoA = createTopLevelMemo();
+    const memoB = createTopLevelMemo();
+    expect(memoA(dir)).not.toBe(memoB(dir));
+    await Promise.all([memoA(dir), memoB(dir)]);
+  });
+});
+
+describe("createRevParseHeadMemo", () => {
+  test("resolves the same SHA for repeated lookups of the same path", async () => {
+    const dir = makeRepo();
+    const memo = createRevParseHeadMemo();
+    const [a, b] = await Promise.all([memo(dir), memo(dir)]);
+    expect(a.ok).toBe(true);
+    expect(a.sha).toBe(b.sha);
   });
 });
 
@@ -252,6 +323,54 @@ describe("asyncPool", () => {
   test("concurrency higher than item count doesn't error", async () => {
     const results = await asyncPool([1, 2], 100, async (x) => x * 3);
     expect(results).toEqual([3, 6]);
+  });
+
+  test("never runs more than `concurrency` jobs at once, and does reach the cap under load", async () => {
+    const concurrency = 3;
+    let current = 0;
+    let maxObserved = 0;
+    const items = Array.from({ length: 9 }, (_, i) => i);
+    await asyncPool(items, concurrency, async (i) => {
+      current++;
+      maxObserved = Math.max(maxObserved, current);
+      await new Promise((r) => setTimeout(r, 20));
+      current--;
+      return i;
+    });
+    expect(maxObserved).toBeLessThanOrEqual(concurrency);
+    expect(maxObserved).toBe(concurrency);
+  });
+
+  test("one hanging/slow job's own timeout does not block sibling jobs past it — real spawnGitAsync", async () => {
+    // Every tool-level fan-out pool (git_status/git_inventory/git_parity) is
+    // built on this exact primitive (asyncPool + spawnGitAsync). The hang is
+    // simulated via holdStdin + a short timeoutMs test hook rather than an
+    // uncontrolled real hang, so the test is fast and deterministic.
+    const items = [
+      { dir: makeRepoWithSeed(), hang: false },
+      { dir: makeRepoWithSeed(), hang: true },
+      { dir: makeRepoWithSeed(), hang: false },
+    ];
+    const start = Date.now();
+    const results = await asyncPool(items, 3, async (item) => {
+      if (item.hang) {
+        return spawnGitAsync(item.dir, ["cat-file", "--batch"], {
+          timeoutMs: 60,
+          holdStdin: true,
+          sigkillAfterMs: 30,
+        });
+      }
+      return spawnGitAsync(item.dir, ["rev-parse", "HEAD"]);
+    });
+    const elapsed = Date.now() - start;
+    expect(results[0]?.ok).toBe(true);
+    expect(results[1]?.ok).toBe(false);
+    expect(results[1]?.timedOut).toBe(true);
+    expect(results[2]?.ok).toBe(true);
+    // Bounded by the hanging job's own timeout, not serialized behind it —
+    // a serialized implementation would need to wait out the hang before
+    // even starting the other two, and this asserts it does not.
+    expect(elapsed).toBeLessThan(1000);
   });
 });
 
@@ -520,6 +639,127 @@ describe("spawnGitAsync", () => {
     } finally {
       process.env.PATH = savedPath;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildFilteredGitEnv — env allowlist for git subprocesses
+// ---------------------------------------------------------------------------
+
+describe("buildFilteredGitEnv", () => {
+  test("keeps allowlisted vars and drops everything else, including other GIT_* smuggling vectors", () => {
+    const ambient = {
+      PATH: "/usr/bin",
+      HOME: "/home/x",
+      GIT_SSH_COMMAND: "ssh -i key",
+      GIT_DIR: "/tmp/evil-git-dir",
+      GIT_WORK_TREE: "/tmp/evil-worktree",
+      GIT_INDEX_FILE: "/tmp/evil-index",
+      RANDOM_SECRET: "shh",
+    };
+    const filtered = buildFilteredGitEnv(ambient, undefined);
+    expect(filtered.PATH).toBe("/usr/bin");
+    expect(filtered.HOME).toBe("/home/x");
+    expect(filtered.GIT_SSH_COMMAND).toBe("ssh -i key");
+    expect(filtered.GIT_DIR).toBeUndefined();
+    expect(filtered.GIT_WORK_TREE).toBeUndefined();
+    expect(filtered.GIT_INDEX_FILE).toBeUndefined();
+    expect(filtered.RANDOM_SECRET).toBeUndefined();
+  });
+
+  test("keeps any LC_* prefixed var regardless of specific name", () => {
+    const filtered = buildFilteredGitEnv(
+      { LC_ALL: "C", LC_TIME: "en_US.UTF-8", NOT_LC: "x" },
+      undefined,
+    );
+    expect(filtered.LC_ALL).toBe("C");
+    expect(filtered.LC_TIME).toBe("en_US.UTF-8");
+    expect(filtered.NOT_LC).toBeUndefined();
+  });
+
+  test("RETHUNK_GIT_ENV_PASSTHROUGH appends extra names, including other GIT_* vars", () => {
+    const ambient = { PATH: "/usr/bin", GIT_DIR: "/tmp/evil", MY_CUSTOM: "val" };
+    const filtered = buildFilteredGitEnv(ambient, "GIT_DIR,MY_CUSTOM");
+    expect(filtered.GIT_DIR).toBe("/tmp/evil");
+    expect(filtered.MY_CUSTOM).toBe("val");
+  });
+
+  test("passthrough list tolerates whitespace and empty entries", () => {
+    const ambient = { PATH: "/usr/bin", FOO: "1", BAR: "2" };
+    const filtered = buildFilteredGitEnv(ambient, " FOO ,, BAR ,");
+    expect(filtered.FOO).toBe("1");
+    expect(filtered.BAR).toBe("2");
+  });
+
+  test("omits ambient vars whose value is undefined", () => {
+    const filtered = buildFilteredGitEnv(
+      { PATH: undefined } as unknown as NodeJS.ProcessEnv,
+      undefined,
+    );
+    expect(filtered.PATH).toBeUndefined();
+  });
+
+  test("defaults read real process.env / RETHUNK_GIT_ENV_PASSTHROUGH when args are omitted", () => {
+    withEnvVar("RETHUNK_GIT_ENV_PASSTHROUGH", "MCP_GIT_TEST_PASSTHROUGH_VAR", () => {
+      withEnvVar("MCP_GIT_TEST_PASSTHROUGH_VAR", "present", () => {
+        const filtered = buildFilteredGitEnv();
+        expect(filtered.MCP_GIT_TEST_PASSTHROUGH_VAR).toBe("present");
+        expect(filtered.PATH).toBe(process.env.PATH);
+      });
+    });
+  });
+});
+
+describe("spawnGitAsync — env allowlist enforcement", () => {
+  test("a poisoned ambient GIT_INDEX_FILE does not reach the child", async () => {
+    const dir = makeRepo();
+    const bogusIndex = join(dir, "not-a-real-index.bin");
+    writeFileSync(bogusIndex, "not a valid git index\n");
+    let promise!: ReturnType<typeof spawnGitAsync>;
+    withEnvVar("GIT_INDEX_FILE", bogusIndex, () => {
+      promise = spawnGitAsync(dir, ["status", "--short"]);
+    });
+    const result = await promise;
+    // If the ambient GIT_INDEX_FILE reached the child, git would fail parsing
+    // the garbage file as an index; the allowlist must keep it from reaching git.
+    expect(result.ok).toBe(true);
+  });
+
+  test("RETHUNK_GIT_ENV_PASSTHROUGH lets an added ambient var reach the child (end-to-end)", async () => {
+    const dir = makeRepo();
+    const bogusIndex = join(dir, "not-a-real-index-2.bin");
+    writeFileSync(bogusIndex, "not a valid git index\n");
+    let promise!: ReturnType<typeof spawnGitAsync>;
+    // Without the passthrough, GIT_INDEX_FILE is dropped and the command
+    // succeeds against the real index (see test above). With it added to the
+    // passthrough list, the poisoned index reaches git and the command fails —
+    // proving the passthrough path actually widens what reaches the child.
+    withEnvVar("RETHUNK_GIT_ENV_PASSTHROUGH", "GIT_INDEX_FILE", () => {
+      withEnvVar("GIT_INDEX_FILE", bogusIndex, () => {
+        promise = spawnGitAsync(dir, ["status", "--short"]);
+      });
+    });
+    const result = await promise;
+    expect(result.ok).toBe(false);
+  });
+
+  test("opts.env merges on top of the filtered ambient base (GIT_AUTHOR_*/GIT_CONFIG_* injection)", async () => {
+    const dir = mkTmpDir("mcp-env-merge-test-");
+    const initResult = await spawnGitAsync(dir, ["init", "-b", "main"]);
+    expect(initResult.ok).toBe(true);
+    writeFileSync(join(dir, "f.txt"), "hi\n");
+    await spawnGitAsync(dir, ["add", "f.txt"]);
+    const commitResult = await spawnGitAsync(dir, ["commit", "-m", "test"], {
+      env: {
+        GIT_AUTHOR_NAME: "Test User",
+        GIT_AUTHOR_EMAIL: "test@example.com",
+        GIT_COMMITTER_NAME: "Test User",
+        GIT_COMMITTER_EMAIL: "test@example.com",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+      },
+    });
+    expect(commitResult.ok).toBe(true);
   });
 });
 
