@@ -337,6 +337,31 @@ describe("git_merge strategy", () => {
 // ---------------------------------------------------------------------------
 
 describe("git_merge cleanup", () => {
+  test("deleteMergedBranches deletes an up_to_date source (safest case — fully ref-contained)", async () => {
+    const dir = makeRepo();
+    // feature/a points at main's current tip, then main advances past it — the
+    // source is fully contained in the destination (outcome: up_to_date), which
+    // is the safest possible case for `git branch -d`, yet used to be skipped.
+    gitCmd(dir, "branch", "feature/a", "HEAD");
+    addCommit(dir, "extra.txt", "extra\n", "chore: advance main");
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/a"],
+      deleteMergedBranches: true,
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ outcome: string; branchDeleted?: boolean }>;
+    };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.results[0]?.outcome).toBe("up_to_date");
+    expect(parsed.results[0]?.branchDeleted).toBe(true);
+    expect(gitCmd(dir, "branch").trim()).not.toContain("feature/a");
+  });
+
   test("deleteMergedBranches deletes non-protected source, skips protected source (maybeDeleteBranch)", async () => {
     const dir = makeRepo();
     // Non-protected branch, ahead of main.
@@ -494,6 +519,33 @@ describe("git_merge guardrails", () => {
     });
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_ref_token");
+  });
+
+  test("merge_in_progress refuses with a specific error instead of generic working_tree_dirty", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "feature/a");
+    writeFileSync(join(dir, "shared.txt"), "alpha\n");
+    gitCmd(dir, "add", "shared.txt");
+    gitCmd(dir, "commit", "-m", "feat: alpha");
+    const conflictSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
+
+    // Produce a real mid-merge conflict state (MERGE_HEAD set, tree dirty).
+    expect(() => gitCmd(dir, "merge", "--no-ff", "--no-edit", "feature/a")).toThrow();
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
+
+    const run = captureTool(registerGitMergeTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: ["feature/a"],
+    });
+    const parsed = JSON.parse(text) as { error: string; commit?: string };
+    expect(parsed.error).toBe("merge_in_progress");
+    expect(parsed.commit).toBe(conflictSha);
+
+    gitCmd(dir, "merge", "--abort");
   });
 
   test("non-git workspaceRoot returns not_a_git_repository", async () => {

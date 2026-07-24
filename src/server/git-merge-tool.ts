@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
@@ -77,9 +78,12 @@ export async function abortRebase(gitTop: string): Promise<{ ok: boolean; detail
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
-async function mergeInProgress(gitTop: string): Promise<boolean> {
+/** SHA of MERGE_HEAD (the merge currently in progress), or undefined once resolved/absent. */
+async function mergeInProgress(gitTop: string): Promise<string | undefined> {
   const r = await spawnGitAsync(gitTop, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]);
-  return r.ok;
+  if (!r.ok) return undefined;
+  const sha = r.stdout.trim();
+  return sha === "" ? undefined : sha;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +317,8 @@ async function maybeRemoveWorktree(
   const path = await worktreeForBranch(gitTop, source);
   if (!path) return undefined;
   // Re-check protected names against the worktree path's trailing segment too.
-  const tail = path.split("/").pop() ?? "";
+  // `node:path.basename` (not a POSIX-only `"/"` split) so this also works on Windows paths.
+  const tail = basename(path);
   if (isProtectedBranch(tail)) return undefined;
   const r = await spawnGitAsync(gitTop, ["worktree", "remove", path]);
   return r.ok ? path : undefined;
@@ -345,8 +350,9 @@ export function registerGitMergeTool(server: FastMCP): void {
       "Merge one or more source branches into a destination. `auto` cascades " +
       "fast-forward → rebase → merge-commit, preferring linear history. " +
       "`auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs), not only the destination. " +
-      "Refuses on dirty tree; stops on first conflict. Optional flags delete merged branches/worktrees " +
-      "(protected names skipped: main, master, dev, develop, stable, trunk, prod, production, release/*, hotfix/*).",
+      "Refuses on dirty tree or when a merge is already in progress. Stops on first conflict. Optional flags " +
+      "delete merged branches/worktrees (protected names skipped: main, master, dev, develop, stable, trunk, " +
+      "prod, production, release/*, hotfix/*).",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -386,6 +392,15 @@ export function registerGitMergeTool(server: FastMCP): void {
       const pre = requireSingleRepo(server, args);
       if (!pre.ok) return jsonRespond(pre.error);
       const gitTop = pre.gitTop;
+
+      // --- Guard: refuse when a merge is already in progress (native MERGE_HEAD state,
+      // read live off .git — this server is stateless per call). Checked before the
+      // dirty-tree refusal below so callers get a specific, actionable error instead of
+      // the generic working_tree_dirty (mirrors git_cherry_pick's CHERRY_PICK_HEAD guard). ---
+      const mergeHead = await mergeInProgress(gitTop);
+      if (mergeHead) {
+        return jsonRespond({ error: ERROR_CODES.MERGE_IN_PROGRESS, commit: mergeHead });
+      }
 
       // --- Validate ref tokens early ---
       for (const s of args.sources) {
@@ -445,7 +460,10 @@ export function registerGitMergeTool(server: FastMCP): void {
       if (allOk) {
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
-          if (!r || r.outcome === "up_to_date") continue;
+          if (!r) continue;
+          // `up_to_date` sources are the safest to clean up: the source is fully
+          // contained in the destination by ref ancestry, so both `-d` delete and
+          // worktree removal are unconditionally safe — no reason to skip them.
           const worktreeRemoved = await maybeRemoveWorktree(
             gitTop,
             r.source,

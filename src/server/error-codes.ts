@@ -93,6 +93,7 @@ export const ERROR_CODES = {
   MERGE_BASE_FAILED: "merge_base_failed",
   MERGE_CONFLICTS: "merge_conflicts",
   MERGE_FAILED: "merge_failed",
+  MERGE_IN_PROGRESS: "merge_in_progress",
   REBASE_ABORT_FAILED: "rebase_abort_failed",
   REBASE_CONFLICTS: "rebase_conflicts",
   SOURCE_NOT_FOUND: "source_not_found",
@@ -100,6 +101,7 @@ export const ERROR_CODES = {
   // Cherry-pick
   CHECKOUT_FAILED: "checkout_failed",
   CHERRY_PICK_ABORT_FAILED: "cherry_pick_abort_failed",
+  CHERRY_PICK_CONFLICTS: "cherry_pick_conflicts",
   CHERRY_PICK_CONTINUE_FAILED: "cherry_pick_continue_failed",
   CHERRY_PICK_IN_PROGRESS: "cherry_pick_in_progress",
   CHERRY_PICK_TOO_MANY_COMMITS: "cherry_pick_too_many_commits",
@@ -112,7 +114,11 @@ export const ERROR_CODES = {
   RESET_NOT_ANCESTOR: "reset_not_ancestor",
 
   // Revert
+  NO_REVERT_IN_PROGRESS: "no_revert_in_progress",
   REVERT_ABORT_FAILED: "revert_abort_failed",
+  REVERT_CONTINUE_FAILED: "revert_continue_failed",
+  REVERT_IN_PROGRESS: "revert_in_progress",
+  REVERT_UNRESOLVED_PATHS: "revert_unresolved_paths",
 
   // Tag
   REF_NOT_FOUND: "ref_not_found",
