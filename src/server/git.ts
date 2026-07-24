@@ -308,6 +308,9 @@ export function spawnGitAsync(
     }
 
     function onChunk(stream: "stdout" | "stderr", chunk: string) {
+      // Once settled (timeout/kill/abort/overflow), stop accumulating —
+      // the resolved result already captured its snapshot of stdout/stderr.
+      if (settled) return;
       const byteLen = Buffer.byteLength(chunk, "utf8");
       if (stream === "stdout") {
         stdoutBytes += byteLen;
@@ -367,7 +370,14 @@ export function spawnGitAsync(
     }
 
     // Register lifecycle handlers before any early kill so close/error are observed.
-    child.on("error", () => settle({ ok: false, stdout, stderr }));
+    child.on("error", (err) => {
+      // Surface the real Node spawn error (e.g. ENOENT: no git on PATH vs
+      // EACCES: not executable) instead of silently discarding it — stdout/
+      // stderr are typically empty here since the process never ran.
+      const nodeErr = err as NodeJS.ErrnoException;
+      const detail = nodeErr.code ? `${nodeErr.code}: ${nodeErr.message}` : nodeErr.message;
+      settle({ ok: false, stdout, stderr: stderr ? `${stderr}\n${detail}` : detail });
+    });
     child.on("close", (code) => settle({ ok: code === 0, stdout, stderr }));
 
     // AbortSignal: kill immediately if already aborted, else listen
