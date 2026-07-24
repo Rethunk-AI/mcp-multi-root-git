@@ -76,8 +76,15 @@ describe("git_parity", () => {
     const run = captureTool(registerGitParityTool);
 
     const text = await run({ root: [w.root], format: "json" });
-    const parsed = JSON.parse(text) as { error: string };
-    expect(parsed.error).toBe("no_pairs");
+    // no_pairs is a per-root entry (contract 1) — never an abort of the whole
+    // sweep, even when there's only one root in play.
+    const parsed = JSON.parse(text) as {
+      parity: Array<{ status: string; pairs: unknown[]; error?: { error: string } }>;
+    };
+    expect(parsed.parity).toHaveLength(1);
+    expect(parsed.parity[0]?.error?.error).toBe("no_pairs");
+    expect(parsed.parity[0]?.status).toBe("MISMATCH");
+    expect(parsed.parity[0]?.pairs).toHaveLength(0);
   });
 
   test("SHA mismatch JSON: match false with leftSha and rightSha", async () => {
@@ -250,5 +257,115 @@ describe("git_parity", () => {
     expect(parsed.parity[0]?.status).toBe("OK");
     expect(parsed.parity[0]?.pairs[0]?.label).toBe("from preset");
     expect(parsed.parity[0]?.pairs[0]?.match).toBe(true);
+  });
+
+  test("maxPairs dedupes duplicate pairs before truncation and reports omitted count", async () => {
+    const root = mkTmpDir("parity-cap-");
+    gitInitMain(root);
+    commitFile(root, "root.txt", "root\n");
+    for (const n of ["left", "right", "left2", "right2", "left3", "right3"]) {
+      const d = join(root, n);
+      mkdirSync(d);
+      gitInitMain(d);
+      commitFile(d, "f.txt", "same\n");
+    }
+
+    const run = captureTool(registerGitParityTool);
+    const text = await run({
+      format: "json",
+      root: [root],
+      pairs: [
+        { left: "left", right: "right", label: "p1" },
+        { left: "left", right: "right", label: "p1-dup" },
+        { left: "left2", right: "right2", label: "p2" },
+        { left: "left3", right: "right3", label: "p3" },
+      ],
+      maxPairs: 2,
+    });
+    const parsed = JSON.parse(text) as {
+      parity: Array<{
+        pairsTruncated?: boolean;
+        pairsOmittedCount?: number;
+        pairs: Array<{ label: string }>;
+      }>;
+    };
+    const group = parsed.parity[0];
+    // 4 input pairs -> 3 unique on (left,right) -> capped to 2 -> 1 omitted.
+    expect(group?.pairsTruncated).toBe(true);
+    expect(group?.pairsOmittedCount).toBe(1);
+    expect(group?.pairs.map((p) => p.label)).toEqual(["p1", "p2"]);
+  });
+
+  test("preset failure on one root produces a per-root error entry instead of aborting the sweep", async () => {
+    const broken = mkTmpDir("parity-preset-broken-");
+    gitInitMain(broken);
+    mkdirSync(join(broken, ".rethunk"), { recursive: true });
+    writeFileSync(join(broken, ".rethunk", "git-mcp-presets.json"), "{not valid json");
+
+    const ok = makeParityWorkspace("parity-preset-ok-");
+    mkdirSync(join(ok.root, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(ok.root, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({
+        schemaVersion: "1",
+        presets: { p: { parityPairs: [{ left: "left", right: "right" }] } },
+      }),
+    );
+
+    const run = captureTool(registerGitParityTool, undefined, [
+      `file://${broken}`,
+      `file://${ok.root}`,
+    ]);
+    const text = await run({ root: "*", format: "json", preset: "p" });
+    const parsed = JSON.parse(text) as {
+      parity: Array<{
+        workspaceRoot: string;
+        status: string;
+        pairs: unknown[];
+        error?: { error: string };
+      }>;
+    };
+    expect(parsed.parity).toHaveLength(2);
+    expect(parsed.parity[0]?.workspaceRoot).toBe(broken);
+    expect(parsed.parity[0]?.error?.error).toBe("preset_file_invalid");
+    expect(parsed.parity[0]?.pairs).toHaveLength(0);
+    expect(parsed.parity[1]?.workspaceRoot).toBe(ok.root);
+    expect(parsed.parity[1]?.status).toBe("OK");
+  });
+
+  test("no_pairs on one root (preset with no pairs) produces a per-root error entry instead of aborting the sweep", async () => {
+    const a = mkTmpDir("parity-nopairs-sweep-a-");
+    gitInitMain(a);
+    mkdirSync(join(a, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(a, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({ schemaVersion: "1", presets: { p: {} } }),
+    );
+
+    const b = makeParityWorkspace("parity-nopairs-sweep-b-");
+    mkdirSync(join(b.root, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(b.root, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({
+        schemaVersion: "1",
+        presets: { p: { parityPairs: [{ left: "left", right: "right" }] } },
+      }),
+    );
+
+    const run = captureTool(registerGitParityTool, undefined, [`file://${a}`, `file://${b.root}`]);
+    const text = await run({ root: "*", format: "json", preset: "p" });
+    const parsed = JSON.parse(text) as {
+      parity: Array<{
+        workspaceRoot: string;
+        status: string;
+        pairs: unknown[];
+        error?: { error: string };
+      }>;
+    };
+    expect(parsed.parity).toHaveLength(2);
+    expect(parsed.parity[0]?.workspaceRoot).toBe(a);
+    expect(parsed.parity[0]?.error?.error).toBe("no_pairs");
+    expect(parsed.parity[1]?.workspaceRoot).toBe(b.root);
+    expect(parsed.parity[1]?.status).toBe("OK");
   });
 });

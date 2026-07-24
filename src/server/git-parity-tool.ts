@@ -4,10 +4,27 @@ import { z } from "zod";
 import { ERROR_CODES } from "./error-codes.js";
 import { gitRevParseHead, gitTopLevel } from "./git.js";
 import { validateRepoPath } from "./inventory.js";
-import { jsonRespond, spreadDefined } from "./json.js";
+import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetParityPairs, type ParityPair } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
+
+/** Default / hard cap on parity pairs evaluated per root. */
+const MAX_PAIRS_DEFAULT = 64;
+const MAX_PAIRS_HARD_CAP = 256;
+
+/** Dedup pairs on (left, right), keeping first occurrence — mirrors the preset-merge dedup in presets.ts. */
+function dedupePairs(pairs: ParityPair[]): ParityPair[] {
+  const seen = new Set<string>();
+  const out: ParityPair[] = [];
+  for (const pair of pairs) {
+    const key = `${pair.left}\0${pair.right}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(pair);
+  }
+  return out;
+}
 
 export function registerGitParityTool(server: FastMCP): void {
   server.addTool({
@@ -28,12 +45,23 @@ export function registerGitParityTool(server: FastMCP): void {
         .optional(),
       preset: z.string().optional(),
       presetMerge: z.boolean().optional().default(false),
+      maxPairs: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_PAIRS_HARD_CAP)
+        .optional()
+        .default(MAX_PAIRS_DEFAULT)
+        .describe(`Max pairs evaluated per root (hard cap ${MAX_PAIRS_HARD_CAP}).`),
     }),
-    execute: async (args) => {
-      const pre = requireGitAndRoots(server, args, args.preset);
+    execute: async (args, context) => {
+      const pre = requireGitAndRoots(server, args, args.preset, context.sessionId);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
+      const warning = pre.warning;
+
+      const maxPairs = args.maxPairs ?? MAX_PAIRS_DEFAULT;
 
       const results: {
         workspaceRoot: string;
@@ -49,6 +77,9 @@ export function registerGitParityTool(server: FastMCP): void {
           rightSha?: string;
           error?: string;
         }[];
+        pairsTruncated?: boolean;
+        pairsOmittedCount?: number;
+        error?: Record<string, unknown>;
       }[] = [];
 
       const mdParts: string[] = [];
@@ -86,14 +117,71 @@ export function registerGitParityTool(server: FastMCP): void {
         if (args.preset) {
           const applied = applyPresetParityPairs(top, args.preset, args.presetMerge, pairs);
           if (!applied.ok) {
-            return jsonRespond(applied.error);
+            // Never abort the whole sweep for one root's preset problem — record a
+            // per-root error entry (same shape as the not-a-git-repo entries above)
+            // and move on to the remaining roots.
+            if (args.format === "json") {
+              results.push({
+                workspaceRoot: top,
+                status: "MISMATCH",
+                pairs: [],
+                error: applied.error,
+              });
+            } else {
+              mdParts.push(
+                [
+                  "# Git HEAD parity",
+                  "",
+                  "status: MISMATCH",
+                  "",
+                  `## ${top} — preset error`,
+                  "```json",
+                  JSON.stringify(applied.error),
+                  "```",
+                  "",
+                ].join("\n"),
+              );
+            }
+            continue;
           }
           pairs = applied.pairs;
           parityPresetSchemaVersion = applied.presetSchemaVersion;
         }
 
         if (!pairs?.length) {
-          return jsonRespond({ error: ERROR_CODES.NO_PAIRS });
+          const noPairsError = { error: ERROR_CODES.NO_PAIRS };
+          if (args.format === "json") {
+            results.push({
+              workspaceRoot: top,
+              status: "MISMATCH",
+              pairs: [],
+              error: noPairsError,
+            });
+          } else {
+            mdParts.push(
+              [
+                "# Git HEAD parity",
+                "",
+                "status: MISMATCH",
+                "",
+                `## ${top} — error`,
+                "```json",
+                JSON.stringify(noPairsError),
+                "```",
+                "",
+              ].join("\n"),
+            );
+          }
+          continue;
+        }
+
+        pairs = dedupePairs(pairs);
+        let pairsTruncated = false;
+        let pairsOmittedCount = 0;
+        if (pairs.length > maxPairs) {
+          pairsOmittedCount = pairs.length - maxPairs;
+          pairs = pairs.slice(0, maxPairs);
+          pairsTruncated = true;
         }
 
         let allOk = true;
@@ -158,6 +246,7 @@ export function registerGitParityTool(server: FastMCP): void {
           ...spreadDefined("presetSchemaVersion", parityPresetSchemaVersion),
           status: allOk ? "OK" : "MISMATCH",
           pairs: pairResults,
+          ...spreadWhen(pairsTruncated, { pairsTruncated: true, pairsOmittedCount }),
         });
 
         if (args.format !== "json") {
@@ -167,6 +256,12 @@ export function registerGitParityTool(server: FastMCP): void {
             `status: ${allOk ? "OK" : "MISMATCH"}`,
             "",
           ];
+          if (pairsTruncated) {
+            lines.push(
+              `pairs_truncated: ${pairsOmittedCount} pair(s) not evaluated (maxPairs=${maxPairs})`,
+              "",
+            );
+          }
           for (const pr of pairResults) {
             if (pr.error) {
               lines.push(`## ${pr.label} — error`, "```text", pr.error, "```", "");
@@ -188,9 +283,11 @@ export function registerGitParityTool(server: FastMCP): void {
       }
 
       if (args.format === "json") {
-        return jsonRespond({ parity: results });
+        return jsonRespond({ ...spreadDefined("warning", warning), parity: results });
       }
-      return mdParts.join("\n\n---\n\n");
+      return [...(warning ? [`_(warning: ${JSON.stringify(warning)})_`] : []), ...mdParts].join(
+        "\n\n---\n\n",
+      );
     },
   });
 }
