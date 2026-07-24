@@ -10,6 +10,7 @@
     "noUnusedParameters": true,
     "allowUnusedLabels": false,
     "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
     "allowUnreachableCode": false,
     "noImplicitOverride": true,
     "rootDir": "./src",
