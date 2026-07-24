@@ -8,6 +8,7 @@ import {
   isProtectedBranch,
   isSafeGitAncestorRef,
   isSafeGitRefToken,
+  PROTECTED_BRANCH_NAMES_TEXT,
 } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -38,7 +39,7 @@ export function registerGitBranchTool(server: FastMCP): void {
       "Create, delete, or rename a local git branch. `action: 'create'` makes `name` from `from` " +
       "(default HEAD); `action: 'delete'` removes `name` (`force: true` for an unmerged branch, `-D`); " +
       "`action: 'rename'` renames `name` to `newName`. Refuses protected branch names " +
-      "(main/master/dev/develop/stable/trunk/prod/production/release*/hotfix*) in any role.",
+      `(${PROTECTED_BRANCH_NAMES_TEXT}) in any role.`,
     annotations: {
       title: "Git Branch",
       readOnlyHint: false,

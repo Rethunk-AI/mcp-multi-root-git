@@ -11,6 +11,7 @@ import {
   isProtectedBranch,
   isSafeGitRefToken,
   isWorkingTreeClean,
+  PROTECTED_BRANCH_NAMES_TEXT,
   resolveRef,
   worktreeForBranch,
 } from "./git-refs.js";
@@ -351,8 +352,7 @@ export function registerGitMergeTool(server: FastMCP): void {
       "fast-forward → rebase → merge-commit, preferring linear history. " +
       "`auto`/`rebase` rewrite the source branch tip in place when rebasing (new SHAs), not only the destination. " +
       "Refuses on dirty tree or when a merge is already in progress. Stops on first conflict. Optional flags " +
-      "delete merged branches/worktrees (protected names skipped: main, master, dev, develop, stable, trunk, " +
-      "prod, production, release/*, hotfix/*).",
+      `delete merged branches/worktrees (protected names skipped: ${PROTECTED_BRANCH_NAMES_TEXT}).`,
     annotations: {
       title: "Git Merge",
       readOnlyHint: false,

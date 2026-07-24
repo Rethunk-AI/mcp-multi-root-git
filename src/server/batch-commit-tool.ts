@@ -44,8 +44,7 @@ const CommitEntrySchema = z.object({
     .min(1)
     .describe(
       "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. " +
-        "Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`); " +
-        "on mid-entry stage failure, already-staged paths for that entry are unstaged. " +
+        "Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`). " +
         "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. " +
         "Rejects `.`, the repo root, and directory pathspecs.",
     ),

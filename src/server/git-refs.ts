@@ -37,6 +37,14 @@ const PROTECTED_EXACT = new Set([
   "head",
 ]);
 
+/**
+ * Human-readable protected-name list for tool descriptions — single-sourced
+ * here so it can't drift out of sync with {@link isProtectedBranch}'s
+ * `PROTECTED_EXACT` / `PROTECTED_PATTERN` across the tools that mention it.
+ */
+export const PROTECTED_BRANCH_NAMES_TEXT =
+  "main/master/dev/develop/stable/trunk/prod/production/head/release*/hotfix*";
+
 const PROTECTED_PATTERN = /^(release|hotfix)[-/].+$/i;
 
 /** True when a branch name is on the protected list and must not be auto-deleted. */

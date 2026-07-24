@@ -3,7 +3,13 @@ import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, spawnGitAsync } from "./git.js";
-import { getRefSha, isProtectedBranch, isSafeGitCommitIsh, isSafeGitRefToken } from "./git-refs.js";
+import {
+  getRefSha,
+  isProtectedBranch,
+  isSafeGitCommitIsh,
+  isSafeGitRefToken,
+  PROTECTED_BRANCH_NAMES_TEXT,
+} from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -49,7 +55,7 @@ export function registerGitTagTool(server: FastMCP): void {
     description:
       "Create or delete git tags. Create annotated tags (with message) or lightweight tags (ref only). " +
       "Returns tag name, type, and SHA. Refuses protected names " +
-      "(main/master/dev/develop/stable/trunk/prod/production/release*/hotfix*) as a tag name, " +
+      `(${PROTECTED_BRANCH_NAMES_TEXT}) as a tag name, ` +
       "same guardrail as git_branch/git_worktree_add.",
     annotations: {
       title: "Git Tag",
