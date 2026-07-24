@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
@@ -8,7 +9,6 @@ import {
   createTopLevelMemo,
   GIT_SUBPROCESS_PARALLELISM,
 } from "./git.js";
-import { validateRepoPath } from "./inventory.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetParityPairs, type ParityPair } from "./presets.js";
 import { requireGitAndRootsAsync } from "./roots.js";

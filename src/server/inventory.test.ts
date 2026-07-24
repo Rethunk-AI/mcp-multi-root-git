@@ -1,8 +1,8 @@
 /**
  * Tests for src/server/inventory.ts.
  *
- * Pure helpers (makeSkipEntry, buildInventorySectionMarkdown, validateRepoPath)
- * are tested as unit tests; collectInventoryEntry is tested with real on-disk repos.
+ * Pure helpers (makeSkipEntry, buildInventorySectionMarkdown) are tested as
+ * unit tests; collectInventoryEntry is tested with real on-disk repos.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -12,7 +12,6 @@ import {
   collectInventoryEntry,
   MAX_INVENTORY_ROOTS_DEFAULT,
   makeSkipEntry,
-  validateRepoPath,
 } from "./inventory.js";
 import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harness.js";
 
@@ -128,31 +127,6 @@ describe("buildInventorySectionMarkdown", () => {
       upstreamMode: "auto",
     });
     expect(lines.join("\n")).toContain("(clean)");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// validateRepoPath
-// ---------------------------------------------------------------------------
-
-describe("validateRepoPath", () => {
-  test("valid nested path reports underTop=true", () => {
-    const dir = makeRepoWithSeed();
-    const result = validateRepoPath("packages/sub", dir);
-    expect(result.underTop).toBe(true);
-    expect(result.abs).toContain("packages/sub");
-  });
-
-  test("dotdot path that escapes the root reports underTop=false", () => {
-    const dir = makeRepoWithSeed();
-    const result = validateRepoPath("../escape", dir);
-    expect(result.underTop).toBe(false);
-  });
-
-  test("absolute path outside root reports underTop=false", () => {
-    const dir = makeRepoWithSeed();
-    const result = validateRepoPath("/tmp/outside", dir);
-    expect(result.underTop).toBe(false);
   });
 });
 

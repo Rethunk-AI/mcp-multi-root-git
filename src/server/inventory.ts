@@ -1,4 +1,3 @@
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { fetchAheadBehind, gitStatusSnapshotAsync, spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 
@@ -36,11 +35,6 @@ export type InventoryEntryJson = {
   };
   skipReason?: string;
 };
-
-export function validateRepoPath(rel: string, gitTop: string): { abs: string; underTop: boolean } {
-  const abs = resolvePathForRepo(rel, gitTop);
-  return { abs, underTop: assertRelativePathUnderTop(rel, abs, gitTop) };
-}
 
 export function makeSkipEntry(
   label: string,

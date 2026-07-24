@@ -6,7 +6,11 @@ import {
   assertRelativePathUnderTop,
   isStrictlyUnderGitTop,
   resolvePathForRepo,
+  validateRepoPath,
 } from "./repo-paths.js";
+import { makeRepoWithSeed, registerTmpCleanup } from "./server/test-harness.js";
+
+registerTmpCleanup();
 
 const created: string[] = [];
 
@@ -132,5 +136,26 @@ describe("resolvePathForRepo + assertRelativePathUnderTop", () => {
     const rel = join("subdir", "secret");
     const abs = resolvePathForRepo(rel, top);
     expect(assertRelativePathUnderTop(rel, abs, top)).toBe(false);
+  });
+});
+
+describe("validateRepoPath", () => {
+  test("valid nested path reports underTop=true", () => {
+    const dir = makeRepoWithSeed();
+    const result = validateRepoPath("packages/sub", dir);
+    expect(result.underTop).toBe(true);
+    expect(result.abs).toContain("packages/sub");
+  });
+
+  test("dotdot path that escapes the root reports underTop=false", () => {
+    const dir = makeRepoWithSeed();
+    const result = validateRepoPath("../escape", dir);
+    expect(result.underTop).toBe(false);
+  });
+
+  test("absolute path outside root reports underTop=false", () => {
+    const dir = makeRepoWithSeed();
+    const result = validateRepoPath("/tmp/outside", dir);
+    expect(result.underTop).toBe(false);
   });
 });

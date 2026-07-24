@@ -1,7 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
@@ -316,8 +316,7 @@ export function registerGitBlameTool(server: FastMCP): void {
       const top = pre.gitTop;
 
       // Path confinement
-      const resolved = resolvePathForRepo(args.path, top);
-      if (!assertRelativePathUnderTop(args.path, resolved, top)) {
+      if (!validateRepoPath(args.path, top).underTop) {
         return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
       }
 

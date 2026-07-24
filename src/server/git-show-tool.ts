@@ -1,7 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { GIT_DIFF_DEFAULT_MAX_BYTES, truncateDiffOutput } from "./git-diff-tool.js";
@@ -273,16 +273,14 @@ export function registerGitShowTool(server: FastMCP): void {
       }
 
       if (args.path !== undefined) {
-        const resolved = resolvePathForRepo(args.path, top);
-        if (!assertRelativePathUnderTop(args.path, resolved, top)) {
+        if (!validateRepoPath(args.path, top).underTop) {
           return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
         }
       }
 
       if (Array.isArray(args.paths)) {
         for (const p of args.paths) {
-          const resolved = resolvePathForRepo(p, top);
-          if (!assertRelativePathUnderTop(p, resolved, top)) {
+          if (!validateRepoPath(p, top).underTop) {
             return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: p });
           }
         }

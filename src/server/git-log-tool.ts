@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
@@ -419,8 +419,7 @@ export function registerGitLogTool(server: FastMCP): void {
         }
 
         for (const p of rawPaths) {
-          const resolved = resolvePathForRepo(p, top);
-          if (!assertRelativePathUnderTop(p, resolved, top)) {
+          if (!validateRepoPath(p, top).underTop) {
             return {
               _error: true as const,
               workspaceRoot: rootInput,

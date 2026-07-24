@@ -73,3 +73,14 @@ export function assertRelativePathUnderTop(
   }
   return isStrictlyUnderGitTop(absResolved, gitTop);
 }
+
+/**
+ * Resolve `rel` against `gitTop` and check confinement in one step — the
+ * shared path-confinement shape used across tools. Callers build their own
+ * error payload from `underTop` (error codes/wire shapes intentionally
+ * differ per tool, e.g. `path_escapes_repository` vs `path_escapes_repo`).
+ */
+export function validateRepoPath(rel: string, gitTop: string): { abs: string; underTop: boolean } {
+  const abs = resolvePathForRepo(rel, gitTop);
+  return { abs, underTop: assertRelativePathUnderTop(rel, abs, gitTop) };
+}

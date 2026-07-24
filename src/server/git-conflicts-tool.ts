@@ -4,7 +4,7 @@ import { isAbsolute, join } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { spawnGitAsync } from "./git.js";
 import { conflictPaths } from "./git-refs.js";
@@ -252,8 +252,8 @@ export function readConflictFile(
   relPath: string,
   maxLinesPerFile: number,
 ): ConflictFileJson {
-  const resolved = resolvePathForRepo(relPath, gitTop);
-  if (!assertRelativePathUnderTop(relPath, resolved, gitTop)) {
+  const { abs: resolved, underTop } = validateRepoPath(relPath, gitTop);
+  if (!underTop) {
     return { path: relPath, error: ERROR_CODES.PATH_ESCAPES_REPO };
   }
 

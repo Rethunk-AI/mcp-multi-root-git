@@ -5,7 +5,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
-import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
+import { resolvePathForRepo, validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, parseGitSubmodulePaths, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
@@ -518,8 +518,7 @@ function validateEntryPaths(
   // --- Validate all paths are under the git toplevel ---
   const escapedPaths: string[] = [];
   for (const path of filePaths) {
-    const abs = resolvePathForRepo(path, gitTop);
-    if (!assertRelativePathUnderTop(path, abs, gitTop)) {
+    if (!validateRepoPath(path, gitTop).underTop) {
       escapedPaths.push(path);
     }
   }

@@ -1,6 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
+import { validateRepoPath } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
@@ -17,7 +18,6 @@ import {
   MAX_BRANCH_STATUS_LINES_DEFAULT,
   MAX_INVENTORY_ROOTS_DEFAULT,
   makeSkipEntry,
-  validateRepoPath,
 } from "./inventory.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetNestedRoots } from "./presets.js";
