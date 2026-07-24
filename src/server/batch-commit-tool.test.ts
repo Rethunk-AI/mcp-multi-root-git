@@ -983,6 +983,39 @@ describe("batch_commit pathspec isolation and stage rollback", () => {
     expect(restoredBlob).toBe(preStagedBlob);
   });
 
+  test("canonicalizes non-canonical caller paths so they aren't dropped as unrelated staged", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "canon.ts"), "export const a = 1;\n");
+    writeFileSync(join(dir, "noncanon.ts"), "export const b = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: add both files",
+          files: ["canon.ts", "./noncanon.ts"],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    // Both files must be in the commit — "./noncanon.ts" must never be
+    // silently excluded while the tool still reports ok:true.
+    const show = await spawnGitAsync(dir, ["log", "-1", "--name-only", "--pretty=format:"]);
+    expect(show.stdout).toContain("canon.ts");
+    expect(show.stdout).toContain("noncanon.ts");
+
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout.trim()).toBe("");
+  });
+
   test("rejects '.' whole-tree pathspec", async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, "base.ts"), "const b = 0;\n");

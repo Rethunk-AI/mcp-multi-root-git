@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
@@ -91,6 +91,20 @@ function isWholeTreeOrDirectoryPathspec(path: string, gitTop: string): boolean {
     // ignore stat errors — treat as non-directory
   }
   return false;
+}
+
+/**
+ * Canonicalizes a caller-supplied path to the same form `git diff --name-only`
+ * reports: relative to the git toplevel, no leading `./`, forward slashes.
+ * Callers may pass `./x.ts` or other non-canonical relative forms; comparing
+ * those literally against git's own output would misclassify this entry's
+ * own staged file as an unrelated pre-staged path (see `unmatched` check at
+ * the commit call site). Assumes `path` has already been validated as
+ * non-absolute and confined under `gitTop`.
+ */
+function toGitCanonicalPath(path: string, gitTop: string): string {
+  const abs = resolvePathForRepo(path, gitTop);
+  return relative(gitTop, abs).split(sep).join("/");
 }
 
 /**
@@ -542,7 +556,30 @@ export function registerBatchCommitTool(server: FastMCP): void {
               .map((s) => s.trim())
               .filter(Boolean)
           : [];
-        const entryPathSet = new Set(filePaths);
+        // Canonicalize this entry's paths before comparing against git's own
+        // --name-only output — otherwise a non-canonical caller path (e.g.
+        // "./x.ts") would fail to match its own staged name, get classified as
+        // "unrelated pre-staged", and get silently excluded from the commit
+        // while the tool still returns ok:true.
+        const canonicalPaths = filePaths.map((p) => toGitCanonicalPath(p, gitTop));
+        const stagedNameSet = new Set(stagedNames);
+        const unmatchedCanonicalPaths = canonicalPaths.filter((p) => !stagedNameSet.has(p));
+        if (unmatchedCanonicalPaths.length > 0) {
+          // A path we intended to stage for this entry didn't show up under
+          // its canonical name — never silently drop it; restore and error.
+          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
+          results.push({
+            index: i,
+            ok: false,
+            message: entry.message,
+            files: filePaths,
+            error: ERROR_CODES.INVALID_PATHS,
+            detail: `staged path could not be matched to git's canonical name: ${unmatchedCanonicalPaths.join(", ")}`,
+          });
+          break;
+        }
+
+        const entryPathSet = new Set(canonicalPaths);
         const unrelatedStaged = stagedNames.filter((p) => !entryPathSet.has(p));
 
         let indexSnap: string | undefined;
