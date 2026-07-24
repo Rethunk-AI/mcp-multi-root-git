@@ -28,7 +28,7 @@ Full install, prerequisites, and MCP client wiring: [HUMANS.md](HUMANS.md) and [
 - **Structured JSON** — minified tool payloads (format version 6); optional fields omitted when empty
 - **Presets** — `.rethunk/git-mcp-presets.json` at the git toplevel for nested roots and parity pairs
 - **Read and write git** — diffs, blame, conflicts, stash, `batch_commit`, push, merge, cherry-pick, revert, branches, tags, and worktrees (writes take a single `workspaceRoot`)
-- **Deliberately small surface** — 24 tools; every tool must clear the [inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria) (enforced policy on writes, fan-out call compression, or large-output compression)
+- **Deliberately small surface** — 25 tools; every tool must clear the [inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria) (enforced policy on writes, fan-out call compression, or large-output compression)
 - **Published schemas** — `schemas/index.json` and per-tool JSON Schema files for offline validation
 
 ## Documentation

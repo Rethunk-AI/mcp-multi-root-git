@@ -17,9 +17,9 @@ When reporting a vulnerability, please include:
 
 ## Scope & Risk Profile
 
-`mcp-multi-root-git` is an MCP **stdio** server that exposes **24** git tools to LLMs. It runs with the OS user's permissions and can read and modify local repositories the operator (or client) can reach.
+`mcp-multi-root-git` is an MCP **stdio** server that exposes **25** git tools to LLMs. It runs with the OS user's permissions and can read and modify local repositories the operator (or client) can reach.
 
-### Tool surface (24)
+### Tool surface (25)
 
 **Fan-out read** (`root`: one path, path list, or `"*"`):
 
@@ -51,9 +51,10 @@ When reporting a vulnerability, please include:
 | `git_merge` | Merges sources into a destination; optional cleanup skips protected names |
 | `git_cherry_pick` | Applies commits onto a destination; same protected-name cleanup rules; `onConflict: "pause"` leaves conflict + sequencer state in place instead of aborting; refuses a second call while one is already in progress |
 | `git_cherry_pick_continue` | Resumes (`--continue`) or rolls back (`--abort`) a cherry-pick left in progress; stateless, reads `CHERRY_PICK_HEAD` live |
-| `git_reset_soft` | Moves branch tip (`--soft`); history rewrite of the tip (objects kept in index) |
-| `git_revert` | New inverse commit(s); **does not** rewrite history |
-| `git_tag` | Create / delete tags |
+| `git_reset_soft` | Moves branch tip (`--soft`); history rewrite of the tip (objects kept in index); requires `ref` to be an ancestor of HEAD unless `force: true` |
+| `git_revert` | New inverse commit(s); **does not** rewrite history; `onConflict: "pause"` leaves conflict + sequencer state in place instead of aborting |
+| `git_revert_continue` | Resumes (`--continue`) or rolls back (`--abort`) a revert left in progress; stateless, reads `REVERT_HEAD` live |
+| `git_tag` | Create / delete tags (protected names refused in both roles) |
 | `git_branch` | Create / delete / rename local branches (protected names refused) |
 | `git_worktree_add` | Adds a linked worktree (protected branch names refused) |
 | `git_worktree_remove` | Removes a linked worktree (not the main worktree) |
@@ -128,7 +129,7 @@ Read-only tools can surface secrets already present in tracked history or the wo
 
 ### Deployment hardening: `RETHUNK_GIT_TOOLS`
 
-Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 24 tools register. Details: [docs/install.md](docs/install.md).
+Set `RETHUNK_GIT_TOOLS` to a comma-separated allowlist of tool names to shrink the registered surface (for example omit all mutators in a read-only deployment). When unset, all 25 tools register. Details: [docs/install.md](docs/install.md).
 
 ## Security Practices (operator)
 

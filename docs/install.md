@@ -90,10 +90,10 @@ Omit any `cwd` / `workingDirectory` field unless your client requires it for unr
 ## Environment variables
 
 | Variable | Default | Purpose |
-|----------|---------|---------|
+| ---------- | --------- | --------- |
 | `GIT_SUBPROCESS_PARALLELISM` | `4` | Max concurrent git subprocesses for `git_inventory` rows, `git_status` submodule rows, and multi-root fan-out in `git_log` and `git_grep`. Valid range: 1 to 2×CPU count (auto-clamped). Increase on high-core machines to accelerate large fleet scans; decrease if system resources are constrained. |
 | `GIT_SUBPROCESS_TIMEOUT_MS` | `120000` | Per-subprocess timeout in milliseconds for async git calls. On expiry the child receives SIGTERM and the call fails. Set `0` (or negative) to disable timeout for intentionally unbounded operations. |
-| `RETHUNK_GIT_TOOLS` | _(unset)_ | Comma-separated list of tool names to register. When unset or empty, all 24 tools are registered (default). When set, only the listed tools are exposed — unknown names are warned and ignored. If every name is unknown, **zero** tools are registered and a loud warning is emitted (the restriction is honored literally). The presets resource (`rethunk-git://presets`) is always registered regardless of this setting. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. Full tool-name list: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep`, `git_diff_summary`, `git_diff`, `git_show`, `git_conflicts`, `git_blame`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_cherry_pick_continue`, `git_reset_soft`, `git_revert`, `git_tag`, `git_branch`, `git_worktree_add`, `git_worktree_remove`, `git_stash_apply`, `git_stash_push`. |
+| `RETHUNK_GIT_TOOLS` | *(unset)* | Comma-separated list of tool names to register. When unset or empty, all 25 tools are registered (default). When set, only the listed tools are exposed — unknown names are warned and ignored. If every name is unknown, **zero** tools are registered and a loud warning is emitted (the restriction is honored literally). The presets resource (`rethunk-git://presets`) is always registered regardless of this setting. Example: `RETHUNK_GIT_TOOLS=git_status,git_diff_summary,git_diff,git_log,batch_commit,git_push`. Full tool-name list: `git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep`, `git_diff_summary`, `git_diff`, `git_show`, `git_conflicts`, `git_blame`, `batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, `git_cherry_pick_continue`, `git_reset_soft`, `git_revert`, `git_revert_continue`, `git_tag`, `git_branch`, `git_worktree_add`, `git_worktree_remove`, `git_stash_apply`, `git_stash_push`. |
 
 Set these in the environment where the MCP client launches the server (e.g. in your shell, in the MCP client config as `env`, or in a startup script).
 
@@ -169,7 +169,7 @@ Use **MCP: List Servers** / **MCP: Reset Cached Tools** if tools do not update a
 Config file (create if missing):
 
 | OS | Path |
-|----|------|
+| ---- | ------ |
 | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
@@ -257,7 +257,7 @@ For contributors working inside a clone of [mcp-multi-root-git](https://github.c
 ## Troubleshooting
 
 | Issue | What to try |
-|-------|-------------|
+| ------- | ------------- |
 | `git_not_found` | Install Git and ensure it is on `PATH` in the environment that launches the MCP server. |
 | Tools missing / stale | Restart the MCP host or use its “reload MCP / reset tools” action; in VS Code try **MCP: Reset Cached Tools**. |
 | `npx` / `bun` not found | Install Node ≥ 22 or Bun; use full paths to the executable in config if `PATH` is minimal. |
