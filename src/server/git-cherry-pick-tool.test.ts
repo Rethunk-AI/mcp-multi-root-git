@@ -9,7 +9,9 @@ import { join } from "node:path";
 
 import {
   abortCherryPick,
+  branchHasUnmergedMergeCommits,
   MAX_CHERRY_PICK_COMMITS,
+  maybeDeleteCherryPickedBranch,
   registerGitCherryPickContinueTool,
   registerGitCherryPickTool,
 } from "./git-cherry-pick-tool.js";
@@ -260,12 +262,14 @@ describe("git_cherry_pick conflicts", () => {
     const parsed = JSON.parse(text) as {
       ok: boolean;
       applied: number;
-      conflict?: { stage: string; paths: string[] };
+      conflict?: { stage: string; paths: string[]; error?: string };
     };
     expect(parsed.ok).toBe(false);
     expect(parsed.applied).toBe(0);
     expect(parsed.conflict?.stage).toBe("cherry-pick");
     expect(parsed.conflict?.paths).toContain("shared.txt");
+    // Conflict object carries an error code, mirroring git_merge's per-source `merge_conflicts`.
+    expect(parsed.conflict?.error).toBe("cherry_pick_conflicts");
     // Repo state is clean (cherry-pick aborted).
     const status = gitCmd(dir, "status", "--porcelain").trim();
     expect(status).toBe("");
@@ -422,6 +426,52 @@ describe("git_cherry_pick patch-id branch deletion", () => {
     const branches = gitCmd(dir, "branch");
     expect(branches).toContain("feature/strict");
   });
+
+  test("branchHasUnmergedMergeCommits: true for a branch with its own unique merge commit", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "topic");
+    writeFileSync(join(dir, "topic.txt"), "topic\n");
+    gitCmd(dir, "add", "topic.txt");
+    gitCmd(dir, "commit", "-m", "feat: topic");
+    gitCmd(dir, "checkout", "main");
+
+    gitCmd(dir, "checkout", "-b", "feature/mergey");
+    writeFileSync(join(dir, "f.txt"), "f\n");
+    gitCmd(dir, "add", "f.txt");
+    gitCmd(dir, "commit", "-m", "feat: f");
+    // Merge topic into feature/mergey — a merge commit unique to feature/mergey,
+    // not reachable from main.
+    gitCmd(dir, "merge", "--no-ff", "-m", "merge: topic into feature/mergey", "topic");
+
+    expect(await branchHasUnmergedMergeCommits(dir, "feature/mergey", "main")).toBe(true);
+    // topic itself has no merge commits.
+    expect(await branchHasUnmergedMergeCommits(dir, "topic", "main")).toBe(false);
+  });
+
+  test("maybeDeleteCherryPickedBranch falls back to strict -d semantics when the branch has an unverified merge commit", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "topic2");
+    writeFileSync(join(dir, "topic2.txt"), "topic2\n");
+    gitCmd(dir, "add", "topic2.txt");
+    gitCmd(dir, "commit", "-m", "feat: topic2");
+    gitCmd(dir, "checkout", "main");
+
+    gitCmd(dir, "checkout", "-b", "feature/mergey2");
+    writeFileSync(join(dir, "f2.txt"), "f2\n");
+    gitCmd(dir, "add", "f2.txt");
+    gitCmd(dir, "commit", "-m", "feat: f2");
+    gitCmd(dir, "merge", "--no-ff", "-m", "merge: topic2 into feature/mergey2", "topic2");
+    gitCmd(dir, "checkout", "main");
+
+    // Default (non-strict) patch-id path would normally force-delete with `-D`,
+    // but feature/mergey2's history includes a merge commit whose content the
+    // patch-id comparison can't verify — main hasn't actually incorporated
+    // feature/mergey2's changes at all, so the strict-fallback ref-ancestry
+    // check correctly refuses deletion.
+    const deleted = await maybeDeleteCherryPickedBranch(dir, "feature/mergey2", "main", false);
+    expect(deleted).toBe(false);
+    expect(gitCmd(dir, "branch").trim()).toContain("feature/mergey2");
+  });
 });
 
 describe("git_cherry_pick guardrails", () => {
@@ -531,6 +581,39 @@ describe("git_cherry_pick guardrails", () => {
     expect(parsed.max).toBe(MAX_CHERRY_PICK_COMMITS);
   });
 
+  test("cap is enforced BEFORE the dedupe subprocess spawning, even when every commit would dedupe away", async () => {
+    const dir = makeRepo();
+    // Build an over-cap chain, then fast-forward `onto` all the way to the tip —
+    // every commit in the range is now already-reachable from `onto`, so the
+    // *post*-dedupe pick count would be 0 (old behavior: no error, no-op success).
+    // The cap must instead be checked on the raw range size before filterAndDedupe
+    // ever spawns a `merge-base --is-ancestor` subprocess per commit.
+    const startSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+    const tree = gitCmd(dir, "rev-parse", "HEAD^{tree}").trim();
+    let tip = startSha;
+    for (let i = 0; i < MAX_CHERRY_PICK_COMMITS + 1; i++) {
+      tip = gitCmd(dir, "commit-tree", tree, "-p", tip, "-m", `feat: ${i}`).trim();
+    }
+    gitCmd(dir, "update-ref", "refs/heads/feature/many2", tip);
+    gitCmd(dir, "merge", "--ff-only", "feature/many2");
+    expect(gitCmd(dir, "rev-parse", "HEAD").trim()).toBe(tip);
+
+    const run = captureTool(registerGitCherryPickTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [`${startSha}..${tip}`],
+    });
+    const parsed = JSON.parse(text) as {
+      error: string;
+      picked: number;
+      max: number;
+    };
+    expect(parsed.error).toBe("cherry_pick_too_many_commits");
+    expect(parsed.picked).toBe(MAX_CHERRY_PICK_COMMITS + 1);
+    expect(parsed.max).toBe(MAX_CHERRY_PICK_COMMITS);
+  });
+
   test("abortCherryPick reports failure instead of claiming a clean abort", async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, "shared.txt"), "common\n");
@@ -599,13 +682,20 @@ describe("git_cherry_pick onConflict: pause", () => {
     const parsed = JSON.parse(text) as {
       ok: boolean;
       applied: number;
-      conflict?: { stage: string; paused?: boolean; commit?: string; paths: string[] };
+      conflict?: {
+        stage: string;
+        paused?: boolean;
+        commit?: string;
+        paths: string[];
+        error?: string;
+      };
     };
     expect(parsed.ok).toBe(false);
     expect(parsed.applied).toBe(0);
     expect(parsed.conflict?.paused).toBe(true);
     expect(parsed.conflict?.commit).toBe(conflictSha);
     expect(parsed.conflict?.paths).toContain("shared.txt");
+    expect(parsed.conflict?.error).toBe("cherry_pick_conflicts");
 
     // Sequencer state left in place (not aborted): CHERRY_PICK_HEAD still set, tree still dirty.
     expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();

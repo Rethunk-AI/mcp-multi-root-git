@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
@@ -47,6 +48,8 @@ interface ConflictReport {
   detail?: string;
   /** `onConflict: "pause"` left the conflict + sequencer state in place instead of aborting. */
   paused?: boolean;
+  /** `cherry_pick_conflicts` (mirrors git_merge's `merge_conflicts`), or `cherry_pick_abort_failed`. */
+  error?: string;
   abortFailed?: boolean;
   abortDetail?: string;
 }
@@ -125,6 +128,21 @@ async function resolveSource(
 }
 
 /**
+ * Count of distinct SHAs across all resolved sources — cheap set membership only,
+ * no subprocess spawning. Used to enforce `MAX_CHERRY_PICK_COMMITS` *before*
+ * `filterAndDedupe` below, which spawns one `merge-base --is-ancestor` subprocess
+ * per unique commit; checking the cap first bounds that spawning regardless of
+ * how large an unexpanded range/branch source is.
+ */
+function countUniqueCommits(resolved: ResolvedSource[]): number {
+  const seen = new Set<string>();
+  for (const src of resolved) {
+    for (const sha of src.commits) seen.add(sha);
+  }
+  return seen.size;
+}
+
+/**
  * Pre-filter already-in-destination commits (they would cherry-pick to empty).
  * Also dedupe across sources while preserving first-seen order per-commit.
  */
@@ -153,6 +171,63 @@ async function filterAndDedupe(
 }
 
 // ---------------------------------------------------------------------------
+// Branch-deletion equivalence (cleanup after a successful cherry-pick)
+// ---------------------------------------------------------------------------
+
+/**
+ * True when `branch`'s history unique to it (since its merge-base with `target`)
+ * contains any merge commits. Fails closed (`true`, i.e. "cannot confirm") on any
+ * git error so the caller falls back to the strict ref-ancestry path rather than
+ * trusting an unverifiable patch-id comparison enough to force-delete.
+ */
+export async function branchHasUnmergedMergeCommits(
+  gitTop: string,
+  branch: string,
+  target: string,
+): Promise<boolean> {
+  const mb = await spawnGitAsync(gitTop, ["merge-base", branch, target]);
+  if (!mb.ok) return true;
+  const base = mb.stdout.trim();
+  const r = await spawnGitAsync(gitTop, ["rev-list", "--merges", "--count", `${base}..${branch}`]);
+  if (!r.ok) return true;
+  return (parseInt(r.stdout.trim(), 10) || 0) > 0;
+}
+
+/**
+ * Delete a cherry-picked branch-kind source after success.
+ *
+ * `strict: true` — strict ref-ancestry (`git branch -d`), same semantics as `git_merge`'s cleanup.
+ *
+ * `strict: false` (default) — patch-id content equivalence (`isContentEquivalentlyMergedInto`),
+ * then force-delete with `-D` since cherry-picked history never satisfies `-d`'s ref-ancestry
+ * check. That patch-id comparison silently ignores merge commits (plain `git diff-tree` shows no
+ * diff for a merge without `-m`/`-c`), so it cannot vouch for any unique content a merge commit
+ * introduced (e.g. via conflict resolution). When `branch`'s own history since its merge-base
+ * with `onto` contains merge commits, fall back to the strict `-d` path instead of trusting that
+ * incomplete check enough to force-delete.
+ */
+export async function maybeDeleteCherryPickedBranch(
+  gitTop: string,
+  branch: string,
+  onto: string,
+  strict: boolean,
+): Promise<boolean> {
+  const useStrict = strict || (await branchHasUnmergedMergeCommits(gitTop, branch, onto));
+  if (useStrict) {
+    const merged = await isFullyMergedInto(gitTop, branch, onto);
+    if (!merged) return false;
+    const r = await spawnGitAsync(gitTop, ["branch", "-d", branch]);
+    return r.ok;
+  }
+  const merged = await isContentEquivalentlyMergedInto(gitTop, branch, onto);
+  if (!merged) return false;
+  // -D required: git branch -d checks ref ancestry (fails after cherry-pick),
+  // but we've already verified content equivalence via patch-id.
+  const r = await spawnGitAsync(gitTop, ["branch", "-D", branch]);
+  return r.ok;
+}
+
+// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -163,8 +238,10 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       "Cherry-pick commits from one or more sources onto a destination. Sources: SHAs, `A..B` ranges, " +
       "or branch names (expanded to `onto..<branch>`, oldest-first). Already-reachable commits skipped. " +
       `Hard-capped at ${MAX_CHERRY_PICK_COMMITS} commits per call (after dedupe). ` +
-      "Refuses on dirty tree; stops on first conflict. Optional flags delete source branches/worktrees " +
-      "after success using patch-id equivalence (set `strictMergedRefEquality: true` for strict ancestry). " +
+      "Refuses on dirty tree or an in-progress cherry-pick; stops on first conflict. Optional flags " +
+      "delete source branches/worktrees after success using patch-id equivalence (set " +
+      "`strictMergedRefEquality: true` for strict ancestry) — automatically falls back to strict " +
+      "ancestry when a source branch's own history includes merge commits patch-id can't verify. " +
       "Protected names always skipped.",
     annotations: {
       readOnlyHint: false,
@@ -275,16 +352,22 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         resolved.push(r);
       }
 
-      // --- Dedupe + skip already-present ---
-      const { picks, perSourceKept } = await filterAndDedupe(gitTop, onto, resolved);
-
-      if (picks.length > MAX_CHERRY_PICK_COMMITS) {
+      // --- Cap check BEFORE dedupe: filterAndDedupe spawns one `merge-base
+      // --is-ancestor` subprocess per unique resolved commit, so the cap must be
+      // enforced on the raw (pre-dedupe) count here — otherwise a huge range/branch
+      // source can force an unbounded number of sequential subprocess spawns before
+      // the cap is ever checked. ---
+      const rawUniqueCount = countUniqueCommits(resolved);
+      if (rawUniqueCount > MAX_CHERRY_PICK_COMMITS) {
         return jsonRespond({
           error: ERROR_CODES.CHERRY_PICK_TOO_MANY_COMMITS,
-          picked: picks.length,
+          picked: rawUniqueCount,
           max: MAX_CHERRY_PICK_COMMITS,
         });
       }
+
+      // --- Dedupe + skip already-present ---
+      const { picks, perSourceKept } = await filterAndDedupe(gitTop, onto, resolved);
 
       // --- Apply cherry-pick (single atomic call) ---
       // `--empty=drop` silently drops commits that would produce no change against the
@@ -310,6 +393,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               ...spreadDefined("commit", failedSha),
               paths,
               detail: (r.stderr || r.stdout).trim(),
+              error: ERROR_CODES.CHERRY_PICK_CONFLICTS,
             };
           } else {
             const abort = await abortCherryPick(gitTop);
@@ -318,6 +402,9 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               ...spreadDefined("commit", failedSha),
               paths,
               detail: (r.stderr || r.stdout).trim(),
+              error: abort.ok
+                ? ERROR_CODES.CHERRY_PICK_CONFLICTS
+                : ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
               ...spreadWhen(!abort.ok, {
                 abortFailed: true,
                 ...spreadDefined("abortDetail", abort.detail),
@@ -344,7 +431,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
           if (args.deleteMergedWorktrees) {
             const path = await worktreeForBranch(gitTop, src.raw);
             if (path) {
-              const tail = path.split("/").pop() ?? "";
+              const tail = basename(path);
               if (!isProtectedBranch(tail)) {
                 const r = await spawnGitAsync(gitTop, ["worktree", "remove", path]);
                 if (r.ok) src.worktreeRemoved = path;
@@ -353,21 +440,13 @@ export function registerGitCherryPickTool(server: FastMCP): void {
           }
 
           if (args.deleteMergedBranches) {
-            if (args.strictMergedRefEquality) {
-              const merged = await isFullyMergedInto(gitTop, src.raw, onto);
-              if (merged) {
-                const r = await spawnGitAsync(gitTop, ["branch", "-d", src.raw]);
-                if (r.ok) src.branchDeleted = true;
-              }
-            } else {
-              const merged = await isContentEquivalentlyMergedInto(gitTop, src.raw, onto);
-              if (merged) {
-                // -D required: git branch -d checks ref ancestry (fails after cherry-pick),
-                // but we've already verified content equivalence via patch-id.
-                const r = await spawnGitAsync(gitTop, ["branch", "-D", src.raw]);
-                if (r.ok) src.branchDeleted = true;
-              }
-            }
+            const deleted = await maybeDeleteCherryPickedBranch(
+              gitTop,
+              src.raw,
+              onto,
+              args.strictMergedRefEquality ?? false,
+            );
+            if (deleted) src.branchDeleted = true;
           }
         }
       }
@@ -397,6 +476,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               ...spreadDefined("commit", conflict?.commit),
               paths: conflict?.paths ?? [],
               ...spreadDefined("detail", conflict?.detail),
+              ...spreadDefined("error", conflict?.error),
               ...spreadWhen(conflict?.abortFailed === true, {
                 abortFailed: true,
                 ...spreadDefined("abortDetail", conflict?.abortDetail),
@@ -436,9 +516,9 @@ export function registerGitCherryPickTool(server: FastMCP): void {
             "  Paused: cherry-pick left in progress. Resolve the conflict, then call `git_cherry_pick_continue`.",
           );
         }
-        if (conflict.abortFailed) {
+        if (conflict.error) {
           lines.push(
-            `  Error: ${ERROR_CODES.CHERRY_PICK_ABORT_FAILED}${conflict.abortDetail ? ` — ${conflict.abortDetail}` : ""}`,
+            `  Error: ${conflict.error}${conflict.abortDetail ? ` — ${conflict.abortDetail}` : ""}`,
           );
         }
       }
