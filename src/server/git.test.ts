@@ -80,6 +80,35 @@ describe("isSafeGitUpstreamToken", () => {
   test("accepts exactly 256 chars", () => {
     expect(isSafeGitUpstreamToken("a".repeat(256))).toBe(true);
   });
+
+  test("accepts the @{u} upstream shorthand", () => {
+    expect(isSafeGitUpstreamToken("@{u}")).toBe(true);
+  });
+
+  test("rejects leading plus (force-update refspec)", () => {
+    expect(isSafeGitUpstreamToken("+origin")).toBe(false);
+  });
+
+  test("rejects trailing slash", () => {
+    expect(isSafeGitUpstreamToken("origin/")).toBe(false);
+  });
+
+  test("rejects .lock suffix", () => {
+    expect(isSafeGitUpstreamToken("origin.lock")).toBe(false);
+  });
+
+  test("rejects trailing dot", () => {
+    expect(isSafeGitUpstreamToken("origin.")).toBe(false);
+  });
+
+  test("rejects doubled slash", () => {
+    expect(isSafeGitUpstreamToken("origin//main")).toBe(false);
+  });
+
+  test("rejects @{ ref-log syntax other than the @{u} shorthand", () => {
+    expect(isSafeGitUpstreamToken("origin@{1}")).toBe(false);
+    expect(isSafeGitUpstreamToken("HEAD@{upstream}")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

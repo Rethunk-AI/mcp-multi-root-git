@@ -11,6 +11,9 @@ import { cpus } from "node:os";
 import { join } from "node:path";
 
 import { ERROR_CODES } from "./error-codes.js";
+// Function-body-level usage only — a benign circular import edge with
+// git-refs.ts (which does not import from this module at module-eval time).
+import { isSafeGitRefToken } from "./git-refs.js";
 
 /**
  * Parallel git subprocesses for inventory rows and git_status submodule rows.
@@ -222,12 +225,18 @@ export function hasGitMetadata(dir: string): boolean {
   return existsSync(join(dir, ".git"));
 }
 
-/** Conservative checks for remote/branch strings passed into git rev-parse / rev-list argv. */
+/**
+ * Conservative checks for remote/branch strings passed into git rev-parse /
+ * rev-list argv. Delegates to isSafeGitRefToken's full guard set (leading
+ * `-`/`+`, `..`, `.lock` suffix, `//`, `@{`, trailing `/`/`.`, whitespace,
+ * shell metacharacters), plus one upstream-specific allowance: the literal
+ * `@{u}` shorthand (a trusted constant passed by internal callers, not
+ * user-controlled input).
+ */
 export function isSafeGitUpstreamToken(s: string): boolean {
   const t = s.trim();
-  if (t.length === 0 || t.length > 256) return false;
-  if (t.includes("..")) return false;
-  return /^(?!-)[A-Za-z0-9_./+-]+$/.test(t);
+  if (t === "@{u}") return true;
+  return isSafeGitRefToken(t);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +508,11 @@ export async function fetchAheadBehind(
   absPath: string,
   upstreamSpec: string,
 ): Promise<{ ahead: string | null; behind: string | null }> {
+  // Fail closed on its own — do not rely solely on callers to pre-validate
+  // upstreamSpec before it is interpolated into rev-list range argv.
+  if (!isSafeGitUpstreamToken(upstreamSpec)) {
+    return { ahead: null, behind: null };
+  }
   const aheadR = await spawnGitAsync(absPath, ["rev-list", "--count", `${upstreamSpec}..HEAD`]);
   const behindR = await spawnGitAsync(absPath, ["rev-list", "--count", `HEAD..${upstreamSpec}`]);
   return {
