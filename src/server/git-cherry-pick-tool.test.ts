@@ -614,40 +614,47 @@ describe("git_cherry_pick guardrails", () => {
     expect(parsed.max).toBe(MAX_CHERRY_PICK_COMMITS);
   });
 
-  test("abortCherryPick reports failure instead of claiming a clean abort", async () => {
-    const dir = makeRepo();
-    writeFileSync(join(dir, "shared.txt"), "common\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "chore: shared");
+  test.skipIf(process.getuid?.() === 0)(
+    "abortCherryPick reports failure instead of claiming a clean abort",
+    async () => {
+      const dir = makeRepo();
+      writeFileSync(join(dir, "shared.txt"), "common\n");
+      gitCmd(dir, "add", "shared.txt");
+      gitCmd(dir, "commit", "-m", "chore: shared");
 
-    gitCmd(dir, "checkout", "-b", "feature/a");
-    writeFileSync(join(dir, "shared.txt"), "alpha\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "feat: alpha");
-    const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
-    gitCmd(dir, "checkout", "main");
+      gitCmd(dir, "checkout", "-b", "feature/a");
+      writeFileSync(join(dir, "shared.txt"), "alpha\n");
+      gitCmd(dir, "add", "shared.txt");
+      gitCmd(dir, "commit", "-m", "feat: alpha");
+      const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
+      gitCmd(dir, "checkout", "main");
 
-    writeFileSync(join(dir, "shared.txt"), "beta\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "chore: beta");
+      writeFileSync(join(dir, "shared.txt"), "beta\n");
+      gitCmd(dir, "add", "shared.txt");
+      gitCmd(dir, "commit", "-m", "chore: beta");
 
-    expect(() => gitCmd(dir, "cherry-pick", sha)).toThrow();
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
+      expect(() => gitCmd(dir, "cherry-pick", sha)).toThrow();
+      expect(
+        gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim(),
+      ).toBeTruthy();
 
-    const gitDir = join(dir, ".git");
-    execFileSync("chmod", ["a-w", gitDir]);
-    try {
-      const result = await abortCherryPick(dir);
-      expect(result.ok).toBe(false);
-      expect(result.detail).toBeTruthy();
-    } finally {
-      execFileSync("chmod", ["u+w", gitDir]);
-    }
+      const gitDir = join(dir, ".git");
+      execFileSync("chmod", ["a-w", gitDir]);
+      try {
+        const result = await abortCherryPick(dir);
+        expect(result.ok).toBe(false);
+        expect(result.detail).toBeTruthy();
+      } finally {
+        execFileSync("chmod", ["u+w", gitDir]);
+      }
 
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim()).toBeTruthy();
-    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
-    gitCmd(dir, "cherry-pick", "--abort");
-  });
+      expect(
+        gitCmd(dir, "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD").trim(),
+      ).toBeTruthy();
+      expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+      gitCmd(dir, "cherry-pick", "--abort");
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { captureToolDefinitions } from "./test-harness.js";
+import { captureToolDefinitions, withEnvVar } from "./test-harness.js";
 import {
   ALL_PARAMETER_SCHEMA_TOOLS,
   captureToolParameterSchemas,
@@ -16,20 +16,12 @@ import { registerRethunkGitTools } from "./tools.js";
 
 describe("tool parameter schemas", () => {
   test("capture keys match registerRethunkGitTools and category union", () => {
-    const prev = process.env.RETHUNK_GIT_TOOLS;
-    delete process.env.RETHUNK_GIT_TOOLS;
-    let registeredNames: string[];
-    try {
+    let registeredNames: string[] = [];
+    withEnvVar("RETHUNK_GIT_TOOLS", undefined, () => {
       registeredNames = captureToolDefinitions((server) => {
         registerRethunkGitTools(server);
       }).map((t) => t.name);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.RETHUNK_GIT_TOOLS;
-      } else {
-        process.env.RETHUNK_GIT_TOOLS = prev;
-      }
-    }
+    });
 
     const schemas = captureToolParameterSchemas();
     const captureKeys = Object.keys(schemas);

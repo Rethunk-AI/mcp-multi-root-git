@@ -127,47 +127,50 @@ describe("git_revert conflicts", () => {
     expect(headAfter).toBeTruthy();
   });
 
-  test("abortRevert reports failure instead of claiming a clean abort", async () => {
-    // Exercises the abortRevert helper directly (rather than through the full
-    // tool) because forcing `git revert --abort` itself to fail requires
-    // making `.git` unwritable *after* the conflict already exists — a state
-    // the full execute() path can't be paused in mid-flight from a test
-    // without mocking beyond this file's style.
-    const dir = makeRepo();
-    writeFileSync(join(dir, "seed.txt"), "alpha\n");
-    gitCmd(dir, "add", "seed.txt");
-    gitCmd(dir, "commit", "-m", "chore: alpha");
-    const alphaSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+  test.skipIf(process.getuid?.() === 0)(
+    "abortRevert reports failure instead of claiming a clean abort",
+    async () => {
+      // Exercises the abortRevert helper directly (rather than through the full
+      // tool) because forcing `git revert --abort` itself to fail requires
+      // making `.git` unwritable *after* the conflict already exists — a state
+      // the full execute() path can't be paused in mid-flight from a test
+      // without mocking beyond this file's style.
+      const dir = makeRepo();
+      writeFileSync(join(dir, "seed.txt"), "alpha\n");
+      gitCmd(dir, "add", "seed.txt");
+      gitCmd(dir, "commit", "-m", "chore: alpha");
+      const alphaSha = gitCmd(dir, "rev-parse", "HEAD").trim();
 
-    writeFileSync(join(dir, "seed.txt"), "beta\n");
-    gitCmd(dir, "add", "seed.txt");
-    gitCmd(dir, "commit", "-m", "chore: beta");
+      writeFileSync(join(dir, "seed.txt"), "beta\n");
+      gitCmd(dir, "add", "seed.txt");
+      gitCmd(dir, "commit", "-m", "chore: beta");
 
-    // Produce a real conflicted, mid-revert state (same as the "conflicts" test above).
-    expect(() => gitCmd(dir, "revert", "--no-edit", alphaSha)).toThrow();
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
+      // Produce a real conflicted, mid-revert state (same as the "conflicts" test above).
+      expect(() => gitCmd(dir, "revert", "--no-edit", alphaSha)).toThrow();
+      expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
 
-    // Now make .git read-only so `git revert --abort` cannot create index.lock
-    // and fails with a non-zero exit — simulating an abort that itself fails.
-    const gitDir = join(dir, ".git");
-    execFileSync("chmod", ["a-w", gitDir]);
-    try {
-      const result = await abortRevert(dir);
-      expect(result.ok).toBe(false);
-      expect(result.detail).toBeTruthy();
-    } finally {
-      // Restore permissions so cleanupTmpPaths (rmSync) can remove the directory tree.
-      execFileSync("chmod", ["u+w", gitDir]);
-    }
+      // Now make .git read-only so `git revert --abort` cannot create index.lock
+      // and fails with a non-zero exit — simulating an abort that itself fails.
+      const gitDir = join(dir, ".git");
+      execFileSync("chmod", ["a-w", gitDir]);
+      try {
+        const result = await abortRevert(dir);
+        expect(result.ok).toBe(false);
+        expect(result.detail).toBeTruthy();
+      } finally {
+        // Restore permissions so cleanupTmpPaths (rmSync) can remove the directory tree.
+        execFileSync("chmod", ["u+w", gitDir]);
+      }
 
-    // The failed abort must not have silently "succeeded" — tree is still mid-revert.
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
-    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+      // The failed abort must not have silently "succeeded" — tree is still mid-revert.
+      expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
+      expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
 
-    // Clean up now that .git is writable again so the rest of the suite (and
-    // cleanupTmpPaths) don't trip over a leftover mid-revert state.
-    gitCmd(dir, "revert", "--abort");
-  });
+      // Clean up now that .git is writable again so the rest of the suite (and
+      // cleanupTmpPaths) don't trip over a leftover mid-revert state.
+      gitCmd(dir, "revert", "--abort");
+    },
+  );
 });
 
 describe("git_revert guardrails", () => {

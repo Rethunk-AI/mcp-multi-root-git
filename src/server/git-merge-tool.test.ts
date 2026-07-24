@@ -560,57 +560,63 @@ describe("git_merge guardrails", () => {
     expect(parsed.error).toBe("not_a_git_repository");
   });
 
-  test("abortMerge reports failure instead of claiming a clean abort", async () => {
-    const dir = makeRepo();
-    gitCmd(dir, "checkout", "-b", "feature/a");
-    writeFileSync(join(dir, "shared.txt"), "alpha\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "feat: alpha");
-    gitCmd(dir, "checkout", "main");
-    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
+  test.skipIf(process.getuid?.() === 0)(
+    "abortMerge reports failure instead of claiming a clean abort",
+    async () => {
+      const dir = makeRepo();
+      gitCmd(dir, "checkout", "-b", "feature/a");
+      writeFileSync(join(dir, "shared.txt"), "alpha\n");
+      gitCmd(dir, "add", "shared.txt");
+      gitCmd(dir, "commit", "-m", "feat: alpha");
+      gitCmd(dir, "checkout", "main");
+      addCommit(dir, "shared.txt", "beta\n", "chore: beta");
 
-    // Produce a real mid-merge conflict state.
-    expect(() => gitCmd(dir, "merge", "--no-ff", "--no-edit", "feature/a")).toThrow();
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
+      // Produce a real mid-merge conflict state.
+      expect(() => gitCmd(dir, "merge", "--no-ff", "--no-edit", "feature/a")).toThrow();
+      expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
 
-    const gitDir = join(dir, ".git");
-    execFileSync("chmod", ["a-w", gitDir]);
-    try {
-      const result = await abortMerge(dir);
-      expect(result.ok).toBe(false);
-      expect(result.detail).toBeTruthy();
-    } finally {
-      execFileSync("chmod", ["u+w", gitDir]);
-    }
+      const gitDir = join(dir, ".git");
+      execFileSync("chmod", ["a-w", gitDir]);
+      try {
+        const result = await abortMerge(dir);
+        expect(result.ok).toBe(false);
+        expect(result.detail).toBeTruthy();
+      } finally {
+        execFileSync("chmod", ["u+w", gitDir]);
+      }
 
-    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
-    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
-    gitCmd(dir, "merge", "--abort");
-  });
+      expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "MERGE_HEAD").trim()).toBeTruthy();
+      expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+      gitCmd(dir, "merge", "--abort");
+    },
+  );
 
-  test("abortRebase reports failure instead of claiming a clean abort", async () => {
-    const dir = makeRepo();
-    gitCmd(dir, "checkout", "-b", "feature/a");
-    writeFileSync(join(dir, "shared.txt"), "alpha\n");
-    gitCmd(dir, "add", "shared.txt");
-    gitCmd(dir, "commit", "-m", "feat: alpha");
-    gitCmd(dir, "checkout", "main");
-    addCommit(dir, "shared.txt", "beta\n", "chore: beta");
+  test.skipIf(process.getuid?.() === 0)(
+    "abortRebase reports failure instead of claiming a clean abort",
+    async () => {
+      const dir = makeRepo();
+      gitCmd(dir, "checkout", "-b", "feature/a");
+      writeFileSync(join(dir, "shared.txt"), "alpha\n");
+      gitCmd(dir, "add", "shared.txt");
+      gitCmd(dir, "commit", "-m", "feat: alpha");
+      gitCmd(dir, "checkout", "main");
+      addCommit(dir, "shared.txt", "beta\n", "chore: beta");
 
-    expect(() => gitCmd(dir, "rebase", "main", "feature/a")).toThrow();
+      expect(() => gitCmd(dir, "rebase", "main", "feature/a")).toThrow();
 
-    const gitDir = join(dir, ".git");
-    execFileSync("chmod", ["a-w", gitDir]);
-    try {
-      const result = await abortRebase(dir);
-      expect(result.ok).toBe(false);
-      expect(result.detail).toBeTruthy();
-    } finally {
-      execFileSync("chmod", ["u+w", gitDir]);
-    }
+      const gitDir = join(dir, ".git");
+      execFileSync("chmod", ["a-w", gitDir]);
+      try {
+        const result = await abortRebase(dir);
+        expect(result.ok).toBe(false);
+        expect(result.detail).toBeTruthy();
+      } finally {
+        execFileSync("chmod", ["u+w", gitDir]);
+      }
 
-    const hasRebaseDir = readdirSync(gitDir).some((n: string) => n.startsWith("rebase-"));
-    expect(hasRebaseDir).toBe(true);
-    gitCmd(dir, "rebase", "--abort");
-  });
+      const hasRebaseDir = readdirSync(gitDir).some((n: string) => n.startsWith("rebase-"));
+      expect(hasRebaseDir).toBe(true);
+      gitCmd(dir, "rebase", "--abort");
+    },
+  );
 });

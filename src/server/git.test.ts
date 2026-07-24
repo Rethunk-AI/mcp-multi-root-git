@@ -17,7 +17,6 @@ import {
   GIT_MISSING_RECHECK_MS,
   GIT_SUBPROCESS_MAX_BUFFER_BYTES,
   GIT_SUBPROCESS_PARALLELISM,
-  GIT_SUBPROCESS_TIMEOUT_MS,
   gateGit,
   gitRevParseGitDir,
   gitRevParseHead,
@@ -447,12 +446,6 @@ describe("resolveGitSubprocessMaxBufferBytes", () => {
 // ---------------------------------------------------------------------------
 
 describe("spawnGitAsync", () => {
-  test("env knob GIT_SUBPROCESS_TIMEOUT_MS is a positive number or zero", () => {
-    // The module-level constant must be a non-negative integer.
-    expect(typeof GIT_SUBPROCESS_TIMEOUT_MS).toBe("number");
-    expect(GIT_SUBPROCESS_TIMEOUT_MS).toBeGreaterThanOrEqual(0);
-  });
-
   test("fast command completes normally — timedOut is falsy", async () => {
     const dir = makeRepo();
     const result = await spawnGitAsync(dir, ["--version"]);

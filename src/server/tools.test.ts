@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import type { FastMCP } from "fastmcp";
 
-import { captureToolDefinitions } from "./test-harness.js";
+import { captureToolDefinitions, withEnvVar, withStderrCapture } from "./test-harness.js";
 import { registerRethunkGitTools, selectToolRegistrars } from "./tools.js";
 
 // ---------------------------------------------------------------------------
@@ -72,36 +72,6 @@ function captureToolsAndResources(register: (server: FastMCP) => void): {
   } as unknown as FastMCP;
   register(server);
   return { tools, resources };
-}
-
-function withStderrCapture(fn: () => void): string[] {
-  const writes: string[] = [];
-  const orig = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: string | Uint8Array, encodingOrCb?: unknown, cb?: unknown) => {
-    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-    writes.push(text);
-    if (typeof encodingOrCb === "function") encodingOrCb();
-    else if (typeof cb === "function") cb();
-    return true;
-  }) as typeof process.stderr.write;
-  try {
-    fn();
-  } finally {
-    process.stderr.write = orig;
-  }
-  return writes;
-}
-
-function withEnv(value: string | undefined, fn: () => void): void {
-  const saved = process.env.RETHUNK_GIT_TOOLS;
-  try {
-    if (value === undefined) delete process.env.RETHUNK_GIT_TOOLS;
-    else process.env.RETHUNK_GIT_TOOLS = value;
-    fn();
-  } finally {
-    if (saved !== undefined) process.env.RETHUNK_GIT_TOOLS = saved;
-    else delete process.env.RETHUNK_GIT_TOOLS;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -184,35 +154,35 @@ describe("selectToolRegistrars", () => {
 
 describe("registerRethunkGitTools", () => {
   test("unset RETHUNK_GIT_TOOLS → all 25 tools registered in canonical order", () => {
-    withEnv(undefined, () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", undefined, () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);
     });
   });
 
   test('RETHUNK_GIT_TOOLS="*" → all 25 tools registered', () => {
-    withEnv("*", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "*", () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual([...ALL_TOOL_NAMES]);
     });
   });
 
   test("subset RETHUNK_GIT_TOOLS → only listed tools registered", () => {
-    withEnv("git_status,git_diff_summary,batch_commit", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "git_status,git_diff_summary,batch_commit", () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual(["git_status", "git_diff_summary", "batch_commit"]);
     });
   });
 
   test("all-unknown RETHUNK_GIT_TOOLS → zero tools registered", () => {
-    withEnv("not_a_tool", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "not_a_tool", () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       expect(tools).toEqual([]);
     });
   });
 
   test("presets resource always registered under subset allowlist", () => {
-    withEnv("git_status", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "git_status", () => {
       const { tools, resources } = captureToolsAndResources(registerRethunkGitTools);
       expect(tools.map((t) => t.name)).toEqual(["git_status"]);
       expect(resources.some((r) => r.uri === "rethunk-git://presets")).toBe(true);
@@ -220,7 +190,7 @@ describe("registerRethunkGitTools", () => {
   });
 
   test("presets resource always registered when allowlist yields zero tools", () => {
-    withEnv("not_a_tool", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "not_a_tool", () => {
       const { tools, resources } = captureToolsAndResources(registerRethunkGitTools);
       expect(tools).toEqual([]);
       expect(resources.some((r) => r.uri === "rethunk-git://presets")).toBe(true);
@@ -228,7 +198,7 @@ describe("registerRethunkGitTools", () => {
   });
 
   test("mixed-unknown env writes stderr warning listing unknowns", () => {
-    withEnv("git_status,typo_tool,git_log", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "git_status,typo_tool,git_log", () => {
       const writes = withStderrCapture(() => {
         captureToolDefinitions(registerRethunkGitTools);
       });
@@ -240,7 +210,7 @@ describe("registerRethunkGitTools", () => {
   });
 
   test("all-unknown env writes stderr warning about empty tool surface", () => {
-    withEnv("not_a_tool", () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", "not_a_tool", () => {
       const writes = withStderrCapture(() => {
         captureToolDefinitions(registerRethunkGitTools);
       });
@@ -252,7 +222,7 @@ describe("registerRethunkGitTools", () => {
   });
 
   test("declared tool names match actual addTool names — drift guard", () => {
-    withEnv(undefined, () => {
+    withEnvVar("RETHUNK_GIT_TOOLS", undefined, () => {
       const tools = captureToolDefinitions(registerRethunkGitTools);
       const captured = new Set(tools.map((t) => t.name));
       const declared = new Set<string>(ALL_TOOL_NAMES);
