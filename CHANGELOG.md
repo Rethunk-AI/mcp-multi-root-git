@@ -26,6 +26,9 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 - **`git_inventory` / `git_parity` per-root preset failures** — a `preset`/`nestedRoots` resolution problem, or (for `git_parity`) a root left with zero pairs, no longer aborts the whole call. That root instead gets a per-root error entry (`{workspaceRoot, entries: [], error}` / `{workspaceRoot, status: "MISMATCH", pairs: [], error}`) and the sweep continues over the remaining roots. Both tools also gain a top-level `warning: {code: "workspace_root_hint_mismatch", preset, hint}` when a multi-root `preset` argument's `workspaceRootHint` matches no candidate root.
 - **`git_inventory` ahead/behind `partial` flag** — when exactly one of ahead/behind could be fetched, the entry (or `compareRefs`) now carries an explicit `partial: true` instead of silently reporting an inconsistent pair as complete.
 - **`git_cherry_pick` branch deletion** — patch-id equivalence deletion now automatically falls back to strict `git branch -d` ancestry when the source branch's own history includes merge commits (patch-id can't verify a merge's unique content).
+- **`batch_commit`** serializes concurrent same-repo calls in-process (FIFO).
+- **`batch_commit`** `commit_failed` entries restore the pre-entry index snapshot, matching `stage_failed`.
+- **`git_status` / `git_inventory` / `git_parity`** fan-out runs through a single bounded concurrency pool (`GIT_SUBPROCESS_PARALLELISM`) instead of serial iteration.
 
 ### Fixed
 
@@ -47,6 +50,7 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 ### Security
 
 - **`git_push` / `batch_commit` `push: "after"`** — output (both the condensed success output and `push_failed` `detail`) now redacts userinfo credentials embedded in HTTPS remote URLs (`scheme://user:pass@host` → `scheme://***@host`) before it reaches the tool result.
+- **Git subprocess environment** is allowlisted; non-essential `GIT_*` vars are dropped unless re-added via `RETHUNK_GIT_ENV_PASSTHROUGH`.
 
 ### CI/dev
 

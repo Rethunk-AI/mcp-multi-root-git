@@ -18,13 +18,13 @@ IDEs injecting this as context: do not re-link from rules.
 | ------ | --------- |
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `MCP_JSON_FORMAT_VERSION`; `registerRethunkGitTools` |
 | [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `readMcpServerVersion()`, `spreadWhen`, `spreadDefined` |
-| [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync` (optional `{ timeoutMs, signal }`), `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `GIT_SUBPROCESS_TIMEOUT_MS`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
-| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRoots` (fan-out `root` resolution: string / string[] / `"*"`), `requireSingleRepo` (`workspaceRoot`), `resolveRootPathList`, `RootPickArgs` — shared tool preludes; session root resolution |
+| [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync` (optional `{ timeoutMs, signal, env }`), `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `GIT_SUBPROCESS_TIMEOUT_MS`, `gitTopLevelAsync`, `gitRevParseGitDirAsync`, `gitRevParseHeadAsync`, `createTopLevelMemo`, `createRevParseHeadMemo`, `buildFilteredGitEnv`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken`, `gitFailureDetail` |
+| [`src/server/roots.ts`](src/server/roots.ts) | `requireGitAndRootsAsync` (fan-out `root` resolution: string / string[] / `"*"`, bounded-pool toplevel resolution), `requireSingleRepo` (`workspaceRoot`), `resolveRootPathListAsync`, `RootPickArgs` — shared tool preludes; session root resolution |
 | [`src/server/presets.ts`](src/server/presets.ts) | `PRESET_FILE_PATH`, `loadPresetsFromGitTop`, `presetLoadErrorPayload`, `applyPresetNestedRoots`, `applyPresetParityPairs`; Zod schemas must match [`git-mcp-presets.schema.json`](git-mcp-presets.schema.json) |
-| [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema` (single-repo: `workspaceRoot` + `format`), `RootPickSchema` (fan-out: polymorphic `root` + `format`), `MAX_INVENTORY_ROOTS_DEFAULT`, **`MAX_ROOT_PATHS`** (256) |
-| [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `validateRepoPath`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
-| [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`, `isSafeGitCommitIsh`; `getCurrentBranch`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `isContentEquivalentlyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `inferRemoteFromUpstream`; `conflictPaths` |
-| [`src/server/error-codes.ts`](src/server/error-codes.ts) | `ERROR_CODES` (centralised error-code registry — the exact `error` field strings on the wire), `ErrorCode` type |
+| [`src/server/schemas.ts`](src/server/schemas.ts) | `WorkspacePickSchema` (single-repo: `workspaceRoot` + `format`), `RootPickSchema` (fan-out: polymorphic `root` + `format`), **`MAX_ROOT_PATHS`** (256) |
+| [`src/server/inventory.ts`](src/server/inventory.ts) | `InventoryEntryJson`, `MAX_INVENTORY_ROOTS_DEFAULT`, `MAX_BRANCH_STATUS_LINES_DEFAULT`, `makeSkipEntry`, `buildInventorySectionMarkdown`, `collectInventoryEntry` |
+| [`src/server/git-refs.ts`](src/server/git-refs.ts) | `isProtectedBranch`, `PROTECTED_BRANCH_NAMES_TEXT`, `isSafeGitRefToken`, `isSafeGitRangeToken`, `isSafeGitAncestorRef`, `isSafeGitCommitIsh`; `getCurrentBranch`, `getRefSha`, `resolveRef`, `isWorkingTreeClean`, `isFullyMergedInto`, `isContentEquivalentlyMergedInto`, `commitListBetween`; `listWorktrees`, `worktreeForBranch`; `inferRemoteFromUpstream`; `conflictPaths` |
+| [`src/server/error-codes.ts`](src/server/error-codes.ts) | `ERROR_CODES` (centralised error-code registry — the exact `error` field strings on the wire) |
 | [`src/server/tools.ts`](src/server/tools.ts) | `registerRethunkGitTools` — dispatches to `register*` below; `selectToolRegistrars(envValue, registrars)` — pure parse/filter fn for `RETHUNK_GIT_TOOLS` (reads env inside `registerRethunkGitTools`, not at module scope); `TOOL_REGISTRARS` ordered array |
 | [`src/server/git-status-tool.ts`](src/server/git-status-tool.ts) | `git_status` |
 | [`src/server/git-inventory-tool.ts`](src/server/git-inventory-tool.ts) | `git_inventory` — optional `compareRefs: { left, right }` ahead/behind between arbitrary local refs |
@@ -50,7 +50,7 @@ IDEs injecting this as context: do not re-link from rules.
 | [`src/server/presets-resource.ts`](src/server/presets-resource.ts) | `rethunk-git://presets` resource |
 | [`src/server/tool-parameter-schemas.ts`](src/server/tool-parameter-schemas.ts) | `buildToolParameterSchemaDocument`, `captureToolParameterSchemas`; backs `tool-parameters.schema.json` and published `schemas/*.json` snapshots |
 | [`src/server/coverage.ts`](src/server/coverage.ts) | `parseAllFilesLineCoverage` — parses bun test coverage output for `coverage:check` CI gate |
-| [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop` |
+| [`src/repo-paths.ts`](src/repo-paths.ts) | `resolvePathForRepo`, `assertRelativePathUnderTop`, `isStrictlyUnderGitTop`, `validateRepoPath` (combines the first two; the shared path-confinement check) |
 
 ## Changing contracts
 
@@ -83,7 +83,7 @@ Rules for LLMs operating in or against this repository.
 
 **Contract bumps need documentation** — if a JSON output shape changes incompatibly, bump the `MCP_JSON_FORMAT_VERSION` constant in `src/server.ts` (it is surfaced in the server `instructions` field and discoverable via MCP `initialize`) and document the migration in both this file and [docs/mcp-tools.md](docs/mcp-tools.md).
 
-**Path confinement** — any tool accepting file paths must use `resolvePathForRepo` / `assertRelativePathUnderTop` from [`src/repo-paths.ts`](src/repo-paths.ts) and include escaping-attempt tests.
+**Path confinement** — any tool accepting file paths must use `validateRepoPath` (or the `resolvePathForRepo` / `assertRelativePathUnderTop` pair it wraps) from [`src/repo-paths.ts`](src/repo-paths.ts) and include escaping-attempt tests.
 
 ## Repo MCP entry (contributors)
 
