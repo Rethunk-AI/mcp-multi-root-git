@@ -595,6 +595,38 @@ describe("batch_commit dryRun mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("batch_commit line-range staging", () => {
+  test("stages a brand-new untracked file via line range (--no-index diff branch)", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+
+    // new.ts is never staged or committed — stageFile's untracked branch
+    // synthesizes the new-file diff via `git diff --no-index -- /dev/null new.ts`.
+    writeFileSync(join(dir, "new.ts"), "export const a = 1;\nexport const b = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [
+        {
+          message: "feat: add new file via line range",
+          files: [{ path: "new.ts", lines: { from: 1, to: 2 } }],
+        },
+      ],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; committed: number };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.committed).toBe(1);
+
+    const logResult = await spawnGitAsync(dir, ["log", "-1", "--name-status"]);
+    expect(logResult.stdout).toContain("new.ts");
+    const showResult = await spawnGitAsync(dir, ["log", "-1", "-p"]);
+    expect(showResult.stdout).toContain("export const a = 1");
+    expect(showResult.stdout).toContain("export const b = 2");
+  });
+
   test("stages only lines in range when lines parameter is provided", async () => {
     const dir = makeRepo();
 

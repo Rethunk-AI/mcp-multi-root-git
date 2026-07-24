@@ -28,9 +28,11 @@ const FileEntrySchema = z.union([
           .max(1000000)
           .describe("End line number (1-indexed, inclusive)."),
       })
-      .refine((l) => l.from <= l.to, {
-        message: "lines.from must be <= lines.to",
-      })
+      // Not a `.refine((l) => l.from <= l.to)` here: schema-level refinement
+      // would reject `from > to` before `execute` ever runs, making the
+      // runtime check below (which returns a structured invalid_line_range
+      // result inside `results`, consistent with this tool's other
+      // per-entry errors) unreachable dead code.
       .describe("Line range to stage. Only hunks overlapping [from, to] are staged."),
   }),
 ]);
