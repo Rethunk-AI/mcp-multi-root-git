@@ -140,6 +140,46 @@ describe("batch_commit execute handler", () => {
     expect(parsed.total).toBe(1);
   });
 
+  test("invalid_paths: absolute path inside the repo is rejected (mutating tools reject absolute paths)", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "new.ts"), "export const x = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: [join(dir, "new.ts")] }],
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      results: Array<{ error?: string; detail?: string }>;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("invalid_paths");
+    expect(parsed.results[0]?.detail).toContain("absolute paths are not accepted");
+
+    // Nothing should have been staged.
+    const staged = await spawnGitAsync(dir, ["diff", "--cached", "--name-only"]);
+    expect(staged.stdout.trim()).toBe("");
+  });
+
+  test("invalid_paths: absolute path outside the repo is rejected before the escape check", async () => {
+    const dir = makeRepo();
+
+    const run = captureTool(registerBatchCommitTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "bad", files: ["/etc/passwd"] }],
+    });
+    const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error?: string }> };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.results[0]?.error).toBe("invalid_paths");
+  });
+
   test("path_escapes_repository: dotdot path → error in json response", async () => {
     const dir = makeRepo();
 

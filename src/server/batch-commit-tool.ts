@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
@@ -432,6 +432,28 @@ export function registerBatchCommitTool(server: FastMCP): void {
             files: filePaths,
             error: ERROR_CODES.INVALID_LINE_RANGE,
             detail: "lines.from must be <= lines.to",
+          });
+          break;
+        }
+
+        // --- Reject absolute paths ---
+        // CONTRIBUTING.md forbids mutating tools from accepting absolute paths.
+        // `resolvePathForRepo`'s isAbsolute branch is retained for read tools
+        // that legitimately pass workspace-absolute paths (git-show, git-diff,
+        // etc.) — batch_commit gates it here instead of changing that shared
+        // behavior. This also closes the root enabler of the canonicalization
+        // mismatch above: an absolute path never round-trips through
+        // `relative(gitTop, abs)` the way a caller might expect for the
+        // git-relative name comparisons below.
+        const absolutePaths = filePaths.filter((p) => isAbsolute(p.trim()));
+        if (absolutePaths.length > 0) {
+          results.push({
+            index: i,
+            ok: false,
+            message: entry.message,
+            files: filePaths,
+            error: ERROR_CODES.INVALID_PATHS,
+            detail: `absolute paths are not accepted: ${absolutePaths.join(", ")}`,
           });
           break;
         }
