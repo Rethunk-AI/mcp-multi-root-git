@@ -18,6 +18,8 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 - **`batch_commit` schema footprint** (~1k tokens once loaded): roughly 40% is the `files` field's `string | { path, lines: { from, to } }` union, which is the JSON-Schema shape hunk-level staging requires — flattening `lines: {from,to}` to sibling `lineFrom`/`lineTo` properties would trim it further but changes the **input** wire format for every existing caller. Deferred as a breaking change pending a decision, rather than folded into this release silently.
 
+## [4.1.0] — 2026-07-21
+
 ### Changed
 
 - **`git_push` / `batch_commit` `push: "after"`** — successful pushes now condense git output to the state-bearing lines (destination, ref updates, new branch/tag, `remote:` banners, `-u` tracking notice) plus an omitted-line count; pre-push hook noise (test runs, package installs) no longer floods the tool result ([#17](https://github.com/Rethunk-AI/mcp-multi-root-git/issues/17)). Both streams are now merged before filtering, so ref-update lines on stderr survive a noisy hook stdout. Failure output is unchanged (full detail).
