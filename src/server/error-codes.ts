@@ -109,6 +109,7 @@ export const ERROR_CODES = {
 
   // Reset
   RESET_FAILED: "reset_failed",
+  RESET_NOT_ANCESTOR: "reset_not_ancestor",
 
   // Revert
   REVERT_ABORT_FAILED: "revert_abort_failed",

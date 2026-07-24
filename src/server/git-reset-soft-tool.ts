@@ -8,11 +8,6 @@ import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
-// SEAM (F1): add `RESET_NOT_ANCESTOR: "reset_not_ancestor"` to the Reset
-// section of error-codes.ts, then replace this local constant's use below
-// with `ERROR_CODES.RESET_NOT_ANCESTOR`.
-const RESET_NOT_ANCESTOR = "reset_not_ancestor";
-
 export function registerGitResetSoftTool(server: FastMCP): void {
   server.addTool({
     name: "git_reset_soft",
@@ -81,7 +76,7 @@ export function registerGitResetSoftTool(server: FastMCP): void {
           ]);
           if (!ancestorCheck.ok) {
             return jsonRespond({
-              error: RESET_NOT_ANCESTOR,
+              error: ERROR_CODES.RESET_NOT_ANCESTOR,
               ref: args.ref,
               detail: "ref is not an ancestor of HEAD. Pass force: true to reset anyway.",
             });
