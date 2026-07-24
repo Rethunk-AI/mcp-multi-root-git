@@ -57,6 +57,38 @@ describe("git_parity", () => {
     ]);
   });
 
+  test("3-root fan-out with unequal pair counts stays input-order deterministic", async () => {
+    // Root-level AND pair-level work now run through one shared bounded pool
+    // instead of nested sequential loops; giving roots different pair counts
+    // makes them finish at different times, so this proves the pool still
+    // emits results in `pre.roots` order rather than completion order.
+    const a = makeParityWorkspace("parity-order-a-");
+    const b = mkTmpDir("parity-order-b-");
+    gitInitMain(b);
+    commitFile(b, "root.txt", "root\n");
+    const pairNames = ["p1", "p2", "p3", "p4"];
+    for (const n of pairNames) {
+      const d = join(b, n);
+      mkdirSync(d);
+      gitInitMain(d);
+      commitFile(d, "f.txt", "same\n");
+    }
+    const c = makeParityWorkspace("parity-order-c-");
+
+    const run = captureTool(registerGitParityTool);
+    const text = await run({
+      format: "json",
+      root: [a.root, b, c.root],
+      pairs: [
+        { left: "left", right: "right", label: "single" },
+        { left: "p1", right: "p2", label: "p12" },
+        { left: "p3", right: "p4", label: "p34" },
+      ],
+    });
+    const parsed = JSON.parse(text) as { parity: { workspaceRoot: string }[] };
+    expect(parsed.parity.map((p) => p.workspaceRoot)).toEqual([a.root, b, c.root]);
+  });
+
   test("markdown format contains parity status and pair labels", async () => {
     const w = makeParityWorkspace("parity-md-");
     const run = captureTool(registerGitParityTool);

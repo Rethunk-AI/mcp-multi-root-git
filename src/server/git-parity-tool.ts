@@ -2,11 +2,16 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { gitRevParseHead, gitTopLevel } from "./git.js";
+import {
+  asyncPool,
+  createRevParseHeadMemo,
+  createTopLevelMemo,
+  GIT_SUBPROCESS_PARALLELISM,
+} from "./git.js";
 import { validateRepoPath } from "./inventory.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetParityPairs, type ParityPair } from "./presets.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
 
 /** Default / hard cap on parity pairs evaluated per root. */
@@ -55,7 +60,7 @@ export function registerGitParityTool(server: FastMCP): void {
         .describe(`Max pairs evaluated per root (hard cap ${MAX_PAIRS_HARD_CAP}).`),
     }),
     execute: async (args, context) => {
-      const pre = requireGitAndRoots(server, args, args.preset, context.sessionId);
+      const pre = await requireGitAndRootsAsync(server, args, args.preset, context.sessionId);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
@@ -63,34 +68,177 @@ export function registerGitParityTool(server: FastMCP): void {
 
       const maxPairs = args.maxPairs ?? MAX_PAIRS_DEFAULT;
 
+      type PairResult = {
+        label: string;
+        leftPath: string;
+        rightPath: string;
+        match: boolean;
+        sha?: string;
+        leftSha?: string;
+        rightSha?: string;
+        error?: string;
+      };
+      type PairSlot = { type: "pending" } | { type: "result"; result: PairResult };
+      type RootPlan =
+        | { kind: "notRepo"; workspaceRoot: string }
+        | { kind: "presetError"; top: string; error: Record<string, unknown> }
+        | { kind: "noPairs"; top: string; error: Record<string, unknown> }
+        | {
+            kind: "ok";
+            top: string;
+            presetSchemaVersion?: string;
+            pairsTruncated: boolean;
+            pairsOmittedCount: number;
+            slots: PairSlot[];
+          };
+      type PairJob = {
+        rootIndex: number;
+        slotIndex: number;
+        label: string;
+        leftAbs: string;
+        rightAbs: string;
+      };
+
+      // Phase 1: resolve every root's toplevel concurrently (bounded pool,
+      // per-call memoized) instead of one blocking call per root in sequence.
+      const topMemo = createTopLevelMemo();
+      const tops = await asyncPool(pre.roots, GIT_SUBPROCESS_PARALLELISM, (r) => topMemo(r));
+
+      // Phase 2: per-root synchronous setup (no subprocess) — resolves preset
+      // pairs, dedupes/caps, and validates each pair's paths. A pair with a
+      // path-escape resolves immediately (no subprocess); a valid pair becomes
+      // a PairJob queued for the head-resolution pool below.
+      const pairJobs: PairJob[] = [];
+      const plans: RootPlan[] = pre.roots.map((workspaceRoot, rootIndex) => {
+        const top = tops[rootIndex];
+        if (!top) return { kind: "notRepo", workspaceRoot };
+
+        let pairs: ParityPair[] | undefined = args.pairs;
+        let parityPresetSchemaVersion: string | undefined;
+        if (args.preset) {
+          const applied = applyPresetParityPairs(top, args.preset, args.presetMerge, pairs);
+          if (!applied.ok) {
+            // Never abort the whole sweep for one root's preset problem.
+            return { kind: "presetError", top, error: applied.error };
+          }
+          pairs = applied.pairs;
+          parityPresetSchemaVersion = applied.presetSchemaVersion;
+        }
+
+        if (!pairs?.length) {
+          return { kind: "noPairs", top, error: { error: ERROR_CODES.NO_PAIRS } };
+        }
+
+        pairs = dedupePairs(pairs);
+        let pairsTruncated = false;
+        let pairsOmittedCount = 0;
+        if (pairs.length > maxPairs) {
+          pairsOmittedCount = pairs.length - maxPairs;
+          pairs = pairs.slice(0, maxPairs);
+          pairsTruncated = true;
+        }
+
+        const slots: PairSlot[] = pairs.map((pair, slotIndex) => {
+          const pa = validateRepoPath(pair.left, top);
+          const pb = validateRepoPath(pair.right, top);
+          const label = pair.label ?? `${pair.left} / ${pair.right}`;
+          if (!pa.underTop || !pb.underTop) {
+            return {
+              type: "result",
+              result: {
+                label,
+                leftPath: pa.abs,
+                rightPath: pb.abs,
+                match: false,
+                error: "path escapes git toplevel — rejected",
+              },
+            };
+          }
+          pairJobs.push({ rootIndex, slotIndex, label, leftAbs: pa.abs, rightAbs: pb.abs });
+          return { type: "pending" };
+        });
+
+        return {
+          kind: "ok",
+          top,
+          ...spreadDefined("presetSchemaVersion", parityPresetSchemaVersion),
+          pairsTruncated,
+          pairsOmittedCount,
+          slots,
+        };
+      });
+
+      // Phase 3: one global bounded pool resolving HEAD for every path
+      // referenced by any pair across every root (left AND right, across
+      // roots AND pairs) — a single flat pool instead of nested per-root /
+      // per-pair pools, so total concurrency never exceeds the knob. The
+      // per-call memo collapses repeated paths (e.g. the same left path
+      // reused across pairs) to one subprocess.
+      const headMemo = createRevParseHeadMemo();
+      const headPathRequests: string[] = [];
+      for (const job of pairJobs) {
+        headPathRequests.push(job.leftAbs, job.rightAbs);
+      }
+      await asyncPool(headPathRequests, GIT_SUBPROCESS_PARALLELISM, (p) => headMemo(p));
+
+      // Phase 4: fill in each PairJob's slot from the now-resolved (cached)
+      // HEAD lookups — no further subprocess spawns, just reading the memo.
+      for (const job of pairJobs) {
+        const plan = plans[job.rootIndex];
+        if (plan?.kind !== "ok") continue;
+        const ha = await headMemo(job.leftAbs);
+        const hb = await headMemo(job.rightAbs);
+        let result: PairResult;
+        if (!ha.ok || !hb.ok) {
+          result = {
+            label: job.label,
+            leftPath: job.leftAbs,
+            rightPath: job.rightAbs,
+            match: false,
+            error: [!ha.ok ? `left: ${ha.text}` : "", !hb.ok ? `right: ${hb.text}` : ""]
+              .filter(Boolean)
+              .join("\n"),
+          };
+        } else if (ha.sha !== hb.sha) {
+          result = {
+            label: job.label,
+            leftPath: job.leftAbs,
+            rightPath: job.rightAbs,
+            match: false,
+            leftSha: ha.sha,
+            rightSha: hb.sha,
+          };
+        } else {
+          result = {
+            label: job.label,
+            leftPath: job.leftAbs,
+            rightPath: job.rightAbs,
+            match: true,
+            sha: ha.sha,
+          };
+        }
+        plan.slots[job.slotIndex] = { type: "result", result };
+      }
+
+      // Phase 5: assemble output in pre.roots order (input-order deterministic
+      // despite concurrent execution above).
       const results: {
         workspaceRoot: string;
         presetSchemaVersion?: string;
         status: "OK" | "MISMATCH";
-        pairs: {
-          label: string;
-          leftPath: string;
-          rightPath: string;
-          match: boolean;
-          sha?: string;
-          leftSha?: string;
-          rightSha?: string;
-          error?: string;
-        }[];
+        pairs: PairResult[];
         pairsTruncated?: boolean;
         pairsOmittedCount?: number;
         error?: Record<string, unknown>;
       }[] = [];
-
       const mdParts: string[] = [];
 
-      for (const workspaceRoot of pre.roots) {
-        const top = gitTopLevel(workspaceRoot);
-        if (!top) {
-          const errDesc = `not a git repository: ${workspaceRoot}`;
+      for (const plan of plans) {
+        if (plan.kind === "notRepo") {
+          const errDesc = `not a git repository: ${plan.workspaceRoot}`;
           if (args.format === "json") {
             results.push({
-              workspaceRoot: workspaceRoot,
+              workspaceRoot: plan.workspaceRoot,
               status: "MISMATCH",
               pairs: [{ label: "—", leftPath: "", rightPath: "", match: false, error: errDesc }],
             });
@@ -111,51 +259,13 @@ export function registerGitParityTool(server: FastMCP): void {
           }
           continue;
         }
-
-        let pairs: ParityPair[] | undefined = args.pairs;
-        let parityPresetSchemaVersion: string | undefined;
-        if (args.preset) {
-          const applied = applyPresetParityPairs(top, args.preset, args.presetMerge, pairs);
-          if (!applied.ok) {
-            // Never abort the whole sweep for one root's preset problem — record a
-            // per-root error entry (same shape as the not-a-git-repo entries above)
-            // and move on to the remaining roots.
-            if (args.format === "json") {
-              results.push({
-                workspaceRoot: top,
-                status: "MISMATCH",
-                pairs: [],
-                error: applied.error,
-              });
-            } else {
-              mdParts.push(
-                [
-                  "# Git HEAD parity",
-                  "",
-                  "status: MISMATCH",
-                  "",
-                  `## ${top} — preset error`,
-                  "```json",
-                  JSON.stringify(applied.error),
-                  "```",
-                  "",
-                ].join("\n"),
-              );
-            }
-            continue;
-          }
-          pairs = applied.pairs;
-          parityPresetSchemaVersion = applied.presetSchemaVersion;
-        }
-
-        if (!pairs?.length) {
-          const noPairsError = { error: ERROR_CODES.NO_PAIRS };
+        if (plan.kind === "presetError") {
           if (args.format === "json") {
             results.push({
-              workspaceRoot: top,
+              workspaceRoot: plan.top,
               status: "MISMATCH",
               pairs: [],
-              error: noPairsError,
+              error: plan.error,
             });
           } else {
             mdParts.push(
@@ -164,9 +274,34 @@ export function registerGitParityTool(server: FastMCP): void {
                 "",
                 "status: MISMATCH",
                 "",
-                `## ${top} — error`,
+                `## ${plan.top} — preset error`,
                 "```json",
-                JSON.stringify(noPairsError),
+                JSON.stringify(plan.error),
+                "```",
+                "",
+              ].join("\n"),
+            );
+          }
+          continue;
+        }
+        if (plan.kind === "noPairs") {
+          if (args.format === "json") {
+            results.push({
+              workspaceRoot: plan.top,
+              status: "MISMATCH",
+              pairs: [],
+              error: plan.error,
+            });
+          } else {
+            mdParts.push(
+              [
+                "# Git HEAD parity",
+                "",
+                "status: MISMATCH",
+                "",
+                `## ${plan.top} — error`,
+                "```json",
+                JSON.stringify(plan.error),
                 "```",
                 "",
               ].join("\n"),
@@ -175,78 +310,20 @@ export function registerGitParityTool(server: FastMCP): void {
           continue;
         }
 
-        pairs = dedupePairs(pairs);
-        let pairsTruncated = false;
-        let pairsOmittedCount = 0;
-        if (pairs.length > maxPairs) {
-          pairsOmittedCount = pairs.length - maxPairs;
-          pairs = pairs.slice(0, maxPairs);
-          pairsTruncated = true;
-        }
-
-        let allOk = true;
-        const pairResults: (typeof results)[0]["pairs"] = [];
-
-        for (const pair of pairs) {
-          const pa = validateRepoPath(pair.left, top);
-          const pb = validateRepoPath(pair.right, top);
-          const label = pair.label ?? `${pair.left} / ${pair.right}`;
-
-          if (!pa.underTop || !pb.underTop) {
-            allOk = false;
-            pairResults.push({
-              label,
-              leftPath: pa.abs,
-              rightPath: pb.abs,
-              match: false,
-              error: "path escapes git toplevel — rejected",
-            });
-            continue;
-          }
-
-          const ha = gitRevParseHead(pa.abs);
-          const hb = gitRevParseHead(pb.abs);
-
-          if (!ha.ok || !hb.ok) {
-            allOk = false;
-            pairResults.push({
-              label,
-              leftPath: pa.abs,
-              rightPath: pb.abs,
-              match: false,
-              error: [!ha.ok ? `left: ${ha.text}` : "", !hb.ok ? `right: ${hb.text}` : ""]
-                .filter(Boolean)
-                .join("\n"),
-            });
-            continue;
-          }
-          if (ha.sha !== hb.sha) {
-            allOk = false;
-            pairResults.push({
-              label,
-              leftPath: pa.abs,
-              rightPath: pb.abs,
-              match: false,
-              leftSha: ha.sha,
-              rightSha: hb.sha,
-            });
-          } else {
-            pairResults.push({
-              label,
-              leftPath: pa.abs,
-              rightPath: pb.abs,
-              match: true,
-              sha: ha.sha,
-            });
-          }
-        }
+        const pairResults = plan.slots.map(
+          (s) => (s as { type: "result"; result: PairResult }).result,
+        );
+        const allOk = pairResults.every((pr) => pr.match);
 
         results.push({
-          workspaceRoot: top,
-          ...spreadDefined("presetSchemaVersion", parityPresetSchemaVersion),
+          workspaceRoot: plan.top,
+          ...spreadDefined("presetSchemaVersion", plan.presetSchemaVersion),
           status: allOk ? "OK" : "MISMATCH",
           pairs: pairResults,
-          ...spreadWhen(pairsTruncated, { pairsTruncated: true, pairsOmittedCount }),
+          ...spreadWhen(plan.pairsTruncated, {
+            pairsTruncated: true,
+            pairsOmittedCount: plan.pairsOmittedCount,
+          }),
         });
 
         if (args.format !== "json") {
@@ -256,9 +333,9 @@ export function registerGitParityTool(server: FastMCP): void {
             `status: ${allOk ? "OK" : "MISMATCH"}`,
             "",
           ];
-          if (pairsTruncated) {
+          if (plan.pairsTruncated) {
             lines.push(
-              `pairs_truncated: ${pairsOmittedCount} pair(s) not evaluated (maxPairs=${maxPairs})`,
+              `pairs_truncated: ${plan.pairsOmittedCount} pair(s) not evaluated (maxPairs=${maxPairs})`,
               "",
             );
           }
