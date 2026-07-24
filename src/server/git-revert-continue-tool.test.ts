@@ -12,13 +12,9 @@ import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-h
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-revert-continue-test-");
-}
-
 describe("git_revert_continue", () => {
   test("with nothing in progress returns no_revert_in_progress", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitRevertContinueTool);
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as { error: string };
@@ -26,7 +22,7 @@ describe("git_revert_continue", () => {
   });
 
   test("with unresolved paths returns an informative error", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -54,7 +50,7 @@ describe("git_revert_continue", () => {
   });
 
   test("continue after resolving the conflict completes the remaining source", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -100,7 +96,7 @@ describe("git_revert_continue", () => {
   });
 
   test("action: abort restores HEAD to the pre-revert commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -132,7 +128,7 @@ describe("git_revert_continue", () => {
   });
 
   test("markdown format reports the completed continue", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");

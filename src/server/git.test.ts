@@ -41,10 +41,6 @@ import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir, withEnvVar } from 
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-utils-test-");
-}
-
 // ---------------------------------------------------------------------------
 // isSafeGitUpstreamToken
 // ---------------------------------------------------------------------------
@@ -120,7 +116,7 @@ describe("isSafeGitUpstreamToken", () => {
 
 describe("gitRevParseGitDirAsync", () => {
   test("returns true for a valid git repository", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     expect(await gitRevParseGitDirAsync(dir)).toBe(true);
   });
 
@@ -136,7 +132,7 @@ describe("gitRevParseGitDirAsync", () => {
 
 describe("gitRevParseHeadAsync", () => {
   test("returns ok=true with a SHA for a repo that has commits", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = await gitRevParseHeadAsync(dir);
     expect(result.ok).toBe(true);
     expect(result.sha).toMatch(/^[0-9a-f]{40}$/);
@@ -154,7 +150,7 @@ describe("gitRevParseHeadAsync", () => {
     // Not an actual hang (rev-parse HEAD is instant) — exercises that the opts
     // param reaches spawnGitAsync at all, independent of the real timeout path
     // covered by the spawnGitAsync describe block below.
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = await gitRevParseHeadAsync(dir, { timeoutMs: 5_000 });
     expect(result.ok).toBe(true);
   });
@@ -166,7 +162,7 @@ describe("gitRevParseHeadAsync", () => {
 
 describe("gitTopLevelAsync", () => {
   test("returns toplevel for a git repo", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     expect(await gitTopLevelAsync(dir)).toBe(dir);
   });
 
@@ -182,7 +178,7 @@ describe("gitTopLevelAsync", () => {
 
 describe("createTopLevelMemo", () => {
   test("resolves the same toplevel for repeated lookups of the same path", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const memo = createTopLevelMemo();
     const [a, b] = await Promise.all([memo(dir), memo(dir)]);
     expect(a).toBe(dir);
@@ -190,7 +186,7 @@ describe("createTopLevelMemo", () => {
   });
 
   test("caches the promise so a second call does not spawn a second subprocess", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const memo = createTopLevelMemo();
     const first = memo(dir);
     const second = memo(dir);
@@ -200,7 +196,7 @@ describe("createTopLevelMemo", () => {
   });
 
   test("a fresh memo instance does not share cache with a prior one (no cross-call cache)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const memoA = createTopLevelMemo();
     const memoB = createTopLevelMemo();
     expect(memoA(dir)).not.toBe(memoB(dir));
@@ -210,7 +206,7 @@ describe("createTopLevelMemo", () => {
 
 describe("createRevParseHeadMemo", () => {
   test("resolves the same SHA for repeated lookups of the same path", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const memo = createRevParseHeadMemo();
     const [a, b] = await Promise.all([memo(dir), memo(dir)]);
     expect(a.ok).toBe(true);
@@ -224,12 +220,12 @@ describe("createRevParseHeadMemo", () => {
 
 describe("parseGitSubmodulePaths", () => {
   test("returns [] when .gitmodules does not exist", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     expect(parseGitSubmodulePaths(dir)).toEqual([]);
   });
 
   test("returns parsed submodule paths when .gitmodules exists", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(
       join(dir, ".gitmodules"),
       '[submodule "vendor/lib"]\n\tpath = vendor/lib\n\turl = https://example.com/lib.git\n',
@@ -240,7 +236,7 @@ describe("parseGitSubmodulePaths", () => {
   });
 
   test("returns multiple paths from a multi-submodule .gitmodules", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(
       join(dir, ".gitmodules"),
       '[submodule "a"]\n\tpath = vendor/a\n\turl = https://a.example.com\n' +
@@ -252,7 +248,7 @@ describe("parseGitSubmodulePaths", () => {
   });
 
   test("does not collect path = lines outside a [submodule] section", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // A stray "path = ..." under a non-submodule section must be ignored.
     writeFileSync(
       join(dir, ".gitmodules"),
@@ -265,7 +261,7 @@ describe("parseGitSubmodulePaths", () => {
   });
 
   test("strips inline comments from path values", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(
       join(dir, ".gitmodules"),
       '[submodule "lib"]\n\tpath = vendor/lib ; inline comment\n\turl = https://example.com/lib.git\n',
@@ -282,7 +278,7 @@ describe("parseGitSubmodulePaths", () => {
 
 describe("hasGitMetadata", () => {
   test("returns true for a directory that contains a .git folder", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     expect(hasGitMetadata(dir)).toBe(true);
   });
 
@@ -292,7 +288,7 @@ describe("hasGitMetadata", () => {
   });
 
   test("returns false for a nested directory inside a repo", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const sub = join(dir, "subdir");
     mkdirSync(sub, { recursive: true });
     expect(hasGitMetadata(sub)).toBe(false);
@@ -380,7 +376,7 @@ describe("asyncPool", () => {
 
 describe("gitStatusSnapshotAsync", () => {
   test("succeeds for a clean repo on main", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const snap = await gitStatusSnapshotAsync(dir);
     expect(snap.branchOk).toBe(true);
     expect(snap.branchLine).toContain("main");
@@ -396,7 +392,7 @@ describe("gitStatusSnapshotAsync", () => {
 
 describe("gitStatusShortBranchAsync", () => {
   test("returns ok=true and branch text for a valid repo", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = await gitStatusShortBranchAsync(dir);
     expect(result.ok).toBe(true);
     expect(result.text).toContain("main");
@@ -409,7 +405,7 @@ describe("gitStatusShortBranchAsync", () => {
 
 describe("fetchAheadBehind", () => {
   test("returns ahead/behind counts relative to upstream", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const bare = mkTmpDir("mcp-git-utils-remote-");
     gitCmd(bare, "init", "--bare", "-b", "main");
     gitCmd(dir, "remote", "add", "origin", bare);
@@ -426,14 +422,14 @@ describe("fetchAheadBehind", () => {
   });
 
   test("returns null ahead/behind for an invalid upstream spec", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const { ahead, behind } = await fetchAheadBehind(dir, "nonexistent-spec");
     expect(ahead).toBeNull();
     expect(behind).toBeNull();
   });
 
   test("fails closed on an unsafe upstream token without ever building git argv from it", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const { ahead, behind } = await fetchAheadBehind(dir, "-evil");
     expect(ahead).toBeNull();
     expect(behind).toBeNull();
@@ -505,7 +501,7 @@ describe("gateGit", () => {
 
 describe("gitTopLevel", () => {
   test("returns toplevel for a git repo", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     expect(gitTopLevel(dir)).toBe(dir);
   });
 
@@ -566,7 +562,7 @@ describe("resolveGitSubprocessMaxBufferBytes", () => {
 
 describe("spawnGitAsync", () => {
   test("fast command completes normally — timedOut is falsy", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = await spawnGitAsync(dir, ["--version"]);
     expect(result.ok).toBe(true);
     expect(result.stdout).toContain("git version");
@@ -575,7 +571,7 @@ describe("spawnGitAsync", () => {
   });
 
   test("already-aborted signal resolves ok:false with aborted:true immediately", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const controller = new AbortController();
     controller.abort();
     const result = await spawnGitAsync(dir, ["--version"], {
@@ -588,7 +584,7 @@ describe("spawnGitAsync", () => {
   });
 
   test("timeoutMs kills a hanging cat-file --batch and resolves timedOut:true", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // holdStdin keeps stdin open so `git cat-file --batch` waits for input —
     // deterministic hang without racing a fast command against a 1ms timer.
     const result = await spawnGitAsync(dir, ["cat-file", "--batch"], {
@@ -602,7 +598,7 @@ describe("spawnGitAsync", () => {
   });
 
   test("maxBufferBytes overflow settles truncated:true", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Produce more than a few bytes of stdout; cap at 8 bytes.
     const result = await spawnGitAsync(dir, ["--version"], {
       maxBufferBytes: 8,
@@ -614,7 +610,7 @@ describe("spawnGitAsync", () => {
   });
 
   test("abort mid-flight via AbortController resolves ok:false with aborted:true", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const controller = new AbortController();
     const promise = spawnGitAsync(dir, ["cat-file", "--batch"], {
       timeoutMs: 5000,
@@ -629,7 +625,7 @@ describe("spawnGitAsync", () => {
   });
 
   test("child process spawn error (e.g. ENOENT) surfaces the real Node error in stderr", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const savedPath = process.env.PATH;
     process.env.PATH = "/nonexistent-mcp-git-test-path";
     try {
@@ -712,7 +708,7 @@ describe("buildFilteredGitEnv", () => {
 
 describe("spawnGitAsync — env allowlist enforcement", () => {
   test("a poisoned ambient GIT_INDEX_FILE does not reach the child", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const bogusIndex = join(dir, "not-a-real-index.bin");
     writeFileSync(bogusIndex, "not a valid git index\n");
     let promise!: ReturnType<typeof spawnGitAsync>;
@@ -726,7 +722,7 @@ describe("spawnGitAsync — env allowlist enforcement", () => {
   });
 
   test("RETHUNK_GIT_ENV_PASSTHROUGH lets an added ambient var reach the child (end-to-end)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const bogusIndex = join(dir, "not-a-real-index-2.bin");
     writeFileSync(bogusIndex, "not a valid git index\n");
     let promise!: ReturnType<typeof spawnGitAsync>;
@@ -769,7 +765,7 @@ describe("spawnGitAsync — env allowlist enforcement", () => {
 
 describe("orphan reaper", () => {
   test("reapOrphanedGitChildrenForTests kills a live spawnGitAsync child, settling its promise", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // holdStdin keeps stdin open so `git cat-file --batch` hangs until killed —
     // without the reaper sweep this would otherwise wait out the timeout.
     const promise = spawnGitAsync(dir, ["cat-file", "--batch"], {

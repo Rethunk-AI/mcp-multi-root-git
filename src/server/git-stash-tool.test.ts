@@ -16,10 +16,6 @@ afterEach(cleanupTmpPaths);
 // Integration: execute paths
 // ---------------------------------------------------------------------------
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-stash-test-");
-}
-
 function stashCount(dir: string): number {
   return gitCmd(dir, "stash", "list")
     .split("\n")
@@ -28,7 +24,7 @@ function stashCount(dir: string): number {
 
 describe("git_stash_apply execute handler", () => {
   test("applies stash and restores staged file", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "stashed.ts"), "const s = 1;\n");
     gitCmd(dir, "add", "stashed.ts");
     gitCmd(dir, "stash", "push", "-m", "wip: apply me");
@@ -49,7 +45,7 @@ describe("git_stash_apply execute handler", () => {
   });
 
   test("pop removes stash after applying", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "popped.ts"), "const p = 2;\n");
     gitCmd(dir, "add", "popped.ts");
     gitCmd(dir, "stash", "push", "-m", "wip: pop me");
@@ -65,7 +61,7 @@ describe("git_stash_apply execute handler", () => {
   });
 
   test("apply fails when no stash exists", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitStashApplyTool);
     const text = await run({ workspaceRoot: dir, format: "json", index: 0 });
@@ -80,7 +76,7 @@ describe("git_stash_apply execute handler", () => {
   });
 
   test("apply markdown success output contains stash ref", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "md.ts"), "const m = 3;\n");
     gitCmd(dir, "add", "md.ts");
     gitCmd(dir, "stash", "push", "-m", "wip: md");
@@ -92,7 +88,7 @@ describe("git_stash_apply execute handler", () => {
   });
 
   test("conflicted apply returns applied=false with conflictPaths; pop retains stash", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Commit base → stash divergent edit → commit a different edit → apply conflicts (UU).
     writeFileSync(join(dir, "conflict.txt"), "base\n");
     gitCmd(dir, "add", "conflict.txt");
@@ -148,7 +144,7 @@ describe("git_stash_apply execute handler", () => {
 
 describe("git_stash_push execute handler", () => {
   test("stashes dirty tracked changes and cleans the working tree", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "seed\nmodified\n");
 
     const run = captureTool(registerGitStashPushTool);
@@ -172,7 +168,7 @@ describe("git_stash_push execute handler", () => {
   });
 
   test("reports no_local_changes when the working tree is clean", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitStashPushTool);
     const text = await run({ workspaceRoot: dir, format: "json" });
@@ -183,7 +179,7 @@ describe("git_stash_push execute handler", () => {
   });
 
   test("path escape via paths array returns path_escapes_repo", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitStashPushTool);
     const text = await run({
@@ -198,7 +194,7 @@ describe("git_stash_push execute handler", () => {
   });
 
   test("includeUntracked controls whether untracked files are stashed", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "untracked.txt"), "new file\n");
 
     // Without the flag, untracked-only changes are not stashed at all.
@@ -222,7 +218,7 @@ describe("git_stash_push execute handler", () => {
   });
 
   test("keepIndex leaves staged content in the index after stash", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "seed\nstaged\n");
     gitCmd(dir, "add", "seed.txt");
 
@@ -242,7 +238,7 @@ describe("git_stash_push execute handler", () => {
   });
 
   test("paths scopes stash push to a relative in-repo file", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Both paths must be tracked (pathspec stash ignores untracked without -u).
     writeFileSync(join(dir, "keep.txt"), "keep\n");
     writeFileSync(join(dir, "stash-me.txt"), "stash\n");

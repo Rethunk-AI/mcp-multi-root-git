@@ -18,13 +18,9 @@ import {
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-reset-soft-test-");
-}
-
 describe("git_reset_soft", () => {
   test("resets HEAD~1 and stages the rewound commit's file (json)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "a.ts", "export const a = 1;\n", "feat: add a");
 
     const run = captureTool(registerGitResetSoftTool);
@@ -44,7 +40,7 @@ describe("git_reset_soft", () => {
   });
 
   test("markdown format contains before→after SHAs", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "x.ts", "export const x = 0;\n", "feat: x");
 
     const run = captureTool(registerGitResetSoftTool);
@@ -56,7 +52,7 @@ describe("git_reset_soft", () => {
   });
 
   test("refuses when working tree has untracked changes", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "dirty.ts"), "dirty\n");
 
     const run = captureTool(registerGitResetSoftTool);
@@ -67,7 +63,7 @@ describe("git_reset_soft", () => {
   });
 
   test("refuses on unsafe ref token (shell metachar)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitResetSoftTool);
     const text = await run({ workspaceRoot: dir, ref: "HEAD;echo evil", format: "json" });
@@ -77,7 +73,7 @@ describe("git_reset_soft", () => {
   });
 
   test("returns reset_failed for a non-existent ref", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitResetSoftTool);
     const text = await run({ workspaceRoot: dir, ref: "nonexistent-ref-xyz", format: "json" });
@@ -87,7 +83,7 @@ describe("git_reset_soft", () => {
   });
 
   test("refuses to reset onto a non-ancestor ref unless force:true", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Diverge: a sibling branch that shares the seed commit but is not an
     // ancestor of main's tip after main gains its own commit.
     gitCmd(dir, "branch", "sibling");
@@ -119,7 +115,7 @@ describe("git_reset_soft", () => {
   });
 
   test("allows resetting to an ancestor ref without force", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "a.ts", "export const a = 1;\n", "feat: add a");
     const parentSha = gitCmd(dir, "rev-parse", "HEAD~1").trim();
 

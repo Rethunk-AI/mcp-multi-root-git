@@ -18,17 +18,13 @@ import {
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-worktree-test-");
-}
-
 // ---------------------------------------------------------------------------
 // git_worktree_add
 // ---------------------------------------------------------------------------
 
 describe("git_worktree_add", () => {
   test("adds a new worktree with a new branch (json)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-feature-a"));
 
     const run = captureTool(registerGitWorktreeAddTool);
@@ -52,7 +48,7 @@ describe("git_worktree_add", () => {
   });
 
   test("adds a worktree for an existing branch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "feature/existing");
     gitCmd(dir, "checkout", "main");
 
@@ -71,7 +67,7 @@ describe("git_worktree_add", () => {
   });
 
   test("markdown format shows the new worktree path and branch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-feature-md"));
 
     const run = captureTool(registerGitWorktreeAddTool);
@@ -86,7 +82,7 @@ describe("git_worktree_add", () => {
   });
 
   test("adds worktree with explicit baseRef", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
     const wtPath = trackTmpPath(join(dir, "../wt-baseref"));
 
@@ -105,7 +101,7 @@ describe("git_worktree_add", () => {
   });
 
   test("trims whitespace on branch and baseRef before spawn", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
     const wtPath = trackTmpPath(join(dir, "../wt-trim"));
 
@@ -125,7 +121,7 @@ describe("git_worktree_add", () => {
   });
 
   test("refuses to add worktree on a protected branch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
       workspaceRoot: dir,
@@ -139,7 +135,7 @@ describe("git_worktree_add", () => {
   });
 
   test("refuses protected exact and pattern branch names beyond main", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     for (const branch of ["master", "develop", "production", "release/1.0", "hotfix-123"]) {
       const text = await run({
@@ -154,7 +150,7 @@ describe("git_worktree_add", () => {
   });
 
   test("refuses on unsafe branch name", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
       workspaceRoot: dir,
@@ -168,7 +164,7 @@ describe("git_worktree_add", () => {
   });
 
   test("refuses on unsafe baseRef", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
       workspaceRoot: dir,
@@ -183,7 +179,7 @@ describe("git_worktree_add", () => {
   });
 
   test("rejects leading-dash worktree path as invalid_paths", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
       workspaceRoot: dir,
@@ -198,7 +194,7 @@ describe("git_worktree_add", () => {
   });
 
   test("rejects NUL in worktree path", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
       workspaceRoot: dir,
@@ -212,7 +208,7 @@ describe("git_worktree_add", () => {
   });
 
   test("allows sibling worktree outside git toplevel", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-sibling-outside"));
     const run = captureTool(registerGitWorktreeAddTool);
     const text = await run({
@@ -249,7 +245,7 @@ describe("git_worktree_add", () => {
 
 describe("git_worktree_remove", () => {
   test("removes an existing worktree (json)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-to-remove"));
     gitCmd(dir, "worktree", "add", "-b", "feature/to-remove", wtPath);
 
@@ -262,7 +258,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("markdown format shows removed path", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-to-remove-md"));
     gitCmd(dir, "worktree", "add", "-b", "feature/remove-md", wtPath);
 
@@ -274,7 +270,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("cannot_remove_main_worktree refuses to remove the main worktree", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeRemoveTool);
     const text = await run({ workspaceRoot: dir, path: dir, format: "json" });
     const parsed = JSON.parse(text) as { error: string };
@@ -283,7 +279,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("worktree_not_found for a path not registered as a worktree", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeRemoveTool);
     const text = await run({
       workspaceRoot: dir,
@@ -296,7 +292,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("dirty linked worktree fails with hint; force:true removes it", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-dirty-force"));
     gitCmd(dir, "worktree", "add", "-b", "feature/dirty-force", wtPath);
     writeFileSync(join(wtPath, "dirty.txt"), "uncommitted\n");
@@ -325,7 +321,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("registration check normalizes a symlinked alias to the registered worktree path", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const wtPath = trackTmpPath(join(dir, "../wt-symlink-target"));
     gitCmd(dir, "worktree", "add", "-b", "feature/symlink-target", wtPath);
 
@@ -342,7 +338,7 @@ describe("git_worktree_remove", () => {
   });
 
   test("rejects leading-dash path on remove", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitWorktreeRemoveTool);
     const text = await run({
       workspaceRoot: dir,

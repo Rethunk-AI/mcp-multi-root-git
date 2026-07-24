@@ -27,10 +27,6 @@ import {
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-cherry-pick-test-");
-}
-
 function createBranchWithCommits(
   dir: string,
   branch: string,
@@ -54,7 +50,7 @@ function createBranchWithCommits(
 
 describe("git_cherry_pick branch sources", () => {
   test("single branch source plays every new commit onto destination", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/a", [
       { path: "a1.txt", body: "a1\n", message: "feat: a1" },
       { path: "a2.txt", body: "a2\n", message: "feat: a2" },
@@ -83,7 +79,7 @@ describe("git_cherry_pick branch sources", () => {
   });
 
   test("multiple branch sources applied in order", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/a", [{ path: "a.txt", body: "a\n", message: "feat: a" }]);
     createBranchWithCommits(dir, "feature/b", [{ path: "b.txt", body: "b\n", message: "feat: b" }]);
 
@@ -103,7 +99,7 @@ describe("git_cherry_pick branch sources", () => {
   });
 
   test("re-applying a patch-equivalent commit adds nothing (--empty=drop)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const shas = createBranchWithCommits(dir, "feature/a", [
       { path: "a.txt", body: "a\n", message: "feat: a" },
     ]);
@@ -144,7 +140,7 @@ describe("git_cherry_pick branch sources", () => {
 
 describe("git_cherry_pick SHA and range sources", () => {
   test("single SHA picks exactly that commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const shas = createBranchWithCommits(dir, "feature/a", [
       { path: "a1.txt", body: "a1\n", message: "feat: a1" },
       { path: "a2.txt", body: "a2\n", message: "feat: a2" },
@@ -172,7 +168,7 @@ describe("git_cherry_pick SHA and range sources", () => {
   });
 
   test("A..B range picks all commits in range, oldest-first", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const shas = createBranchWithCommits(dir, "feature/a", [
       { path: "a1.txt", body: "a1\n", message: "feat: a1" },
       { path: "a2.txt", body: "a2\n", message: "feat: a2" },
@@ -205,7 +201,7 @@ describe("git_cherry_pick SHA and range sources", () => {
   });
 
   test("overlap between branch and SHA sources deduplicates", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const shas = createBranchWithCommits(dir, "feature/a", [
       { path: "a.txt", body: "a\n", message: "feat: a" },
     ]);
@@ -235,7 +231,7 @@ describe("git_cherry_pick SHA and range sources", () => {
 
 describe("git_cherry_pick conflicts", () => {
   test("conflict aborts cherry-pick and reports structured paths", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Two branches touch the same file with incompatible content.
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
@@ -284,7 +280,7 @@ describe("git_cherry_pick conflicts", () => {
 
 describe("git_cherry_pick cleanup", () => {
   test("deleteMergedBranches skips protected 'dev' name even if merged", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Create and merge a dev branch forward into main via fast-forward.
     gitCmd(dir, "checkout", "-b", "dev");
     writeFileSync(join(dir, "d.txt"), "d\n");
@@ -312,7 +308,7 @@ describe("git_cherry_pick cleanup", () => {
   });
 
   test("deleteMergedWorktrees removes a worktree attached to branch-kind source", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/w", [{ path: "w.txt", body: "W\n", message: "feat: w" }]);
     const wtContainer = mkTmpDir("mcp-cp-wt-");
     const wtPath = trackTmpPath(join(wtContainer, "wt"));
@@ -340,7 +336,7 @@ describe("git_cherry_pick cleanup", () => {
   });
 
   test("single branch source cherry-pick (markdown)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/cp", [
       { path: "cp.txt", body: "cp\n", message: "feat: cp" },
     ]);
@@ -365,7 +361,7 @@ describe("git_cherry_pick cleanup", () => {
 
 describe("git_cherry_pick patch-id branch deletion", () => {
   test("deleteMergedBranches deletes branch after cherry-pick despite SHA mismatch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Create feature branch from seed
     createBranchWithCommits(dir, "feature/cp", [
       { path: "cp.txt", body: "content\n", message: "feat: cherry-pick me" },
@@ -398,7 +394,7 @@ describe("git_cherry_pick patch-id branch deletion", () => {
   });
 
   test("strictMergedRefEquality: true skips deletion after cherry-pick (SHA mismatch)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/strict", [
       { path: "strict.txt", body: "strict\n", message: "feat: strict" },
     ]);
@@ -428,7 +424,7 @@ describe("git_cherry_pick patch-id branch deletion", () => {
   });
 
   test("branchHasUnmergedMergeCommits: true for a branch with its own unique merge commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "topic");
     writeFileSync(join(dir, "topic.txt"), "topic\n");
     gitCmd(dir, "add", "topic.txt");
@@ -449,7 +445,7 @@ describe("git_cherry_pick patch-id branch deletion", () => {
   });
 
   test("maybeDeleteCherryPickedBranch falls back to strict -d semantics when the branch has an unverified merge commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "topic2");
     writeFileSync(join(dir, "topic2.txt"), "topic2\n");
     gitCmd(dir, "add", "topic2.txt");
@@ -476,7 +472,7 @@ describe("git_cherry_pick patch-id branch deletion", () => {
 
 describe("git_cherry_pick guardrails", () => {
   test("working_tree_dirty refuses unstaged changes", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchWithCommits(dir, "feature/a", [{ path: "a.txt", body: "a\n", message: "feat: a" }]);
     writeFileSync(join(dir, "seed.txt"), "mutated\n");
 
@@ -491,7 +487,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("unknown source returns source_not_found", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitCherryPickTool);
     const text = await run({
       workspaceRoot: dir,
@@ -503,7 +499,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("unsafe ref token rejected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitCherryPickTool);
     const text = await run({
       workspaceRoot: dir,
@@ -515,7 +511,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("unsafe range token rejected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitCherryPickTool);
     const text = await run({
       workspaceRoot: dir,
@@ -527,7 +523,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("onto checks out a non-current destination branch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "dest");
     addCommit(dir, "dest.txt", "d\n", "chore: dest base");
     gitCmd(dir, "checkout", "main");
@@ -553,7 +549,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("too many expanded commits returns cherry_pick_too_many_commits", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Build the over-cap chain with commit-tree plumbing: porcelain `git commit`
     // in a tight loop intermittently failed with "could not parse HEAD" on CI
     // runners (#16). commit-tree never reads HEAD or the index, and the cap
@@ -582,7 +578,7 @@ describe("git_cherry_pick guardrails", () => {
   });
 
   test("cap is enforced BEFORE the dedupe subprocess spawning, even when every commit would dedupe away", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Build an over-cap chain, then fast-forward `onto` all the way to the tip —
     // every commit in the range is now already-reachable from `onto`, so the
     // *post*-dedupe pick count would be 0 (old behavior: no error, no-op success).
@@ -617,7 +613,7 @@ describe("git_cherry_pick guardrails", () => {
   test.skipIf(process.getuid?.() === 0)(
     "abortCherryPick reports failure instead of claiming a clean abort",
     async () => {
-      const dir = makeRepo();
+      const dir = makeRepoWithSeed();
       writeFileSync(join(dir, "shared.txt"), "common\n");
       gitCmd(dir, "add", "shared.txt");
       gitCmd(dir, "commit", "-m", "chore: shared");
@@ -663,7 +659,7 @@ describe("git_cherry_pick guardrails", () => {
 
 describe("git_cherry_pick onConflict: pause", () => {
   test("leaves the conflict and sequencer state in place instead of aborting", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");
@@ -712,7 +708,7 @@ describe("git_cherry_pick onConflict: pause", () => {
   });
 
   test("markdown format reports the paused state and points at git_cherry_pick_continue", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");
@@ -737,7 +733,7 @@ describe("git_cherry_pick onConflict: pause", () => {
   });
 
   test("a second git_cherry_pick call while paused returns cherry_pick_in_progress", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");
@@ -776,7 +772,7 @@ describe("git_cherry_pick onConflict: pause", () => {
 
 describe("git_cherry_pick_continue", () => {
   test("with nothing in progress returns no_cherry_pick_in_progress", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitCherryPickContinueTool);
     const text = await run({ workspaceRoot: dir, format: "json" });
     const parsed = JSON.parse(text) as { error: string };
@@ -784,7 +780,7 @@ describe("git_cherry_pick_continue", () => {
   });
 
   test("with unresolved paths returns an informative error", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");
@@ -817,7 +813,7 @@ describe("git_cherry_pick_continue", () => {
   });
 
   test("continue after resolving the conflict completes remaining picks", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");
@@ -867,7 +863,7 @@ describe("git_cherry_pick_continue", () => {
   });
 
   test("a later commit conflicting mid-continue is reported resumably", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     writeFileSync(join(dir, "other.txt"), "common2\n");
@@ -934,7 +930,7 @@ describe("git_cherry_pick_continue", () => {
   });
 
   test("action: abort restores HEAD to the pre-cherry-pick commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "shared.txt"), "common\n");
     gitCmd(dir, "add", "shared.txt");
     gitCmd(dir, "commit", "-m", "chore: shared");

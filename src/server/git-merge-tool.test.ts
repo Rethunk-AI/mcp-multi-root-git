@@ -27,10 +27,6 @@ afterEach(cleanupTmpPaths);
 // Repo helpers (shared via test-harness.ts)
 // ---------------------------------------------------------------------------
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-merge-test-");
-}
-
 function createBranchAhead(dir: string, branch: string, files: Record<string, string>): void {
   gitCmd(dir, "checkout", "-b", branch);
   for (const [path, body] of Object.entries(files)) {
@@ -47,7 +43,7 @@ function createBranchAhead(dir: string, branch: string, files: Record<string, st
 
 describe("git_merge fast-forward", () => {
   test("ahead-only source fast-forwards under auto strategy", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
 
     const run = captureTool(registerGitMergeTool);
@@ -69,7 +65,7 @@ describe("git_merge fast-forward", () => {
   });
 
   test("multiple ahead-only sources apply in order", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     // second branch starts from main (before a is merged) and adds b.txt
     createBranchAhead(dir, "feature/b", { "b.txt": "B\n" });
@@ -95,7 +91,7 @@ describe("git_merge fast-forward", () => {
   });
 
   test("already up-to-date source is reported but not re-applied", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // feature/a points at main, then main advances past it.
     gitCmd(dir, "branch", "feature/a", "HEAD");
     addCommit(dir, "extra.txt", "extra\n", "chore: advance main");
@@ -121,7 +117,7 @@ describe("git_merge fast-forward", () => {
 
 describe("git_merge strategy", () => {
   test("ff-only on ahead-only source returns fast_forward", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
 
     const run = captureTool(registerGitMergeTool);
@@ -142,7 +138,7 @@ describe("git_merge strategy", () => {
   });
 
   test("ff-only on diverged branches returns cannot_fast_forward", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     // advance main so feature/a is behind
     addCommit(dir, "m.txt", "M\n", "chore: main advance");
@@ -163,7 +159,7 @@ describe("git_merge strategy", () => {
   });
 
   test("auto on diverged branches rebases then fast-forwards when clean", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     addCommit(dir, "m.txt", "M\n", "chore: main advance");
 
@@ -182,7 +178,7 @@ describe("git_merge strategy", () => {
   });
 
   test("merge strategy always creates a merge commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
 
     const run = captureTool(registerGitMergeTool);
@@ -204,7 +200,7 @@ describe("git_merge strategy", () => {
   });
 
   test("auto falls back to merge commit when rebase conflicts", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Both branches touch the same file with incompatible content.
     gitCmd(dir, "checkout", "-b", "feature/a");
     writeFileSync(join(dir, "shared.txt"), "alpha\n");
@@ -233,7 +229,7 @@ describe("git_merge strategy", () => {
   });
 
   test("rebase strategy surfaces rebase conflict without merge fallback", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "feature/a");
     writeFileSync(join(dir, "shared.txt"), "alpha\n");
     gitCmd(dir, "add", "shared.txt");
@@ -264,7 +260,7 @@ describe("git_merge strategy", () => {
   });
 
   test("multi-source stops on first conflict and skips remaining sources", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/ok", { "ok.txt": "ok\n" });
 
     // Conflicting second source.
@@ -305,7 +301,7 @@ describe("git_merge strategy", () => {
   });
 
   test("into checks out a non-current destination branch", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // dest starts at the same tip as main; feature/a is ahead → FF into dest.
     gitCmd(dir, "branch", "dest", "HEAD");
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
@@ -338,7 +334,7 @@ describe("git_merge strategy", () => {
 
 describe("git_merge cleanup", () => {
   test("deleteMergedBranches deletes an up_to_date source (safest case — fully ref-contained)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // feature/a points at main's current tip, then main advances past it — the
     // source is fully contained in the destination (outcome: up_to_date), which
     // is the safest possible case for `git branch -d`, yet used to be skipped.
@@ -363,7 +359,7 @@ describe("git_merge cleanup", () => {
   });
 
   test("deleteMergedBranches deletes non-protected source, skips protected source (maybeDeleteBranch)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Non-protected branch, ahead of main.
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     // Protected branch name (`dev`), also ahead of main.
@@ -396,7 +392,7 @@ describe("git_merge cleanup", () => {
   });
 
   test("simple ff-merge (markdown)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     gitCmd(dir, "checkout", "main");
 
@@ -409,7 +405,7 @@ describe("git_merge cleanup", () => {
   });
 
   test("deleteMergedWorktrees removes a worktree attached to merged source", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Create branch + worktree for it.
     gitCmd(dir, "branch", "feature/w", "HEAD");
     const wtContainer = mkTmpDir("mcp-wt-");
@@ -439,7 +435,7 @@ describe("git_merge cleanup", () => {
   });
 
   test("deleteMergedWorktrees skips protected source name even when path tail is not protected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Protected branch `dev` with a worktree whose basename is NOT a protected name.
     gitCmd(dir, "checkout", "-b", "dev");
     writeFileSync(join(dir, "d.txt"), "d\n");
@@ -477,7 +473,7 @@ describe("git_merge cleanup", () => {
 
 describe("git_merge guardrails", () => {
   test("working_tree_dirty refuses when tree has unstaged changes", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     createBranchAhead(dir, "feature/a", { "a.txt": "A\n" });
     writeFileSync(join(dir, "seed.txt"), "mutated\n");
 
@@ -492,7 +488,7 @@ describe("git_merge guardrails", () => {
   });
 
   test("unknown source returns source_not_found", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -509,7 +505,7 @@ describe("git_merge guardrails", () => {
   });
 
   test("unsafe ref token rejected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
 
     const run = captureTool(registerGitMergeTool);
     const text = await run({
@@ -522,7 +518,7 @@ describe("git_merge guardrails", () => {
   });
 
   test("merge_in_progress refuses with a specific error instead of generic working_tree_dirty", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "feature/a");
     writeFileSync(join(dir, "shared.txt"), "alpha\n");
     gitCmd(dir, "add", "shared.txt");
@@ -563,7 +559,7 @@ describe("git_merge guardrails", () => {
   test.skipIf(process.getuid?.() === 0)(
     "abortMerge reports failure instead of claiming a clean abort",
     async () => {
-      const dir = makeRepo();
+      const dir = makeRepoWithSeed();
       gitCmd(dir, "checkout", "-b", "feature/a");
       writeFileSync(join(dir, "shared.txt"), "alpha\n");
       gitCmd(dir, "add", "shared.txt");
@@ -594,7 +590,7 @@ describe("git_merge guardrails", () => {
   test.skipIf(process.getuid?.() === 0)(
     "abortRebase reports failure instead of claiming a clean abort",
     async () => {
-      const dir = makeRepo();
+      const dir = makeRepoWithSeed();
       gitCmd(dir, "checkout", "-b", "feature/a");
       writeFileSync(join(dir, "shared.txt"), "alpha\n");
       gitCmd(dir, "add", "shared.txt");

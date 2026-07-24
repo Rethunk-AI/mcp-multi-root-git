@@ -12,13 +12,9 @@ import { captureTool, cleanupTmpPaths, gitCmd, makeRepoWithSeed } from "./test-h
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-revert-test-");
-}
-
 describe("git_revert happy path", () => {
   test("reverts a seeded commit: restores content and creates a new commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "changed\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: change seed");
@@ -57,7 +53,7 @@ describe("git_revert happy path", () => {
   });
 
   test("noCommit stages the revert without creating a commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "changed\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: change seed");
@@ -89,7 +85,7 @@ describe("git_revert happy path", () => {
 
 describe("git_revert conflicts", () => {
   test("conflict aborts revert and reports paths, leaving the tree clean", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // seed.txt: seed -> alpha -> beta. Reverting the "alpha" change while "beta"
     // is HEAD produces a conflict (both touched the same lines afterwards).
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
@@ -135,7 +131,7 @@ describe("git_revert conflicts", () => {
       // making `.git` unwritable *after* the conflict already exists — a state
       // the full execute() path can't be paused in mid-flight from a test
       // without mocking beyond this file's style.
-      const dir = makeRepo();
+      const dir = makeRepoWithSeed();
       writeFileSync(join(dir, "seed.txt"), "alpha\n");
       gitCmd(dir, "add", "seed.txt");
       gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -175,7 +171,7 @@ describe("git_revert conflicts", () => {
 
 describe("git_revert guardrails", () => {
   test("working_tree_dirty refuses unstaged changes", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const targetSha = gitCmd(dir, "rev-parse", "HEAD").trim();
     writeFileSync(join(dir, "seed.txt"), "mutated\n");
 
@@ -190,7 +186,7 @@ describe("git_revert guardrails", () => {
   });
 
   test("unsafe source token rejected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitRevertTool);
     const text = await run({
       workspaceRoot: dir,
@@ -202,7 +198,7 @@ describe("git_revert guardrails", () => {
   });
 
   test("revert_in_progress refuses with a specific error instead of generic working_tree_dirty", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -232,7 +228,7 @@ describe("git_revert guardrails", () => {
 
 describe("git_revert multi-source and mainline", () => {
   test("reverts multiple sources in order and returns reverted[]", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "a.txt"), "a1\n");
     gitCmd(dir, "add", "a.txt");
     gitCmd(dir, "commit", "-m", "feat: a1");
@@ -265,7 +261,7 @@ describe("git_revert multi-source and mainline", () => {
   });
 
   test("mainline selects parent when reverting a merge commit", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Linear base → side branch → merge into main.
     writeFileSync(join(dir, "base.txt"), "base\n");
     gitCmd(dir, "add", "base.txt");
@@ -307,7 +303,7 @@ describe("git_revert multi-source and mainline", () => {
 
 describe("git_revert onConflict: pause", () => {
   test("leaves the conflict and sequencer state in place instead of aborting", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");
@@ -345,7 +341,7 @@ describe("git_revert onConflict: pause", () => {
   });
 
   test("a second git_revert call while paused returns revert_in_progress", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     writeFileSync(join(dir, "seed.txt"), "alpha\n");
     gitCmd(dir, "add", "seed.txt");
     gitCmd(dir, "commit", "-m", "chore: alpha");

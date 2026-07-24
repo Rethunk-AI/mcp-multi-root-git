@@ -32,10 +32,6 @@ afterEach(cleanupTmpPaths);
 // Throwaway repo helpers
 // ---------------------------------------------------------------------------
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-diff-test-");
-}
-
 // ---------------------------------------------------------------------------
 // Unit: parseNumstatOutput
 // ---------------------------------------------------------------------------
@@ -288,33 +284,33 @@ describe("buildDiffArgs", () => {
 
 describe("resolveDiffRangeArgs", () => {
   test("no literal ref named 'staged' → falls back to --cached magic mapping", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const r = await resolveDiffRangeArgs(dir, "staged");
     expect(r).toEqual({ ok: true, args: ["--cached"] });
   });
 
   test("a real branch literally named 'staged' takes precedence over the magic string", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "branch", "staged");
     const r = await resolveDiffRangeArgs(dir, "staged");
     expect(r).toEqual({ ok: true, args: ["staged"] });
   });
 
   test("a real branch literally named 'head' (lowercase) takes precedence over the HEAD magic mapping", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "branch", "head");
     const r = await resolveDiffRangeArgs(dir, "head");
     expect(r).toEqual({ ok: true, args: ["head"] });
   });
 
   test("typed 'HEAD' still resolves to HEAD (real ref path and magic path agree)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const r = await resolveDiffRangeArgs(dir, "HEAD");
     expect(r).toEqual({ ok: true, args: ["HEAD"] });
   });
 
   test("non-magic ranges pass through to buildDiffArgs unchanged", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const r = await resolveDiffRangeArgs(dir, "main..feature");
     expect(r).toEqual({ ok: true, args: ["main..feature"] });
   });
@@ -326,7 +322,7 @@ describe("resolveDiffRangeArgs", () => {
 
 describe("git_diff_summary execute handler", () => {
   test("unstaged changes appear in markdown output", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "foo.ts", "const x = 1;\n", "chore: initial");
     writeFileSync(join(dir, "foo.ts"), "const x = 2;\n");
 
@@ -336,7 +332,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("json format returns structured DiffSummary", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "a.ts", "const a = 1;\n", "chore: initial");
     writeFileSync(join(dir, "a.ts"), "const a = 99;\n");
 
@@ -354,7 +350,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("staged range shows only staged files", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "staged.ts", "const s = 1;\n", "chore: initial");
     writeFileSync(join(dir, "staged.ts"), "const s = 2;\n");
     gitCmd(dir, "add", "staged.ts");
@@ -373,7 +369,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("fileFilter restricts output to matching files only", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "foo.ts", "const f = 1;\n", "chore: initial");
     addCommit(dir, "bar.md", "# Doc\n", "docs: add readme");
     writeFileSync(join(dir, "foo.ts"), "const f = 2;\n");
@@ -394,7 +390,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("ancestor-notation range (HEAD~1..HEAD) diffs the two commits", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "range.ts", "const v = 1;\n", "chore: initial");
     addCommit(dir, "range.ts", "const v = 2;\n", "chore: bump");
 
@@ -409,7 +405,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("clean working tree returns empty files array", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "clean.ts", "const c = 1;\n", "chore: initial");
 
     const run = captureTool(registerGitDiffSummaryTool);
@@ -429,7 +425,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("maxLinesPerFile truncates long diffs", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(
       dir,
       "big.ts",
@@ -448,7 +444,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("maxFiles truncates and sets truncatedFiles", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     for (const name of ["a.ts", "b.ts", "c.ts"]) {
       addCommit(dir, name, `const ${name[0]} = 1;\n`, `chore: ${name}`);
       writeFileSync(join(dir, name), `const ${name[0]} = 2;\n`);
@@ -472,7 +468,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("default excludePatterns lists lock files in excludedFiles", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addCommit(dir, "app.ts", "const x = 1;\n", "chore: app");
     addCommit(dir, "yarn.lock", "lock1\n", "chore: lock");
     writeFileSync(join(dir, "app.ts"), "const x = 2;\n");
@@ -492,7 +488,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("unsafe range returns exact error===unsafe_range_token on the wire", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const run = captureTool(registerGitDiffSummaryTool);
     const text = await run({
       workspaceRoot: dir,
@@ -504,7 +500,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("rename with content edits reports non-zero numstat counts", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     // Keep similarity high so git detects a rename (default -M threshold).
     addCommit(
       dir,
@@ -540,7 +536,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("subprocess-level buffer truncation returns partial summary + truncated:true, not git_diff_failed", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const { writeFileSync } = await import("node:fs");
     writeFileSync(join(dir, "seed.txt"), `${"z".repeat(4000)}\n`);
 
@@ -561,7 +557,7 @@ describe("git_diff_summary execute handler", () => {
   });
 
   test("range literally named 'staged' as a real branch diffs against that branch, not --cached", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     gitCmd(dir, "checkout", "-b", "staged");
     addCommit(dir, "on-staged-branch.ts", "const s = 1;\n", "feat: on staged branch");
     gitCmd(dir, "checkout", "main");

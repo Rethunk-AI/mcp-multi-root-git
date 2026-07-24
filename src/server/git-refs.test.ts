@@ -27,10 +27,6 @@ afterEach(cleanupTmpPaths);
 // Integration: isContentEquivalentlyMergedInto
 // ---------------------------------------------------------------------------
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-git-refs-test-");
-}
-
 function addFile(dir: string, name: string, content: string, msg: string): void {
   writeFileSync(join(dir, name), content);
   gitCmd(dir, "add", name);
@@ -39,7 +35,7 @@ function addFile(dir: string, name: string, content: string, msg: string): void 
 
 describe("isContentEquivalentlyMergedInto", () => {
   test("returns true when branch is a direct ancestor of target (fast-forward merged)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
 
     // Create feature branch at same commit, then add another commit on main.
@@ -52,7 +48,7 @@ describe("isContentEquivalentlyMergedInto", () => {
   });
 
   test("returns false when branch has commits not on target", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
     gitCmd(dir, "checkout", "-b", "feature");
     addFile(dir, "b.ts", "const b = 2;\n", "feat: b");
@@ -63,7 +59,7 @@ describe("isContentEquivalentlyMergedInto", () => {
   });
 
   test("returns true when cherry-picked commits are content-equivalent (different SHA)", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: base");
 
     // Feature branch adds a commit.
@@ -80,7 +76,7 @@ describe("isContentEquivalentlyMergedInto", () => {
   });
 
   test("returns false for unsafe ref tokens", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
     expect(await isContentEquivalentlyMergedInto(dir, "-bad-branch", "main")).toBe(false);
     expect(await isContentEquivalentlyMergedInto(dir, "main", "-bad-target")).toBe(false);
@@ -93,7 +89,7 @@ describe("isContentEquivalentlyMergedInto", () => {
 
 describe("commitPatchId", () => {
   test("returns a stable patch-id for a real commit under default bounds", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
 
@@ -103,7 +99,7 @@ describe("commitPatchId", () => {
   });
 
   test("returns undefined (never hangs) when timeoutMs is exceeded — wedged-git simulation", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
 
@@ -126,7 +122,7 @@ describe("commitPatchId", () => {
   });
 
   test("returns undefined (no silent partial-output match) when maxBufferBytes is exceeded", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\nconst b = 2;\nconst c = 3;\n", "feat: sizable diff");
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
 
@@ -136,7 +132,7 @@ describe("commitPatchId", () => {
   });
 
   test("returns undefined for an unknown sha instead of throwing", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     addFile(dir, "a.ts", "const a = 1;\n", "feat: a");
 
     const id = commitPatchId(dir, "0000000000000000000000000000000000000000");
@@ -393,7 +389,7 @@ describe("isSafeGitCommitIsh", () => {
 
 describe("listWorktrees", () => {
   test("returns worktrees for a real repo", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const listed = await listWorktrees(dir);
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
