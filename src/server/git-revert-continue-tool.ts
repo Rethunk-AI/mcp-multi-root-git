@@ -21,7 +21,7 @@ import { WorkspacePickSchema } from "./schemas.js";
 interface ContinueConflictReport {
   paused: true;
   commit?: string;
-  paths: string[];
+  conflicts: string[];
   detail?: string;
 }
 
@@ -43,7 +43,7 @@ function renderRevertContinueMarkdown(
       "",
       `Conflict at commit \`${conflict.commit ?? "?"}\`:`,
     ];
-    for (const p of conflict.paths) lines.push(`  conflict: ${p}`);
+    for (const p of conflict.conflicts) lines.push(`  conflict: ${p}`);
     if (conflict.detail) lines.push(`  detail: ${conflict.detail}`);
     lines.push(
       "  Paused: revert still in progress. Resolve the conflict, then call `git_revert_continue` again.",
@@ -138,7 +138,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
           const conflict: ContinueConflictReport = {
             paused: true,
             ...spreadDefined("commit", failedSha),
-            paths,
+            conflicts: paths,
             ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
           };
           if (args.format === "json") {
