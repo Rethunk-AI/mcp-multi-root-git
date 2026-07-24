@@ -14,6 +14,7 @@ import {
   buildInventorySectionMarkdown,
   collectInventoryEntry,
   type InventoryEntryJson,
+  MAX_BRANCH_STATUS_LINES_DEFAULT,
   makeSkipEntry,
   validateRepoPath,
 } from "./inventory.js";
@@ -21,6 +22,9 @@ import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetNestedRoots } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 import { MAX_INVENTORY_ROOTS_DEFAULT, RootPickSchema } from "./schemas.js";
+
+/** Reason a per-root inventory group could not be produced (preset/nestedRoots failure). Same shape as other per-root fan-out errors: an `error` code plus context. */
+type InventoryGroupError = Record<string, unknown>;
 
 export function registerGitInventoryTool(server: FastMCP): void {
   server.addTool({
@@ -50,17 +54,26 @@ export function registerGitInventoryTool(server: FastMCP): void {
           "Ahead/behind between two local refs (e.g. main vs a feature branch), independent of upstream tracking.",
         ),
       maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
+      maxBranchStatusLines: z
+        .number()
+        .int()
+        .min(1)
+        .max(20000)
+        .optional()
+        .default(MAX_BRANCH_STATUS_LINES_DEFAULT)
+        .describe("Cap raw branchStatus lines per repo (default 500)."),
     }),
-    execute: async (args) => {
+    execute: async (args, context) => {
       if (Array.isArray(args.root)) {
         if (args.preset || (args.nestedRoots?.length ?? 0) > 0) {
           return jsonRespond({ error: ERROR_CODES.ROOT_LIST_NESTED_OR_PRESET_CONFLICT });
         }
       }
-      const pre = requireGitAndRoots(server, args, args.preset);
+      const pre = requireGitAndRoots(server, args, args.preset, context.sessionId);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
+      const warning = pre.warning;
 
       const rawRemote = args.remote?.trim();
       const rawBranch = args.branch?.trim();
@@ -103,7 +116,10 @@ export function registerGitInventoryTool(server: FastMCP): void {
         presetSchemaVersion?: string;
         upstream?: { mode: "fixed"; remote: string; branch: string };
         entries: InventoryEntryJson[];
+        error?: InventoryGroupError;
       }[] = [];
+
+      const maxBranchStatusLines = args.maxBranchStatusLines ?? MAX_BRANCH_STATUS_LINES_DEFAULT;
 
       const mdChunks: string[] = [];
 
@@ -135,10 +151,39 @@ export function registerGitInventoryTool(server: FastMCP): void {
         if (args.preset) {
           const applied = applyPresetNestedRoots(top, args.preset, args.presetMerge, nestedRoots);
           if (!applied.ok) {
-            return jsonRespond(applied.error);
+            // Never abort the whole sweep for one root's preset problem — record a
+            // per-root error entry (same shape as the not-a-git-repo entries above)
+            // and move on to the remaining roots.
+            if (args.format === "json") {
+              allJson.push({
+                workspaceRoot: top,
+                ...(upstream.mode === "fixed" ? { upstream } : {}),
+                entries: [],
+                error: applied.error,
+              });
+            } else {
+              mdChunks.push(
+                [`### ${top}`, "```json", JSON.stringify(applied.error), "```"].join("\n"),
+              );
+            }
+            continue;
           }
           nestedRoots = applied.nestedRoots;
           presetSchemaVersion = applied.presetSchemaVersion;
+        }
+
+        // Dedup before the maxRoots cutoff so duplicate nestedRoots entries
+        // (inline + merged preset, or a caller-supplied repeat) don't eat into
+        // the truncation budget.
+        if (nestedRoots && nestedRoots.length > 0) {
+          const seen = new Set<string>();
+          const deduped: string[] = [];
+          for (const r of nestedRoots) {
+            if (seen.has(r)) continue;
+            seen.add(r);
+            deduped.push(r);
+          }
+          nestedRoots = deduped;
         }
 
         const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
@@ -172,9 +217,28 @@ export function registerGitInventoryTool(server: FastMCP): void {
             }
             jobs.push({ label: rel, abs });
           }
-          const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, (j) =>
-            collectInventoryEntry(j.label, j.abs, upstream.remote, upstream.branch, compareRefs),
-          );
+          const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async (j) => {
+            // One throwing job must not fail the whole batch — contain it as a
+            // per-entry skip instead of letting asyncPool's Promise.all reject.
+            try {
+              return await collectInventoryEntry(
+                j.label,
+                j.abs,
+                upstream.remote,
+                upstream.branch,
+                compareRefs,
+                maxBranchStatusLines,
+              );
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              return makeSkipEntry(
+                j.label,
+                j.abs,
+                upstream.mode,
+                `(inventory collection failed: ${msg})`,
+              );
+            }
+          });
           entries.push(...computed);
         } else if (!gitRevParseGitDir(top)) {
           entries.push(
@@ -187,6 +251,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
             upstream.remote,
             upstream.branch,
             compareRefs,
+            maxBranchStatusLines,
           );
           entries.push(one);
         }
@@ -217,9 +282,13 @@ export function registerGitInventoryTool(server: FastMCP): void {
       }
 
       if (args.format === "json") {
-        return jsonRespond({ inventories: allJson });
+        return jsonRespond({ ...spreadDefined("warning", warning), inventories: allJson });
       }
-      return ["# Git inventory", ...mdChunks].join("\n\n");
+      return [
+        "# Git inventory",
+        ...(warning ? [`_(warning: ${JSON.stringify(warning)})_`] : []),
+        ...mdChunks,
+      ].join("\n\n");
     },
   });
 }

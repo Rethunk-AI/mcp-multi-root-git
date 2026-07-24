@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitInventoryTool } from "./git-inventory-tool.js";
@@ -280,8 +280,14 @@ describe("git_inventory execute handler", () => {
 
     const run = captureTool(registerGitInventoryTool);
     const text = await run({ root: dir, format: "json", preset: "nope" });
-    const parsed = JSON.parse(text) as { error: string };
-    expect(parsed.error).toBe("preset_not_found");
+    // Preset resolution failures are per-root entries (contract 1) — never an
+    // abort of the whole sweep, even when there's only one root in play.
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{ entries: unknown[]; error?: { error: string } }>;
+    };
+    expect(parsed.inventories).toHaveLength(1);
+    expect(parsed.inventories[0]?.error?.error).toBe("preset_not_found");
+    expect(parsed.inventories[0]?.entries).toHaveLength(0);
   });
 
   test("string non-git root → skipReason not a git repository (plain text)", async () => {
@@ -291,5 +297,168 @@ describe("git_inventory execute handler", () => {
     const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
     expect(parsed.inventories[0]?.entries[0]?.skipReason).toBe("(not a git repository)");
     expect(parsed.inventories[0]?.entries[0]?.skipReason).not.toContain("{");
+  });
+
+  test("true 2+-sibling-repo fan-out via root array", async () => {
+    const a = makeRepoWithSeed("mcp-inv-sibling-a-");
+    const b = makeRepoWithSeed("mcp-inv-sibling-b-");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: [a, b], format: "json" });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    expect(parsed.inventories).toHaveLength(2);
+    expect(parsed.inventories.map((g) => g.workspaceRoot)).toEqual([a, b]);
+    expect(parsed.inventories[0]?.entries[0]?.label).toBe(".");
+    expect(parsed.inventories[1]?.entries[0]?.label).toBe(".");
+  });
+
+  test("compareRefs combined with fixed remote/branch: both upstream and compareRefs populate", async () => {
+    const { work } = makeRepoWithUpstream("mcp-inv-combo-up-", "mcp-inv-combo-remote-");
+    gitCmd(work, "branch", "feature");
+    gitCmd(work, "checkout", "feature");
+    writeFileSync(join(work, "feat.txt"), "feat\n");
+    gitCmd(work, "add", "feat.txt");
+    gitCmd(work, "commit", "-m", "feat: on feature");
+    gitCmd(work, "checkout", "main");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: work,
+      format: "json",
+      remote: "origin",
+      branch: "main",
+      compareRefs: { left: "main", right: "feature" },
+    });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{
+        upstream?: { mode: string; remote: string; branch: string };
+        entries: Array<{
+          upstreamRef?: string;
+          ahead?: string;
+          behind?: string;
+          compareRefs?: { left: string; right: string; ahead?: string; behind?: string };
+        }>;
+      }>;
+    };
+    expect(parsed.inventories[0]?.upstream).toEqual({
+      mode: "fixed",
+      remote: "origin",
+      branch: "main",
+    });
+    const entry = parsed.inventories[0]?.entries[0];
+    expect(entry?.upstreamRef).toBe("origin/main");
+    expect(entry?.ahead).toBe("0");
+    expect(entry?.behind).toBe("0");
+    expect(entry?.compareRefs?.ahead).toBe("1");
+    expect(entry?.compareRefs?.behind).toBe("0");
+  });
+
+  test("nestedRoots dedup happens before maxRoots truncation", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-nested-dedup-");
+    for (const name of ["a", "b"]) {
+      const sub = join(dir, name);
+      mkdirSync(sub);
+      gitCmd(sub, "init", "-b", "main");
+      gitCmd(sub, "config", "user.email", "test@test.com");
+      gitCmd(sub, "config", "user.name", "Test User");
+      writeFileSync(join(sub, "f.ts"), `const ${name} = 1;\n`);
+      gitCmd(sub, "add", "f.ts");
+      gitCmd(sub, "commit", "-m", `init ${name}`);
+    }
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      nestedRoots: ["a", "a", "b"],
+      maxRoots: 2,
+    });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    const group = parsed.inventories[0];
+    // Without the duplicate "a" eaten into the truncation budget, both unique
+    // paths fit under maxRoots=2 and nothing is omitted.
+    expect(group?.nestedRootsTruncated).toBeUndefined();
+    expect(group?.entries).toHaveLength(2);
+    expect(group?.entries.map((e) => e.label)).toEqual(["a", "b"]);
+  });
+
+  test("maxBranchStatusLines caps raw branchStatus text and reports omitted count", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-branchcap-");
+    for (const name of ["f1.txt", "f2.txt", "f3.txt", "f4.txt", "f5.txt"]) {
+      writeFileSync(join(dir, name), "x\n");
+    }
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: dir, format: "json", maxBranchStatusLines: 3 });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{
+        entries: Array<{
+          branchStatus?: string;
+          branchStatusTruncated?: boolean;
+          branchStatusOmittedLines?: number;
+        }>;
+      }>;
+    };
+    const entry = parsed.inventories[0]?.entries[0];
+    expect(entry?.branchStatusTruncated).toBe(true);
+    expect(entry?.branchStatusOmittedLines).toBe(3);
+    expect(entry?.branchStatus?.split("\n")).toHaveLength(3);
+  });
+
+  test("symlink escaping nestedRoots is rejected even though it resolves inside the toplevel lexically", async () => {
+    const dir = makeRepoWithSeed("mcp-inv-symlink-");
+    const outside = mkTmpDir("mcp-inv-symlink-outside-");
+    const linkPath = join(dir, "escape-link");
+    symlinkSync(outside, linkPath, "dir");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: dir, format: "json", nestedRoots: ["escape-link"] });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    const entries = parsed.inventories[0]?.entries ?? [];
+    expect(entries[0]?.skipReason).toContain("path escapes");
+  });
+
+  test("preset failure on one root produces a per-root error entry instead of aborting the sweep", async () => {
+    const broken = makeRepoWithSeed("mcp-inv-preset-broken-");
+    mkdirSync(join(broken, ".rethunk"), { recursive: true });
+    writeFileSync(join(broken, ".rethunk", "git-mcp-presets.json"), "{not valid json");
+
+    const ok = makeRepoWithSeed("mcp-inv-preset-ok-");
+    const sub = join(ok, "pkg");
+    mkdirSync(sub);
+    gitCmd(sub, "init", "-b", "main");
+    gitCmd(sub, "config", "user.email", "test@test.com");
+    gitCmd(sub, "config", "user.name", "Test User");
+    writeFileSync(join(sub, "f.ts"), "const x = 1;\n");
+    gitCmd(sub, "add", "f.ts");
+    gitCmd(sub, "commit", "-m", "init pkg");
+    mkdirSync(join(ok, ".rethunk"), { recursive: true });
+    writeFileSync(
+      join(ok, ".rethunk", "git-mcp-presets.json"),
+      JSON.stringify({ schemaVersion: "1", presets: { inv: { nestedRoots: ["pkg"] } } }),
+    );
+
+    const run = captureTool(registerGitInventoryTool, undefined, [
+      `file://${broken}`,
+      `file://${ok}`,
+    ]);
+    const text = await run({ root: "*", format: "json", preset: "inv" });
+    const parsed = JSON.parse(text) as {
+      inventories: Array<{
+        workspaceRoot: string;
+        entries: InventoryEntry[];
+        error?: { error: string };
+      }>;
+    };
+    expect(parsed.inventories).toHaveLength(2);
+    const brokenGroup = parsed.inventories[0];
+    expect(brokenGroup?.workspaceRoot).toBe(broken);
+    expect(brokenGroup?.error?.error).toBe("preset_file_invalid");
+    expect(brokenGroup?.entries).toHaveLength(0);
+
+    const okGroup = parsed.inventories[1];
+    expect(okGroup?.workspaceRoot).toBe(ok);
+    expect(okGroup?.entries).toHaveLength(1);
+    expect(okGroup?.entries[0]?.label).toBe("pkg");
   });
 });
