@@ -4,9 +4,9 @@ import { z } from "zod";
 import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
+  createTopLevelMemo,
   GIT_SUBPROCESS_PARALLELISM,
-  gitRevParseGitDir,
-  gitTopLevel,
+  gitRevParseGitDirAsync,
   isSafeGitUpstreamToken,
 } from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
@@ -20,7 +20,7 @@ import {
 } from "./inventory.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetNestedRoots } from "./presets.js";
-import { requireGitAndRoots } from "./roots.js";
+import { requireGitAndRootsAsync } from "./roots.js";
 import { MAX_INVENTORY_ROOTS_DEFAULT, RootPickSchema } from "./schemas.js";
 
 /** Reason a per-root inventory group could not be produced (preset/nestedRoots failure). Same shape as other per-root fan-out errors: an `error` code plus context. */
@@ -69,7 +69,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           return jsonRespond({ error: ERROR_CODES.ROOT_LIST_NESTED_OR_PRESET_CONFLICT });
         }
       }
-      const pre = requireGitAndRoots(server, args, args.preset, context.sessionId);
+      const pre = await requireGitAndRootsAsync(server, args, args.preset, context.sessionId);
       if (!pre.ok) {
         return jsonRespond(pre.error);
       }
@@ -122,28 +122,65 @@ export function registerGitInventoryTool(server: FastMCP): void {
       const maxBranchStatusLines = args.maxBranchStatusLines ?? MAX_BRANCH_STATUS_LINES_DEFAULT;
 
       const mdChunks: string[] = [];
+      const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
 
-      for (const workspaceRoot of pre.roots) {
-        const top = gitTopLevel(workspaceRoot);
-        if (!top) {
-          if (args.format === "json") {
-            allJson.push({
-              workspaceRoot: workspaceRoot,
-              ...(upstream.mode === "fixed" ? { upstream } : {}),
-              entries: [
-                makeSkipEntry(
-                  workspaceRoot,
-                  workspaceRoot,
-                  upstream.mode,
-                  "(not a git repository)",
-                ),
-              ],
-            });
-          } else {
-            mdChunks.push(`### ${workspaceRoot}\n(not a git repository)`);
+      // ---------------------------------------------------------------------
+      // Phase 1: resolve every root's toplevel concurrently (bounded pool,
+      // per-call memoized) instead of one blocking call per root in sequence.
+      // ---------------------------------------------------------------------
+      const topMemo = createTopLevelMemo();
+      const tops = await asyncPool(pre.roots, GIT_SUBPROCESS_PARALLELISM, (r) => topMemo(r));
+
+      // One slot per nestedRoots position; filled in by the dir-check /
+      // collect phases below. "skip" entries (path-escape or not-a-work-tree)
+      // are grouped before "computed" entries in the final per-root output —
+      // matching the pre-existing entries shape — but each group individually
+      // preserves nestedRoots input order (see the Phase 4 filter below).
+      type NestedSlot =
+        | { type: "pending" }
+        | { type: "skip"; entry: InventoryEntryJson }
+        | { type: "computed"; entry: InventoryEntryJson };
+
+      type RootPlan =
+        | { kind: "notRepo"; workspaceRoot: string }
+        | { kind: "presetError"; top: string; error: InventoryGroupError }
+        | {
+            kind: "loneTop";
+            rootIndex: number;
+            top: string;
+            presetSchemaVersion?: string;
+            headerNote: string;
           }
-          continue;
-        }
+        | {
+            kind: "nested";
+            top: string;
+            presetSchemaVersion?: string;
+            nestedRootsTruncated: boolean;
+            nestedRootsOmittedCount: number;
+            headerNote: string;
+            slots: NestedSlot[];
+          };
+
+      type DirCheckJob = { rootIndex: number; posIndex: number; label: string; abs: string };
+      type ComputeJob = { rootIndex: number; posIndex: number; label: string; abs: string };
+      type LoneTopJob = { rootIndex: number; top: string };
+
+      const dirCheckJobs: DirCheckJob[] = [];
+      const loneTopJobs: LoneTopJob[] = [];
+      const headerNote = useFixed
+        ? `upstream (fixed): ${upstream.remote}/${upstream.branch}`
+        : "upstream: @{u}";
+
+      // -----------------------------------------------------------------------
+      // Phase 2: per-root synchronous setup (no subprocess) — resolves preset
+      // nestedRoots, caps/dedupes, and classifies each nestedRoots entry as an
+      // immediate skip (path escape, no subprocess needed) or a candidate for
+      // the dir-check pool below. Builds one RootPlan per root and flattens
+      // all subprocess-needing work across every root into global job lists.
+      // -----------------------------------------------------------------------
+      const plans: RootPlan[] = pre.roots.map((workspaceRoot, rootIndex) => {
+        const top = tops[rootIndex];
+        if (!top) return { kind: "notRepo", workspaceRoot };
 
         let nestedRoots: string[] | undefined = args.nestedRoots;
         let presetSchemaVersion: string | undefined;
@@ -151,22 +188,8 @@ export function registerGitInventoryTool(server: FastMCP): void {
         if (args.preset) {
           const applied = applyPresetNestedRoots(top, args.preset, args.presetMerge, nestedRoots);
           if (!applied.ok) {
-            // Never abort the whole sweep for one root's preset problem — record a
-            // per-root error entry (same shape as the not-a-git-repo entries above)
-            // and move on to the remaining roots.
-            if (args.format === "json") {
-              allJson.push({
-                workspaceRoot: top,
-                ...(upstream.mode === "fixed" ? { upstream } : {}),
-                entries: [],
-                error: applied.error,
-              });
-            } else {
-              mdChunks.push(
-                [`### ${top}`, "```json", JSON.stringify(applied.error), "```"].join("\n"),
-              );
-            }
-            continue;
+            // Never abort the whole sweep for one root's preset problem.
+            return { kind: "presetError", top, error: applied.error };
           }
           nestedRoots = applied.nestedRoots;
           presetSchemaVersion = applied.presetSchemaVersion;
@@ -186,7 +209,6 @@ export function registerGitInventoryTool(server: FastMCP): void {
           nestedRoots = deduped;
         }
 
-        const maxRoots = args.maxRoots ?? MAX_INVENTORY_ROOTS_DEFAULT;
         let nestedRootsTruncated = false;
         let nestedRootsOmittedCount = 0;
         if (nestedRoots && nestedRoots.length > maxRoots) {
@@ -195,83 +217,194 @@ export function registerGitInventoryTool(server: FastMCP): void {
           nestedRootsTruncated = true;
         }
 
-        const headerNote = useFixed
-          ? `upstream (fixed): ${upstream.remote}/${upstream.branch}`
-          : "upstream: @{u}";
-
-        const entries: InventoryEntryJson[] = [];
-
-        if (nestedRoots?.length) {
-          const jobs: { label: string; abs: string }[] = [];
-          for (const rel of nestedRoots) {
-            const { abs, underTop } = validateRepoPath(rel, top);
-            if (!underTop) {
-              entries.push(
-                makeSkipEntry(rel, abs, upstream.mode, "(path escapes git toplevel — rejected)"),
-              );
-              continue;
-            }
-            if (!gitRevParseGitDir(abs)) {
-              entries.push(makeSkipEntry(rel, abs, upstream.mode, "(not a git work tree — skip)"));
-              continue;
-            }
-            jobs.push({ label: rel, abs });
-          }
-          const computed = await asyncPool(jobs, GIT_SUBPROCESS_PARALLELISM, async (j) => {
-            // One throwing job must not fail the whole batch — contain it as a
-            // per-entry skip instead of letting asyncPool's Promise.all reject.
-            try {
-              return await collectInventoryEntry(
-                j.label,
-                j.abs,
-                upstream.remote,
-                upstream.branch,
-                compareRefs,
-                maxBranchStatusLines,
-              );
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              return makeSkipEntry(
-                j.label,
-                j.abs,
-                upstream.mode,
-                `(inventory collection failed: ${msg})`,
-              );
-            }
-          });
-          entries.push(...computed);
-        } else if (!gitRevParseGitDir(top)) {
-          entries.push(
-            makeSkipEntry(".", top, upstream.mode, "(not a git work tree — unexpected)"),
-          );
-        } else {
-          const one = await collectInventoryEntry(
-            ".",
+        if (!nestedRoots?.length) {
+          loneTopJobs.push({ rootIndex, top });
+          return {
+            kind: "loneTop",
+            rootIndex,
             top,
+            ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
+            headerNote,
+          };
+        }
+
+        const slots: NestedSlot[] = nestedRoots.map((rel) => {
+          const { abs, underTop } = validateRepoPath(rel, top);
+          if (!underTop) {
+            return {
+              type: "skip",
+              entry: makeSkipEntry(
+                rel,
+                abs,
+                upstream.mode,
+                "(path escapes git toplevel — rejected)",
+              ),
+            };
+          }
+          return { type: "pending" };
+        });
+        nestedRoots.forEach((rel, posIndex) => {
+          if (slots[posIndex]?.type !== "pending") return;
+          const { abs } = validateRepoPath(rel, top);
+          dirCheckJobs.push({ rootIndex, posIndex, label: rel, abs });
+        });
+
+        return {
+          kind: "nested",
+          top,
+          ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
+          nestedRootsTruncated,
+          nestedRootsOmittedCount,
+          headerNote,
+          slots,
+        };
+      });
+
+      // -----------------------------------------------------------------------
+      // Phase 3a: one global bounded pool checking `git rev-parse --git-dir`
+      // for every nestedRoots candidate across every root.
+      // -----------------------------------------------------------------------
+      const computeJobs: ComputeJob[] = [];
+      await asyncPool(dirCheckJobs, GIT_SUBPROCESS_PARALLELISM, async (job) => {
+        const isWorktree = await gitRevParseGitDirAsync(job.abs);
+        const plan = plans[job.rootIndex];
+        if (plan?.kind !== "nested") return;
+        if (!isWorktree) {
+          plan.slots[job.posIndex] = {
+            type: "skip",
+            entry: makeSkipEntry(job.label, job.abs, upstream.mode, "(not a git work tree — skip)"),
+          };
+          return;
+        }
+        computeJobs.push(job);
+      });
+
+      // -----------------------------------------------------------------------
+      // Phase 3b: one global bounded pool running collectInventoryEntry for
+      // every nestedRoots candidate that passed the dir-check above.
+      // -----------------------------------------------------------------------
+      await asyncPool(computeJobs, GIT_SUBPROCESS_PARALLELISM, async (job) => {
+        const plan = plans[job.rootIndex];
+        if (plan?.kind !== "nested") return;
+        // One throwing job must not fail the whole batch — contain it as a
+        // per-entry skip instead of letting asyncPool's Promise.all reject.
+        try {
+          const entry = await collectInventoryEntry(
+            job.label,
+            job.abs,
             upstream.remote,
             upstream.branch,
             compareRefs,
             maxBranchStatusLines,
           );
-          entries.push(one);
+          plan.slots[job.posIndex] = { type: "computed", entry };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          plan.slots[job.posIndex] = {
+            type: "skip",
+            entry: makeSkipEntry(
+              job.label,
+              job.abs,
+              upstream.mode,
+              `(inventory collection failed: ${msg})`,
+            ),
+          };
         }
+      });
+
+      // -----------------------------------------------------------------------
+      // Phase 3c: one global bounded pool for lone-top (no nestedRoots) roots.
+      // Mirrors the pre-existing behavior exactly: the dir-check gates a skip
+      // entry, but a throwing collectInventoryEntry is NOT contained here —
+      // it propagates (rejecting the whole tool call), same as before.
+      // -----------------------------------------------------------------------
+      const loneTopResults = new Map<number, InventoryEntryJson>();
+      await asyncPool(loneTopJobs, GIT_SUBPROCESS_PARALLELISM, async (job) => {
+        const isWorktree = await gitRevParseGitDirAsync(job.top);
+        if (!isWorktree) {
+          loneTopResults.set(
+            job.rootIndex,
+            makeSkipEntry(".", job.top, upstream.mode, "(not a git work tree — unexpected)"),
+          );
+          return;
+        }
+        const entry = await collectInventoryEntry(
+          ".",
+          job.top,
+          upstream.remote,
+          upstream.branch,
+          compareRefs,
+          maxBranchStatusLines,
+        );
+        loneTopResults.set(job.rootIndex, entry);
+      });
+
+      // -----------------------------------------------------------------------
+      // Phase 4: assemble output in pre.roots order (input-order deterministic
+      // despite concurrent execution above).
+      // -----------------------------------------------------------------------
+      for (const plan of plans) {
+        if (plan.kind === "notRepo") {
+          if (args.format === "json") {
+            allJson.push({
+              workspaceRoot: plan.workspaceRoot,
+              ...(upstream.mode === "fixed" ? { upstream } : {}),
+              entries: [
+                makeSkipEntry(
+                  plan.workspaceRoot,
+                  plan.workspaceRoot,
+                  upstream.mode,
+                  "(not a git repository)",
+                ),
+              ],
+            });
+          } else {
+            mdChunks.push(`### ${plan.workspaceRoot}\n(not a git repository)`);
+          }
+          continue;
+        }
+        if (plan.kind === "presetError") {
+          if (args.format === "json") {
+            allJson.push({
+              workspaceRoot: plan.top,
+              ...(upstream.mode === "fixed" ? { upstream } : {}),
+              entries: [],
+              error: plan.error,
+            });
+          } else {
+            mdChunks.push(
+              [`### ${plan.top}`, "```json", JSON.stringify(plan.error), "```"].join("\n"),
+            );
+          }
+          continue;
+        }
+
+        const entries: InventoryEntryJson[] =
+          plan.kind === "loneTop"
+            ? [loneTopResults.get(plan.rootIndex) as InventoryEntryJson]
+            : [
+                ...plan.slots.filter((s) => s.type === "skip").map((s) => s.entry),
+                ...plan.slots.filter((s) => s.type === "computed").map((s) => s.entry),
+              ];
 
         if (args.format === "json") {
           allJson.push({
-            workspaceRoot: top,
-            ...spreadDefined("presetSchemaVersion", presetSchemaVersion),
-            ...spreadWhen(nestedRootsTruncated, {
-              nestedRootsTruncated: true,
-              nestedRootsOmittedCount,
-            }),
+            workspaceRoot: plan.top,
+            ...spreadDefined("presetSchemaVersion", plan.presetSchemaVersion),
+            ...(plan.kind === "nested"
+              ? spreadWhen(plan.nestedRootsTruncated, {
+                  nestedRootsTruncated: true,
+                  nestedRootsOmittedCount: plan.nestedRootsOmittedCount,
+                })
+              : {}),
             ...(upstream.mode === "fixed" ? { upstream } : {}),
             entries,
           });
         } else {
-          const sections: string[] = [`### ${top}`, headerNote];
-          if (nestedRootsTruncated) {
+          const sections: string[] = [`### ${plan.top}`, plan.headerNote];
+          if (plan.kind === "nested" && plan.nestedRootsTruncated) {
             sections.push(
-              `nested_roots_truncated: ${nestedRootsOmittedCount} path(s) not listed (maxRoots=${maxRoots})`,
+              `nested_roots_truncated: ${plan.nestedRootsOmittedCount} path(s) not listed (maxRoots=${maxRoots})`,
             );
           }
           for (const e of entries) {

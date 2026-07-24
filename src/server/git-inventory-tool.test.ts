@@ -312,6 +312,51 @@ describe("git_inventory execute handler", () => {
     expect(parsed.inventories[1]?.entries[0]?.label).toBe(".");
   });
 
+  test("3-root fan-out via root array stays input-order deterministic", async () => {
+    // Root-level work now runs through a bounded pool instead of a strict
+    // for-loop; this proves the pool still emits results in `pre.roots`
+    // order rather than completion order.
+    const a = makeRepoWithSeed("mcp-inv-order-a-");
+    const b = makeRepoWithSeed("mcp-inv-order-b-");
+    const c = makeRepoWithSeed("mcp-inv-order-c-");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({ root: [a, b, c], format: "json" });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    expect(parsed.inventories.map((g) => g.workspaceRoot)).toEqual([a, b, c]);
+  });
+
+  test("nestedRoots fan-out with a mix of valid/escaping/missing entries stays input-order deterministic", async () => {
+    // Nested-root work is now folded into one global bounded pool (dir-check
+    // + collect) rather than a per-root sequential pass; this proves the
+    // final entries order still matches the pre-existing shape (skip entries
+    // grouped before computed entries, each group in nestedRoots order).
+    const dir = makeRepoWithSeed("mcp-inv-nested-order-");
+    mkdirSync(join(dir, "pkg-a"));
+    gitCmd(join(dir, "pkg-a"), "init", "-b", "main");
+    mkdirSync(join(dir, "pkg-b"));
+    gitCmd(join(dir, "pkg-b"), "init", "-b", "main");
+
+    const run = captureTool(registerGitInventoryTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      nestedRoots: ["../../outside", "pkg-a", "does-not-exist", "pkg-b"],
+    });
+    const parsed = JSON.parse(text) as { inventories: InventoryGroup[] };
+    const entries = parsed.inventories[0]?.entries ?? [];
+    expect(entries.map((e) => e.label)).toEqual([
+      "../../outside",
+      "does-not-exist",
+      "pkg-a",
+      "pkg-b",
+    ]);
+    expect(entries[0]?.skipReason).toContain("escapes");
+    expect(entries[1]?.skipReason).toContain("not a git work tree");
+    expect(entries[2]?.skipReason).toBeUndefined();
+    expect(entries[3]?.skipReason).toBeUndefined();
+  });
+
   test("compareRefs combined with fixed remote/branch: both upstream and compareRefs populate", async () => {
     const { work } = makeRepoWithUpstream("mcp-inv-combo-up-", "mcp-inv-combo-remote-");
     gitCmd(work, "branch", "feature");
