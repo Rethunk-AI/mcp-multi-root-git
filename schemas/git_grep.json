@@ -18,14 +18,6 @@
         }
       ]
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "pickaxe": {
       "type": "object",
       "properties": {
@@ -55,10 +47,6 @@
       "description": "Commit/branch/tag to use as the history tip. Must be a safe ref token.",
       "type": "string"
     },
-    "path": {
-      "description": "Limit history to this path. Unioned with `paths`.",
-      "type": "string"
-    },
     "paths": {
       "description": "Limit history to these paths (max 256, must resolve within the repo root).",
       "maxItems": 256,
@@ -81,7 +69,6 @@
     }
   },
   "required": [
-    "format",
     "pickaxe",
     "ignoreCase",
     "maxMatches"

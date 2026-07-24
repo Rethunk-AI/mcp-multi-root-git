@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "message": {
       "description": "Stash subject message (`git stash push -m <message>`).",
       "type": "string"
@@ -39,7 +31,6 @@
     }
   },
   "required": [
-    "format",
     "includeUntracked",
     "keepIndex"
   ],

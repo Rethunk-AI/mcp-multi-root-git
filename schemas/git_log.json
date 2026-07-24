@@ -18,26 +18,12 @@
         }
       ]
     },
-    "format": {
-      "default": "json",
-      "description": "`json` (default): groups array. `markdown`: headed sections per root. `oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json",
-        "oneline"
-      ]
-    },
     "since": {
       "description": "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
       "type": "string"
     },
     "until": {
       "description": "Passed to `--until=`. Same format as `since`.",
-      "type": "string"
-    },
-    "path": {
-      "description": "Limit to commits touching this path. Unioned with `paths`.",
       "type": "string"
     },
     "paths": {
@@ -76,7 +62,7 @@
       "minimum": 1,
       "maximum": 500
     },
-    "branch": {
+    "ref": {
       "description": "Ref/branch to log from. Default: HEAD.",
       "type": "string"
     },
@@ -87,7 +73,6 @@
     }
   },
   "required": [
-    "format",
     "ignoreCase",
     "maxCommits",
     "follow"

@@ -8,25 +8,13 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "ref": {
       "type": "string",
       "minLength": 1,
       "description": "Commit reference (SHA, branch, tag, or ancestor notation like \"HEAD~3\", \"main^2\")."
     },
-    "path": {
-      "description": "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
-      "type": "string"
-    },
     "paths": {
-      "description": "Optional list of file paths (max 256) to filter the shown diff/stat. Merged with `path` when both are provided.",
+      "description": "Optional list of file paths (max 256) to filter the shown diff/stat.",
       "maxItems": 256,
       "type": "array",
       "items": {
@@ -46,7 +34,6 @@
     }
   },
   "required": [
-    "format",
     "ref",
     "maxBytes"
   ],

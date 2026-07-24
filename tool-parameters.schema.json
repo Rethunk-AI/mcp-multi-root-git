@@ -22,14 +22,6 @@
             }
           ]
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "includeSubmodules": {
           "default": true,
           "type": "boolean"
@@ -50,7 +42,6 @@
         }
       },
       "required": [
-        "format",
         "includeSubmodules",
         "maxChangedFiles",
         "maxSubmodules"
@@ -73,14 +64,6 @@
                 "type": "string"
               }
             }
-          ]
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
           ]
         },
         "nestedRoots": {
@@ -139,7 +122,6 @@
         }
       },
       "required": [
-        "format",
         "presetMerge",
         "maxRoots",
         "maxBranchStatusLines"
@@ -162,14 +144,6 @@
                 "type": "string"
               }
             }
-          ]
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
           ]
         },
         "pairs": {
@@ -210,7 +184,6 @@
         }
       },
       "required": [
-        "format",
         "presetMerge",
         "maxPairs"
       ],
@@ -233,19 +206,8 @@
               }
             }
           ]
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         }
       },
-      "required": [
-        "format"
-      ],
       "additionalProperties": false
     },
     "git_log": {
@@ -266,26 +228,12 @@
             }
           ]
         },
-        "format": {
-          "default": "json",
-          "description": "`json` (default): groups array. `markdown`: headed sections per root. `oneline`: `<sha7> <subject>` per line; lowest-token option for post-commit verification.",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json",
-            "oneline"
-          ]
-        },
         "since": {
           "description": "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
           "type": "string"
         },
         "until": {
           "description": "Passed to `--until=`. Same format as `since`.",
-          "type": "string"
-        },
-        "path": {
-          "description": "Limit to commits touching this path. Unioned with `paths`.",
           "type": "string"
         },
         "paths": {
@@ -324,7 +272,7 @@
           "minimum": 1,
           "maximum": 500
         },
-        "branch": {
+        "ref": {
           "description": "Ref/branch to log from. Default: HEAD.",
           "type": "string"
         },
@@ -335,7 +283,6 @@
         }
       },
       "required": [
-        "format",
         "ignoreCase",
         "maxCommits",
         "follow"
@@ -358,14 +305,6 @@
                 "type": "string"
               }
             }
-          ]
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
           ]
         },
         "pickaxe": {
@@ -397,10 +336,6 @@
           "description": "Commit/branch/tag to use as the history tip. Must be a safe ref token.",
           "type": "string"
         },
-        "path": {
-          "description": "Limit history to this path. Unioned with `paths`.",
-          "type": "string"
-        },
         "paths": {
           "description": "Limit history to these paths (max 256, must resolve within the repo root).",
           "maxItems": 256,
@@ -423,7 +358,6 @@
         }
       },
       "required": [
-        "format",
         "pickaxe",
         "ignoreCase",
         "maxMatches"
@@ -438,17 +372,23 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
-        "range": {
-          "description": "Diff range. Examples: \"staged\", \"HEAD~3..HEAD\", \"main...feature\". Default: unstaged changes.",
+        "base": {
+          "description": "Base ref (e.g. \"main\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Omit for unstaged changes.",
           "type": "string"
+        },
+        "head": {
+          "description": "Head ref (e.g. \"feature-branch\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Defaults to HEAD. Used only when `base` is set.",
+          "type": "string"
+        },
+        "staged": {
+          "default": false,
+          "description": "Show staged changes (`git diff --staged`). Ignored if `base` is set.",
+          "type": "boolean"
+        },
+        "findCopies": {
+          "default": false,
+          "description": "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+          "type": "boolean"
         },
         "fileFilter": {
           "description": "Glob pattern to restrict output to matching files, e.g. \"*.ts\", \"src/**\".",
@@ -477,7 +417,8 @@
         }
       },
       "required": [
-        "format",
+        "staged",
+        "findCopies",
         "maxLinesPerFile",
         "maxFiles"
       ],
@@ -491,14 +432,6 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "base": {
           "description": "Base ref (e.g. \"main\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Omit for unstaged changes.",
           "type": "string"
@@ -507,12 +440,8 @@
           "description": "Head ref (e.g. \"feature-branch\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Defaults to HEAD. Used only when `base` is set.",
           "type": "string"
         },
-        "path": {
-          "description": "Scope to a single file. Unioned with `paths` if both given.",
-          "type": "string"
-        },
         "paths": {
-          "description": "Scope to multiple files (must be within repo root, max 256). Unioned with `path` if both given.",
+          "description": "Scope to one or more files (must be within repo root, max 256).",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -530,6 +459,11 @@
           "minimum": 0,
           "maximum": 100
         },
+        "findCopies": {
+          "default": false,
+          "description": "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+          "type": "boolean"
+        },
         "maxBytes": {
           "default": 512000,
           "description": "Max UTF-8 bytes of diff text to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
@@ -539,8 +473,8 @@
         }
       },
       "required": [
-        "format",
         "staged",
+        "findCopies",
         "maxBytes"
       ],
       "additionalProperties": false
@@ -553,25 +487,13 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "ref": {
           "type": "string",
           "minLength": 1,
           "description": "Commit reference (SHA, branch, tag, or ancestor notation like \"HEAD~3\", \"main^2\")."
         },
-        "path": {
-          "description": "Optional single file path to inspect at the ref. Merged with `paths` when both are provided.",
-          "type": "string"
-        },
         "paths": {
-          "description": "Optional list of file paths (max 256) to filter the shown diff/stat. Merged with `path` when both are provided.",
+          "description": "Optional list of file paths (max 256) to filter the shown diff/stat.",
           "maxItems": 256,
           "type": "array",
           "items": {
@@ -591,7 +513,6 @@
         }
       },
       "required": [
-        "format",
         "ref",
         "maxBytes"
       ],
@@ -604,14 +525,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "withHunks": {
           "default": true,
@@ -627,7 +540,6 @@
         }
       },
       "required": [
-        "format",
         "withHunks",
         "maxLinesPerFile"
       ],
@@ -640,14 +552,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "path": {
           "type": "string",
@@ -694,7 +598,6 @@
         }
       },
       "required": [
-        "format",
         "path",
         "maxLines",
         "ignoreWhitespace",
@@ -710,14 +613,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "commits": {
           "minItems": 1,
@@ -748,39 +643,29 @@
                           "minLength": 1,
                           "description": "File path relative to git root."
                         },
-                        "lines": {
-                          "type": "object",
-                          "properties": {
-                            "from": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 1000000,
-                              "description": "Start line number (1-indexed)."
-                            },
-                            "to": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 1000000,
-                              "description": "End line number (1-indexed, inclusive)."
-                            }
-                          },
-                          "required": [
-                            "from",
-                            "to"
-                          ],
-                          "additionalProperties": false,
-                          "description": "Line range to stage. Only hunks overlapping [from, to] are staged."
+                        "lineFrom": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000,
+                          "description": "Start line number (1-indexed). Only hunks overlapping [lineFrom, lineTo] are staged."
+                        },
+                        "lineTo": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000,
+                          "description": "End line number (1-indexed, inclusive)."
                         }
                       },
                       "required": [
                         "path",
-                        "lines"
+                        "lineFrom",
+                        "lineTo"
                       ],
                       "additionalProperties": false
                     }
                   ]
                 },
-                "description": "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`). Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. Rejects `.`, the repo root, and directory pathspecs."
+                "description": "Paths to stage, relative to git root. String or `{ path, lineFrom, lineTo }` for hunk-level staging. Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`). Deleted tracked files are staged via `git rm --cached`. Cannot combine `lineFrom`/`lineTo` with a deleted file. Rejects `.`, the repo root, and directory pathspecs."
               }
             },
             "required": [
@@ -807,7 +692,6 @@
         }
       },
       "required": [
-        "format",
         "commits",
         "push",
         "dryRun"
@@ -821,14 +705,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "remote": {
           "description": "Remote to push to. Defaults to the remote inferred from the current upstream tracking ref, or `origin` when `setUpstream` is true.",
@@ -845,7 +721,6 @@
         }
       },
       "required": [
-        "format",
         "setUpstream"
       ],
       "additionalProperties": false
@@ -857,14 +732,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "sources": {
           "minItems": 1,
@@ -907,7 +774,6 @@
         }
       },
       "required": [
-        "format",
         "sources",
         "strategy",
         "deleteMergedBranches",
@@ -923,14 +789,6 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "sources": {
           "minItems": 1,
           "maxItems": 50,
@@ -939,9 +797,9 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Sources: SHA, `A..B` range, or branch name (resolves to `onto..<branch>`)."
+          "description": "Sources: SHA, `A..B` range, or branch name (resolves to `into..<branch>`)."
         },
-        "onto": {
+        "into": {
           "description": "Destination branch. Defaults to the currently checked-out branch.",
           "type": "string"
         },
@@ -971,7 +829,6 @@
         }
       },
       "required": [
-        "format",
         "sources",
         "deleteMergedBranches",
         "deleteMergedWorktrees",
@@ -988,14 +845,6 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "action": {
           "default": "continue",
           "description": "\"continue\" (default): resolve conflicts, stage them, then resume the sequencer. \"abort\": roll back to the pre-cherry-pick HEAD.",
@@ -1007,7 +856,6 @@
         }
       },
       "required": [
-        "format",
         "action"
       ],
       "additionalProperties": false
@@ -1019,14 +867,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "ref": {
           "type": "string",
@@ -1040,7 +880,6 @@
         }
       },
       "required": [
-        "format",
         "ref",
         "force"
       ],
@@ -1053,14 +892,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "sources": {
           "minItems": 1,
@@ -1094,7 +925,6 @@
         }
       },
       "required": [
-        "format",
         "sources",
         "noCommit",
         "onConflict"
@@ -1109,14 +939,6 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "action": {
           "default": "continue",
           "description": "\"continue\" (default): resolve conflicts, stage them, then resume the sequencer. \"abort\": roll back to the pre-revert HEAD.",
@@ -1128,7 +950,6 @@
         }
       },
       "required": [
-        "format",
         "action"
       ],
       "additionalProperties": false
@@ -1140,14 +961,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "tag": {
           "type": "string",
@@ -1169,7 +982,6 @@
         }
       },
       "required": [
-        "format",
         "tag",
         "delete"
       ],
@@ -1182,14 +994,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "action": {
           "type": "string",
@@ -1220,7 +1024,6 @@
         }
       },
       "required": [
-        "format",
         "action",
         "name",
         "force"
@@ -1234,14 +1037,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "path": {
           "type": "string",
@@ -1259,7 +1054,6 @@
         }
       },
       "required": [
-        "format",
         "path",
         "branch"
       ],
@@ -1273,14 +1067,6 @@
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
         },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
-        },
         "path": {
           "type": "string",
           "minLength": 1,
@@ -1293,7 +1079,6 @@
         }
       },
       "required": [
-        "format",
         "path",
         "force"
       ],
@@ -1306,14 +1091,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "index": {
           "default": 0,
@@ -1329,7 +1106,6 @@
         }
       },
       "required": [
-        "format",
         "index",
         "pop"
       ],
@@ -1342,14 +1118,6 @@
         "workspaceRoot": {
           "description": "Repo path. Default: first MCP root / cwd.",
           "type": "string"
-        },
-        "format": {
-          "default": "json",
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json"
-          ]
         },
         "message": {
           "description": "Stash subject message (`git stash push -m <message>`).",
@@ -1374,7 +1142,6 @@
         }
       },
       "required": [
-        "format",
         "includeUntracked",
         "keepIndex"
       ],

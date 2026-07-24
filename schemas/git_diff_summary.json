@@ -8,17 +8,23 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
-    "range": {
-      "description": "Diff range. Examples: \"staged\", \"HEAD~3..HEAD\", \"main...feature\". Default: unstaged changes.",
+    "base": {
+      "description": "Base ref (e.g. \"main\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Omit for unstaged changes.",
       "type": "string"
+    },
+    "head": {
+      "description": "Head ref (e.g. \"feature-branch\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Defaults to HEAD. Used only when `base` is set.",
+      "type": "string"
+    },
+    "staged": {
+      "default": false,
+      "description": "Show staged changes (`git diff --staged`). Ignored if `base` is set.",
+      "type": "boolean"
+    },
+    "findCopies": {
+      "default": false,
+      "description": "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+      "type": "boolean"
     },
     "fileFilter": {
       "description": "Glob pattern to restrict output to matching files, e.g. \"*.ts\", \"src/**\".",
@@ -47,7 +53,8 @@
     }
   },
   "required": [
-    "format",
+    "staged",
+    "findCopies",
     "maxLinesPerFile",
     "maxFiles"
   ],

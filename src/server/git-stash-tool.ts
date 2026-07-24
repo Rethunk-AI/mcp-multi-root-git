@@ -22,7 +22,7 @@ function buildGitStashApplyJson(opts: {
     ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
     applied,
     stashIndex: index,
-    popped: pop,
+    ...spreadWhen(pop, { popped: true }),
     ...spreadDefined("output", output || undefined),
     ...spreadWhen(conflicts.length > 0, { conflicts }),
   };

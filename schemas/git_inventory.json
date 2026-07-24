@@ -18,14 +18,6 @@
         }
       ]
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "nestedRoots": {
       "type": "array",
       "items": {
@@ -82,7 +74,6 @@
     }
   },
   "required": [
-    "format",
     "presetMerge",
     "maxRoots",
     "maxBranchStatusLines"

@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "sources": {
       "minItems": 1,
       "maxItems": 50,
@@ -24,9 +16,9 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "Sources: SHA, `A..B` range, or branch name (resolves to `onto..<branch>`)."
+      "description": "Sources: SHA, `A..B` range, or branch name (resolves to `into..<branch>`)."
     },
-    "onto": {
+    "into": {
       "description": "Destination branch. Defaults to the currently checked-out branch.",
       "type": "string"
     },
@@ -56,7 +48,6 @@
     }
   },
   "required": [
-    "format",
     "sources",
     "deleteMergedBranches",
     "deleteMergedWorktrees",

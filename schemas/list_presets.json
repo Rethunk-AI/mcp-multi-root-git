@@ -17,18 +17,7 @@
           }
         }
       ]
-    },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
     }
   },
-  "required": [
-    "format"
-  ],
   "additionalProperties": false
 }

@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "base": {
       "description": "Base ref (e.g. \"main\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Omit for unstaged changes.",
       "type": "string"
@@ -24,12 +16,8 @@
       "description": "Head ref (e.g. \"feature-branch\"). Ancestor notation is accepted (e.g. \"HEAD~3\", \"main^2\"). Defaults to HEAD. Used only when `base` is set.",
       "type": "string"
     },
-    "path": {
-      "description": "Scope to a single file. Unioned with `paths` if both given.",
-      "type": "string"
-    },
     "paths": {
-      "description": "Scope to multiple files (must be within repo root, max 256). Unioned with `path` if both given.",
+      "description": "Scope to one or more files (must be within repo root, max 256).",
       "maxItems": 256,
       "type": "array",
       "items": {
@@ -47,6 +35,11 @@
       "minimum": 0,
       "maximum": 100
     },
+    "findCopies": {
+      "default": false,
+      "description": "Detect copies from other files (`git diff -C`), alongside default rename detection.",
+      "type": "boolean"
+    },
     "maxBytes": {
       "default": 512000,
       "description": "Max UTF-8 bytes of diff text to return (default 512000), cut at a line boundary. Oversized output is truncated with truncated:true.",
@@ -56,8 +49,8 @@
     }
   },
   "required": [
-    "format",
     "staged",
+    "findCopies",
     "maxBytes"
   ],
   "additionalProperties": false

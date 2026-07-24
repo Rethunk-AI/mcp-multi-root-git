@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "remote": {
       "description": "Remote to push to. Defaults to the remote inferred from the current upstream tracking ref, or `origin` when `setUpstream` is true.",
       "type": "string"
@@ -31,7 +23,6 @@
     }
   },
   "required": [
-    "format",
     "setUpstream"
   ],
   "additionalProperties": false

@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "withHunks": {
       "default": true,
       "description": "Parse conflict-marker hunks per file. Set false for just the path list.",
@@ -30,7 +22,6 @@
     }
   },
   "required": [
-    "format",
     "withHunks",
     "maxLinesPerFile"
   ],

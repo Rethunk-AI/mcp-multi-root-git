@@ -164,7 +164,7 @@ describe("batch_commit execute handler", () => {
     expect(parsed.results[0]?.error).toBe("invalid_paths");
   });
 
-  test("path_escapes_repository: dotdot path → error in json response", async () => {
+  test("path_escapes_repo: dotdot path → error in json response", async () => {
     const dir = makeRepo();
 
     const run = captureTool(registerBatchCommitTool);
@@ -175,7 +175,7 @@ describe("batch_commit execute handler", () => {
     });
     const parsed = JSON.parse(text) as { ok: boolean; results: Array<{ error: string }> };
     expect(parsed.ok).toBe(false);
-    expect(parsed.results[0]?.error).toBe("path_escapes_repository");
+    expect(parsed.results[0]?.error).toBe("path_escapes_repo");
   });
 
   test("non-git workspaceRoot → not_a_git_repository error", async () => {
@@ -661,7 +661,7 @@ describe("batch_commit line-range staging", () => {
       commits: [
         {
           message: "feat: add new file via line range",
-          files: [{ path: "new.ts", lines: { from: 1, to: 2 } }],
+          files: [{ path: "new.ts", lineFrom: 1, lineTo: 2 }],
         },
       ],
     });
@@ -699,7 +699,7 @@ describe("batch_commit line-range staging", () => {
       commits: [
         {
           message: "feat: stage lines 1-3",
-          files: [{ path: "code.ts", lines: { from: 1, to: 3 } }],
+          files: [{ path: "code.ts", lineFrom: 1, lineTo: 3 }],
         },
       ],
     });
@@ -772,7 +772,7 @@ describe("batch_commit line-range staging", () => {
         {
           message: "feat: mixed staging",
           files: [
-            { path: "file1.ts", lines: { from: 2, to: 2 } }, // Only line 2
+            { path: "file1.ts", lineFrom: 2, lineTo: 2 }, // Only line 2
             "file2.ts", // Whole file
           ],
         },
@@ -806,7 +806,7 @@ describe("batch_commit line-range staging", () => {
       commits: [
         {
           message: "feat: invalid range",
-          files: [{ path: "code.ts", lines: { from: 100, to: 200 } }],
+          files: [{ path: "code.ts", lineFrom: 100, lineTo: 200 }],
         },
       ],
     });
@@ -841,7 +841,7 @@ describe("batch_commit line-range staging", () => {
           // rejects as a corrupt patch whenever the selection isn't the last
           // hunk in the file's diff.
           message: "feat: stage first hunk only",
-          files: [{ path: "code.py", lines: { from: 1, to: 5 } }],
+          files: [{ path: "code.py", lineFrom: 1, lineTo: 5 }],
         },
       ],
     });
@@ -884,7 +884,7 @@ describe("batch_commit line-range staging", () => {
           // first) was never tracked for rollback once bad.ts failed, leaving a
           // "dry run" with real, uncleaned index state.
           message: "feat: mixed success then failure",
-          files: ["good.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+          files: ["good.ts", { path: "bad.ts", lineFrom: 100, lineTo: 200 }],
         },
       ],
     });
@@ -970,7 +970,7 @@ describe("batch_commit deletion staging", () => {
     const text = await run({
       workspaceRoot: dir,
       format: "json",
-      commits: [{ message: "bad", files: [{ path: "gone.ts", lines: { from: 1, to: 5 } }] }],
+      commits: [{ message: "bad", files: [{ path: "gone.ts", lineFrom: 1, lineTo: 5 }] }],
     });
     const parsed = JSON.parse(text) as {
       ok: boolean;
@@ -1051,7 +1051,7 @@ describe("batch_commit pathspec isolation and stage rollback", () => {
       commits: [
         {
           message: "feat: partial stage fail",
-          files: ["good.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+          files: ["good.ts", { path: "bad.ts", lineFrom: 100, lineTo: 200 }],
         },
       ],
     });
@@ -1089,7 +1089,7 @@ describe("batch_commit pathspec isolation and stage rollback", () => {
       commits: [
         {
           message: "feat: partial stage fail with pre-staged sibling",
-          files: ["shared.ts", { path: "bad.ts", lines: { from: 100, to: 200 } }],
+          files: ["shared.ts", { path: "bad.ts", lineFrom: 100, lineTo: 200 }],
         },
       ],
     });
@@ -1266,7 +1266,7 @@ describe("batch_commit dryRun isolation", () => {
       commits: [
         {
           message: "feat: preview more lines",
-          files: [{ path: "shared.ts", lines: { from: 3, to: 3 } }],
+          files: [{ path: "shared.ts", lineFrom: 3, lineTo: 3 }],
         },
       ],
     });
@@ -1415,7 +1415,7 @@ describe("batch_commit commit_failed and push errors", () => {
       commits: [
         {
           message: "bad range",
-          files: [{ path: "code.ts", lines: { from: 10, to: 1 } }],
+          files: [{ path: "code.ts", lineFrom: 10, lineTo: 1 }],
         },
       ],
     });

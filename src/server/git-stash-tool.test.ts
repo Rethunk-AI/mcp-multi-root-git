@@ -34,11 +34,11 @@ describe("git_stash_apply execute handler", () => {
     const parsed = JSON.parse(text) as {
       applied: boolean;
       stashIndex: number;
-      popped: boolean;
+      popped?: boolean;
     };
     expect(parsed.applied).toBe(true);
     expect(parsed.stashIndex).toBe(0);
-    expect(parsed.popped).toBe(false);
+    expect(parsed.popped).toBeUndefined();
 
     // Stash still exists (apply, not pop)
     expect(stashCount(dir)).toBe(1);

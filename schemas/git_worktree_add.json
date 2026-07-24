@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "path": {
       "type": "string",
       "minLength": 1,
@@ -32,7 +24,6 @@
     }
   },
   "required": [
-    "format",
     "path",
     "branch"
   ],

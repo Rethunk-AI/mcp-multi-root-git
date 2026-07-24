@@ -77,8 +77,9 @@ export function assertRelativePathUnderTop(
 /**
  * Resolve `rel` against `gitTop` and check confinement in one step — the
  * shared path-confinement shape used across tools. Callers build their own
- * error payload from `underTop` (error codes/wire shapes intentionally
- * differ per tool, e.g. `path_escapes_repository` vs `path_escapes_repo`).
+ * error payload from `underTop` (the wire error code is `path_escapes_repo`
+ * everywhere as of v7, including `batch_commit`, which used the now-removed
+ * `path_escapes_repository` alias through v6).
  */
 export function validateRepoPath(rel: string, gitTop: string): { abs: string; underTop: boolean } {
   const abs = resolvePathForRepo(rel, gitTop);

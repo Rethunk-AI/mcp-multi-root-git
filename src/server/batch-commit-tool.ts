@@ -18,22 +18,25 @@ const FileEntrySchema = z.union([
   z.string().min(1),
   z.object({
     path: z.string().min(1).describe("File path relative to git root."),
-    lines: z
-      .object({
-        from: z.number().int().min(1).max(1000000).describe("Start line number (1-indexed)."),
-        to: z
-          .number()
-          .int()
-          .min(1)
-          .max(1000000)
-          .describe("End line number (1-indexed, inclusive)."),
-      })
-      // Not a `.refine((l) => l.from <= l.to)` here: schema-level refinement
-      // would reject `from > to` before `execute` ever runs, making the
-      // runtime check below (which returns a structured invalid_line_range
-      // result inside `results`, consistent with this tool's other
-      // per-entry errors) unreachable dead code.
-      .describe("Line range to stage. Only hunks overlapping [from, to] are staged."),
+    lineFrom: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000000)
+      .describe(
+        "Start line number (1-indexed). Only hunks overlapping [lineFrom, lineTo] are staged.",
+      ),
+    lineTo: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000000)
+      .describe("End line number (1-indexed, inclusive)."),
+    // Not a `.refine((v) => v.lineFrom <= v.lineTo)` here: schema-level
+    // refinement would reject `lineFrom > lineTo` before `execute` ever runs,
+    // making the runtime check below (which returns a structured
+    // invalid_line_range result inside `results`, consistent with this
+    // tool's other per-entry errors) unreachable dead code.
   }),
 ]);
 
@@ -43,15 +46,15 @@ const CommitEntrySchema = z.object({
     .array(FileEntrySchema)
     .min(1)
     .describe(
-      "Paths to stage, relative to git root. String or `{ path, lines }` for hunk-level staging. " +
+      "Paths to stage, relative to git root. String or `{ path, lineFrom, lineTo }` for hunk-level staging. " +
         "Each path is staged individually (`git add` / `git apply --cached` / `git rm --cached`). " +
-        "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lines` with a deleted file. " +
+        "Deleted tracked files are staged via `git rm --cached`. Cannot combine `lineFrom`/`lineTo` with a deleted file. " +
         "Rejects `.`, the repo root, and directory pathspecs.",
     ),
 });
 
 type CommitEntryInput = z.infer<typeof CommitEntrySchema>;
-type NormalizedFileEntry = { path: string; lines?: { from: number; to: number } };
+type NormalizedFileEntry = { path: string; lineFrom?: number; lineTo?: number };
 
 const PushModeSchema = z
   .enum(["never", "after"])
@@ -224,13 +227,15 @@ function extractOverlappingHunks(
 async function stageFile(
   gitTop: string,
   filePath: string,
-  lines?: { from: number; to: number },
+  lineFrom?: number,
+  lineTo?: number,
 ): Promise<{ ok: boolean; error?: string | undefined }> {
+  const hasLineRange = lineFrom !== undefined && lineTo !== undefined;
   const absPath = resolvePathForRepo(filePath, gitTop);
   const fileOnDisk = existsSync(absPath);
 
   if (!fileOnDisk) {
-    if (lines) {
+    if (hasLineRange) {
       return { ok: false, error: "cannot stage line range for deleted file" };
     }
     // File missing on disk — stage as removal if tracked in HEAD
@@ -245,7 +250,7 @@ async function stageFile(
     };
   }
 
-  if (!lines) {
+  if (lineFrom === undefined || lineTo === undefined) {
     // Simple case: stage the whole file
     const addResult = await spawnGitAsync(gitTop, ["add", "--", filePath]);
     return {
@@ -284,7 +289,7 @@ async function stageFile(
     diffStdout = diffResult.stdout;
   }
 
-  const partialPatch = extractOverlappingHunks(diffStdout, lines.from, lines.to);
+  const partialPatch = extractOverlappingHunks(diffStdout, lineFrom, lineTo);
   if (!partialPatch) {
     return { ok: false, error: "No hunks found in line range" };
   }
@@ -462,7 +467,7 @@ async function rollbackEntry(gitTop: string, snapshot: string): Promise<void> {
   await spawnGitAsync(gitTop, ["read-tree", snapshot]);
 }
 
-/** Normalizes a commit entry's `files` into `{ path, lines? }` form, flagging `from > to`. */
+/** Normalizes a commit entry's `files` into `{ path, lineFrom?, lineTo? }` form, flagging `lineFrom > lineTo`. */
 function normalizeEntryFiles(entry: CommitEntryInput): {
   fileEntries: NormalizedFileEntry[];
   filePaths: string[];
@@ -476,7 +481,7 @@ function normalizeEntryFiles(entry: CommitEntryInput): {
       fileEntries.push({ path: fileEntry });
       filePaths.push(fileEntry);
     } else {
-      if (fileEntry.lines.from > fileEntry.lines.to) {
+      if (fileEntry.lineFrom > fileEntry.lineTo) {
         invalidLineRange = true;
         filePaths.push(fileEntry.path);
         break;
@@ -522,7 +527,7 @@ function validateEntryPaths(
     }
   }
   if (escapedPaths.length > 0) {
-    return { error: ERROR_CODES.PATH_ESCAPES_REPOSITORY, detail: escapedPaths.join(", ") };
+    return { error: ERROR_CODES.PATH_ESCAPES_REPO, detail: escapedPaths.join(", ") };
   }
 
   // --- Reject `.` / repo-root / directory pathspecs ---
@@ -543,7 +548,12 @@ async function stageEntryFiles(
   fileEntries: NormalizedFileEntry[],
 ): Promise<{ ok: true } | { ok: false; detail: string }> {
   for (const fileEntry of fileEntries) {
-    const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
+    const stageResult = await stageFile(
+      gitTop,
+      fileEntry.path,
+      fileEntry.lineFrom,
+      fileEntry.lineTo,
+    );
     if (!stageResult.ok) {
       return { ok: false, detail: stageResult.error || "Unknown error" };
     }
@@ -721,7 +731,7 @@ async function runBatchCommit(gitTop: string, args: BatchCommitArgs): Promise<st
           entry.message,
           filePaths,
           ERROR_CODES.INVALID_LINE_RANGE,
-          "lines.from must be <= lines.to",
+          "lineFrom must be <= lineTo",
         ),
       );
       break;

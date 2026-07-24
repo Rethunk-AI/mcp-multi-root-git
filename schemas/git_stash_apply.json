@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "index": {
       "default": 0,
       "description": "Stash index (defaults to 0 for stash@{0}).",
@@ -30,7 +22,6 @@
     }
   },
   "required": [
-    "format",
     "index",
     "pop"
   ],

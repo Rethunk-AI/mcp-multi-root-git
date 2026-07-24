@@ -4,13 +4,28 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Breaking
+
+**JSON format version 6 → 7** (`MCP_JSON_FORMAT_VERSION` in `src/server.ts`). Full old→new migration table: [docs/mcp-tools.md § v7 migration](docs/mcp-tools.md#v7-migration).
+
+- **Markdown output removed.** The `format` param is gone from all 25 tool schemas (including `git_log`'s three-way `markdown`/`json`/`oneline` enum). JSON is now the only output — there is no replacement param.
+- **Renamed for cross-tool consistency:** `git_cherry_pick`'s `onto` → `into` (matches `git_merge`; its `onto_detached_head` error code folds into `git_merge`'s `into_detached_head`); `git_log`'s `branch` → `ref` (matches `git_grep`/`git_show`/`git_blame`).
+- **Singular `path` param removed** from `git_log`, `git_grep`, `git_diff`, `git_show` (use `paths: [x]`). `git_blame`'s required singular `path` is unrelated and unchanged.
+- **`git_diff_summary`'s `range` string replaced** with `git_diff`'s explicit `base`/`head`/`staged` shape; the old `staged`/`cached`/`head` magic-string-vs-literal-ref disambiguation is gone.
+- **Conflict-path fields unified to `conflicts`:** `git_merge`'s per-source `conflictPaths`, `git_cherry_pick`'s `conflict.paths` (and `git_cherry_pick_continue`'s paused-conflict shape), and `git_stash_apply`'s top-level `conflictPaths` are all renamed. `git_revert`/`git_revert_continue` already used `conflicts`.
+- **`git_grep`'s top-level `results` → `groups`** (matches the other fan-out read tools); per-entry `root` → `workspaceRoot`.
+- **`git_status`'s per-entry `mcpRoot` → `workspaceRoot`.**
+- **`batch_commit`'s legacy `path_escapes_repository` error code removed** — unified to `path_escapes_repo`, the code every other tool already used.
+- **`batch_commit`'s file entry `lines: { from, to }` flattened** to sibling `lineFrom`/`lineTo` numbers (deferred from the 5.0.0 schema-footprint trim).
+- **`git_stash_apply`'s `popped` field omitted when `false`**, matching the omit-false contract every other boolean-ish flag field already follows.
+
 ### Added
 
 - **`git_revert_continue`** — new tool (25th registered) to resume (`action: "continue"`, default) or roll back (`action: "abort"`) a revert left in progress, mirroring `git_cherry_pick_continue`. Stateless: probes `REVERT_HEAD` live off `.git`. Errors `no_revert_in_progress`, `revert_unresolved_paths`, `revert_continue_failed`, `revert_abort_failed`.
 - **`git_revert` `onConflict`** — `"abort"` (default, unchanged) or `"pause"`: on conflict, leave the conflict and native revert sequencer state in place instead of rolling back, so it can be resolved and resumed via `git_revert_continue`. A second `git_revert` call while one is already in progress now returns `revert_in_progress` (with the conflicting `commit`) instead of the generic `working_tree_dirty`.
-- **`git_log`** — new `until` (paired with `since`), `merges: "only" | "exclude"`, `ignoreCase` (grep case-sensitivity, default `true`), and a singular `path` param unioned with `paths`.
-- **`git_grep` / `git_show`** — singular `path` param unioned with `paths`.
+- **`git_log`** — new `until` (paired with `since`), `merges: "only" | "exclude"`, `ignoreCase` (grep case-sensitivity, default `true`).
 - **`git_blame`** — new `authorMail`, `ignoreWhitespace` (`-w`), `detectMoves` (`-M`), `detectCopies` (`-C`); SHA-256 object-format repos now supported (`sha` may be 64 hex chars, not just 40).
+- **`git_diff` / `git_diff_summary`** — new `findCopies` (maps to `git diff -C`) for copy detection alongside existing rename handling; `git_diff_summary`'s per-file `status` gains a `"copied"` value (with `oldPath` set).
 - **`git_show` `maxBytes`** — caps returned diff/stat content (default `512000`), cut at a line boundary; recognizes merge-commit combined-diff bodies (`diff --cc` / `diff --combined`), not just plain two-parent diffs.
 - **`git_conflicts` `conflictType`** — classifies each conflicted file from git's index stages (`both-modified`, `both-added`, `both-deleted`, `added-by-us`, `added-by-them`, `deleted-by-us`, `deleted-by-them`).
 - **`git_tag`** — refuses protected branch names for both create and delete (`protected_branch`, field `tag`), reusing `git_branch`/`git_merge`'s protected-names guard.

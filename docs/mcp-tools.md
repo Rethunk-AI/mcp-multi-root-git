@@ -258,7 +258,7 @@ Each `presets[*]` row returns the preset's actual `nestedRoots`/`parityPairs` ar
 
 ## JSON responses
 
-Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"6"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
+Tool JSON bodies are minified and contain only the payload — no `rethunkGitMcp` envelope. Current `MCP_JSON_FORMAT_VERSION` is **`"7"`** (exported constant in `src/server.ts`); the version string is surfaced in the FastMCP `instructions` field and is therefore discoverable via the MCP `initialize` response. Payload keys (`groups`, `inventories`, `parity`, `roots`) are stable within a given format version. Preset-related responses may include **`presetSchemaVersion`**.
 
 The tool surface is now **25 tools** (`git_revert_continue` added, mirroring `git_cherry_pick_continue`, to resume/abort a paused `git_revert`).
 
@@ -284,6 +284,7 @@ v7 is a breaking wire-contract pass: markdown output removed, several params/fie
 | `git_log` | `branch` | `ref` | Matches `git_grep`/`git_show`/`git_blame`'s ref param naming. |
 | `git_diff_summary` | `range` (string: `"staged"`/`"cached"`/`"head"`/`A..B`/single ref) | `base?`, `head?`, `staged?` | Same explicit shape as `git_diff`. The old magic-string/literal-ref disambiguation is gone — `base`/`head` are always literal refs, `staged` is always the boolean. |
 | `git_log`, `git_grep`, `git_diff`, `git_show` | `path` (singular, unioned with `paths`) | *(removed)* | Use `paths: [x]` instead of `path: x`. `git_blame`'s required singular `path` is unrelated and unchanged. |
+| `batch_commit` (`files` entry) | `{ path, lines: { from, to } }` | `{ path, lineFrom, lineTo }` | Nested range object flattened to sibling numbers (deferred from the 5.0.0 schema-footprint trim). `invalid_line_range` still fires on `lineFrom > lineTo`. |
 
 **Renamed/removed output fields**
 
@@ -298,6 +299,10 @@ v7 is a breaking wire-contract pass: markdown output removed, several params/fie
 | `git_grep` | per-entry `root` | `workspaceRoot` | |
 | `git_status` | per-entry `mcpRoot` | `workspaceRoot` | |
 | `git_show` | `path` (singular, present only when `paths` omitted) | *(removed — always `paths[]` when any path filter applied)* | |
+| `batch_commit` | error `path_escapes_repository` | `path_escapes_repo` | Legacy alias removed; this is the same code every other tool already used. |
+| `git_stash_apply` | `popped` (always present) | `popped` (omitted when `false`) | Matches the v6/v7 omit-false contract already followed by every other boolean-ish flag field. |
+
+**Format version:** bumped `6` → `7` (`MCP_JSON_FORMAT_VERSION` in `src/server.ts`).
 
 **Additions (non-breaking)**
 
@@ -673,7 +678,7 @@ One `groups` entry per **contiguous run of lines last touched by the same commit
 **Critical for AI agents:** Each call to `batch_commit` is **self-contained and atomic per-commit entry**.
 
 - **All files in a single entry are staged together.** When you list `files: ["src/foo.ts", "src/bar.ts"]` in one commit entry, both are staged as a unit before the commit is created.
-- **Index isolation per commit.** Unrelated paths that were already staged before the call are temporarily unstaged around an **index-based** `git commit` so they are not included. Pathspec/`--only` mode is intentionally avoided — it commits from the worktree and would squash hunk-level (`{ path, lines }`) staging.
+- **Index isolation per commit.** Unrelated paths that were already staged before the call are temporarily unstaged around an **index-based** `git commit` so they are not included. Pathspec/`--only` mode is intentionally avoided — it commits from the worktree and would squash hunk-level (`{ path, lineFrom, lineTo }`) staging.
 - **Each commit entry is processed sequentially within the call.** The tool stages files, commits, then moves to the next entry. All entries within a single `batch_commit` call happen in one atomic MCP transaction.
 - **A single `batch_commit` call cannot be split across multiple MCP calls.** Do NOT attempt incremental staging like "call 1 with file A, then call 2 with file B hoping they stage together." Each call is independent — call 1's commit lands immediately; call 2's changes are a separate transaction.
 - **Failed entry stops the batch.** If staging or commit fails on entry N, the tool aborts and skips remaining entries. Both `stage_failed` and `commit_failed` restore the exact pre-entry index snapshot via `read-tree` (not just a HEAD reset) — any unrelated paths staged before the call re-appear staged, and this entry's own files are unstaged. **Entries that succeeded before the failure remain committed** — they are not rolled back.
@@ -698,7 +703,7 @@ Do NOT do this: make two separate calls hoping to stage files incrementally. Tha
 
 | Parameter | Type | Notes |
 | ----------- | ------ | ------- |
-| `commits` | `{message: string, files: (string \| {path: string, lines: {from: number, to: number}})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lines: {from, to}}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged (`from`/`to` each max `1000000`; `from > to` → `invalid_line_range`); or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lines}` with a deleted file is an error. All paths must stay within the git toplevel and must be relative — **absolute paths are rejected** (`invalid_paths`; CONTRIBUTING.md forbids mutating tools from accepting them). Relative paths are canonicalized to git's own name-only form before matching against what actually got staged; a path that can't be matched to a canonical staged name errors as `invalid_paths` rather than being silently dropped. Rejects `.`, repo-root, and directory pathspecs (`invalid_paths`). |
+| `commits` | `{message: string, files: (string \| {path: string, lineFrom: number, lineTo: number})[]}[]` | Commits to create in order. 1–50 entries. Each `files` entry is either: (a) a path relative to the git root, staged with `git add`; (b) a `{path, lineFrom, lineTo}` object for hunk-level staging — only unified-diff hunks overlapping the given 1-indexed line range are staged (`lineFrom`/`lineTo` each max `1000000`; `lineFrom > lineTo` → `invalid_line_range`); or (c) a path to a **deleted tracked file** (missing on disk but tracked in HEAD), which is staged as a removal via `git rm --cached` — combining `{path, lineFrom, lineTo}` with a deleted file is an error. All paths must stay within the git toplevel and must be relative — **absolute paths are rejected** (`invalid_paths`; CONTRIBUTING.md forbids mutating tools from accepting them). Relative paths are canonicalized to git's own name-only form before matching against what actually got staged; a path that can't be matched to a canonical staged name errors as `invalid_paths` rather than being silently dropped. Rejects `.`, repo-root, and directory pathspecs (`invalid_paths`). |
 | `push` | `"never"` \| `"after"` | Default `"never"`. `"after"` pushes the current branch to its upstream **once all commits succeed**. Never auto-sets upstream — branches without an upstream fail with `push_no_upstream`. Commits are **not** rolled back on push failure. |
 | `dryRun` | boolean | Default `false`. When `true`, stages each entry, reports what would be committed (`staged`, `diffStat`), then unstages everything without writing commits. |
 | `workspaceRoot` | string | Repo path. Default: first MCP root / cwd. |
@@ -739,10 +744,10 @@ The `push` object is present only when `push: "after"` was requested **and** eve
 
 | Code | Meaning |
 | ------ | --------- |
-| `path_escapes_repository` | One of the listed file paths resolves outside the git toplevel. |
+| `path_escapes_repo` | One of the listed file paths resolves outside the git toplevel. Unified in v7 — this tool previously used the `path_escapes_repository` alias. |
 | `invalid_paths` | A pathspec is `.`, the repo root, or a directory; an absolute path was passed (rejected outright); or a path could not be matched to git's canonical staged name after staging (never silently dropped). |
-| `invalid_line_range` | A `{path, lines}` entry has `from > to`. |
-| `stage_failed` | Staging failed. `git add` error for modified/new files; `git rm --cached` error for deleted files (e.g. path never tracked in HEAD); `{path, lines}` on a deleted file. |
+| `invalid_line_range` | A file entry's `lineFrom` > `lineTo`. |
+| `stage_failed` | Staging failed. `git add` error for modified/new files; `git rm --cached` error for deleted files (e.g. path never tracked in HEAD); a line-ranged entry on a deleted file. |
 | `commit_failed` | `git commit` failed (e.g. nothing staged, hooks rejected); the pre-entry index snapshot is restored (same rollback as `stage_failed`). |
 | `not_a_git_repository` | The resolved workspace root is not inside a git repository. |
 
@@ -1237,7 +1242,6 @@ Success (`applied: true`, no `error`):
 {
   "applied": true,
   "stashIndex": 0,
-  "popped": false,
   "output": "On branch main\nChanges not staged for commit:\n..."
 }
 ```
@@ -1249,13 +1253,12 @@ On failure (`applied: false`):
   "error": "stash_apply_failed",
   "applied": false,
   "stashIndex": 0,
-  "popped": false,
   "output": "…",
   "conflicts": ["conflict.txt"]
 }
 ```
 
-`error: "stash_apply_failed"` on every failed apply/pop. `conflicts` is omitted when empty (omit-empty rule); populated via `git diff --name-only --diff-filter=U`. The tree is left as git left it (no auto-abort). With `pop: true`, a conflicted pop retains the stash entry (git does not drop it until the apply succeeds). `output` is omitted when git produced no stdout/stderr text. `popped` mirrors the requested `pop` flag (whether pop was attempted), not whether the stash entry was removed.
+`error: "stash_apply_failed"` on every failed apply/pop. `conflicts` is omitted when empty (omit-empty rule); populated via `git diff --name-only --diff-filter=U`. The tree is left as git left it (no auto-abort). With `pop: true`, a conflicted pop retains the stash entry (git does not drop it until the apply succeeds). `output` is omitted when git produced no stdout/stderr text. `popped` mirrors the requested `pop` flag (whether pop was attempted, not whether the stash entry was removed) and is **omitted when `false`** (v7 omit-false contract) — present (`true`) only when `pop: true` was requested.
 
 ### `git_stash_apply` — error codes
 

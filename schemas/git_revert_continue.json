@@ -8,14 +8,6 @@
       "description": "Repo path. Default: first MCP root / cwd.",
       "type": "string"
     },
-    "format": {
-      "default": "json",
-      "type": "string",
-      "enum": [
-        "markdown",
-        "json"
-      ]
-    },
     "action": {
       "default": "continue",
       "description": "\"continue\" (default): resolve conflicts, stage them, then resume the sequencer. \"abort\": roll back to the pre-revert HEAD.",
@@ -27,7 +19,6 @@
     }
   },
   "required": [
-    "format",
     "action"
   ],
   "additionalProperties": false

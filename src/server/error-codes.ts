@@ -33,14 +33,8 @@ export const ERROR_CODES = {
   INVALID_PATHS: "invalid_paths",
   INVALID_REMOTE_OR_BRANCH: "invalid_remote_or_branch",
   INVALID_SINCE: "invalid_since",
-  /** Canonical path-escape wire string (grep/diff/blame/show/stash). */
+  /** Canonical path-escape wire string, unified in v7 across all tools including `batch_commit`. */
   PATH_ESCAPES_REPO: "path_escapes_repo",
-  /**
-   * Legacy path-escape alias used by `batch_commit`. Same failure class as
-   * `PATH_ESCAPES_REPO`; clients should treat both as equivalent until a
-   * future contract bump unifies them (Worker P owns batch_commit migration).
-   */
-  PATH_ESCAPES_REPOSITORY: "path_escapes_repository",
   UNSAFE_RANGE_TOKEN: "unsafe_range_token",
   UNSAFE_REF_TOKEN: "unsafe_ref_token",
   UNSAFE_REMOTE_TOKEN: "unsafe_remote_token",
