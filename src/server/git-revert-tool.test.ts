@@ -197,6 +197,34 @@ describe("git_revert guardrails", () => {
     const parsed = JSON.parse(text) as { error: string };
     expect(parsed.error).toBe("unsafe_ref_token");
   });
+
+  test("revert_in_progress refuses with a specific error instead of generic working_tree_dirty", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "seed.txt"), "alpha\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: alpha");
+    const alphaSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    writeFileSync(join(dir, "seed.txt"), "beta\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    // Produce a real mid-revert conflict state (REVERT_HEAD set, tree dirty).
+    expect(() => gitCmd(dir, "revert", "--no-edit", alphaSha)).toThrow();
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
+
+    const run = captureTool(registerGitRevertTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [alphaSha],
+    });
+    const parsed = JSON.parse(text) as { error: string; commit?: string };
+    expect(parsed.error).toBe("revert_in_progress");
+    expect(parsed.commit).toBe(alphaSha);
+
+    gitCmd(dir, "revert", "--abort");
+  });
 });
 
 describe("git_revert multi-source and mainline", () => {
@@ -271,5 +299,72 @@ describe("git_revert multi-source and mainline", () => {
     expect(parsed.reverted[0]?.source).toBe(mergeSha);
     // Reverting merge with -m 1 undoes the side-branch contribution.
     expect(gitCmd(dir, "ls-files", "side.txt").trim()).toBe("");
+  });
+});
+
+describe("git_revert onConflict: pause", () => {
+  test("leaves the conflict and sequencer state in place instead of aborting", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "seed.txt"), "alpha\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: alpha");
+    const alphaSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    writeFileSync(join(dir, "seed.txt"), "beta\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const run = captureTool(registerGitRevertTool);
+    const text = await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [alphaSha],
+      onConflict: "pause",
+    });
+    const parsed = JSON.parse(text) as {
+      ok: boolean;
+      paused?: boolean;
+      applied?: number;
+      commit?: string;
+      conflicts: string[];
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.paused).toBe(true);
+    expect(parsed.applied).toBe(0);
+    expect(parsed.commit).toBe(alphaSha);
+    expect(parsed.conflicts).toContain("seed.txt");
+
+    // Sequencer state left in place (not aborted): REVERT_HEAD still set, tree still dirty.
+    expect(gitCmd(dir, "rev-parse", "--verify", "--quiet", "REVERT_HEAD").trim()).toBeTruthy();
+    expect(gitCmd(dir, "status", "--porcelain").trim()).not.toBe("");
+
+    gitCmd(dir, "revert", "--abort");
+  });
+
+  test("a second git_revert call while paused returns revert_in_progress", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "seed.txt"), "alpha\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: alpha");
+    const alphaSha = gitCmd(dir, "rev-parse", "HEAD").trim();
+
+    writeFileSync(join(dir, "seed.txt"), "beta\n");
+    gitCmd(dir, "add", "seed.txt");
+    gitCmd(dir, "commit", "-m", "chore: beta");
+
+    const run = captureTool(registerGitRevertTool);
+    await run({
+      workspaceRoot: dir,
+      format: "json",
+      sources: [alphaSha],
+      onConflict: "pause",
+    });
+
+    const secondText = await run({ workspaceRoot: dir, format: "json", sources: [alphaSha] });
+    const second = JSON.parse(secondText) as { error: string; commit?: string };
+    expect(second.error).toBe("revert_in_progress");
+    expect(second.commit).toBe(alphaSha);
+
+    gitCmd(dir, "revert", "--abort");
   });
 });
