@@ -1,18 +1,28 @@
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { fetchAheadBehind, gitStatusSnapshotAsync, spawnGitAsync } from "./git.js";
+import { isSafeGitAncestorRef } from "./git-refs.js";
 
 export const MAX_INVENTORY_ROOTS_DEFAULT = 64;
+
+/** Default cap on raw `branchStatus` text lines retained per repo entry. */
+export const MAX_BRANCH_STATUS_LINES_DEFAULT = 500;
 
 export type InventoryEntryJson = {
   label: string;
   path: string;
   upstreamMode: "auto" | "fixed";
   branchStatus?: string;
+  /** True when `branchStatus` was cut to `maxBranchStatusLines`. */
+  branchStatusTruncated?: true;
+  /** Line count omitted from `branchStatus` due to `maxBranchStatusLines`. */
+  branchStatusOmittedLines?: number;
   detached?: true;
   headAbbrev?: string;
   upstreamRef?: string;
   ahead?: string;
   behind?: string;
+  /** True when exactly one of ahead/behind was fetched — an explicit partial state, never an inconsistent one. */
+  partial?: true;
   upstreamNote?: string;
   /** Ahead/behind between arbitrary local refs (`compareRefs` tool arg), independent of upstream. */
   compareRefs?: {
@@ -20,6 +30,8 @@ export type InventoryEntryJson = {
     right: string;
     ahead?: string;
     behind?: string;
+    /** True when exactly one of ahead/behind was fetched. */
+    partial?: true;
     note?: string;
   };
   skipReason?: string;
@@ -45,12 +57,18 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
     return ["", header, e.skipReason];
   }
   const lines: string[] = [e.branchStatus || "(clean)"];
+  if (e.branchStatusTruncated) {
+    lines.push(
+      `branch_status_truncated: ${e.branchStatusOmittedLines} line(s) not shown (maxBranchStatusLines)`,
+    );
+  }
   if (e.detached) lines.push("detached HEAD");
   if (e.ahead !== undefined && e.behind !== undefined && e.upstreamRef) {
     lines.push(`${e.upstreamRef}: ahead ${e.ahead}, behind ${e.behind}`);
   } else if (e.upstreamNote) {
     lines.push(`upstream: ${e.upstreamNote}`);
   }
+  if (e.partial) lines.push("(partial ahead/behind data)");
   if (e.compareRefs) {
     const cr = e.compareRefs;
     if (cr.ahead !== undefined && cr.behind !== undefined) {
@@ -58,6 +76,7 @@ export function buildInventorySectionMarkdown(e: InventoryEntryJson): string[] {
     } else if (cr.note) {
       lines.push(`compareRefs ${cr.left}...${cr.right}: ${cr.note}`);
     }
+    if (cr.partial) lines.push(`compareRefs ${cr.left}...${cr.right}: (partial ahead/behind data)`);
   }
   const single = lines.length === 1 ? lines[0] : undefined;
   if (single !== undefined && !single.includes("\n")) {
@@ -74,6 +93,8 @@ function buildEntry(params: {
   label: string;
   absPath: string;
   branchStatus: string;
+  branchStatusTruncated?: boolean;
+  branchStatusOmittedLines?: number;
   detached: boolean;
   headAbbrev: string;
   upstreamMode: "auto" | "fixed";
@@ -88,11 +109,20 @@ function buildEntry(params: {
     upstreamMode: params.upstreamMode,
   };
   if (params.branchStatus) out.branchStatus = params.branchStatus;
+  if (params.branchStatusTruncated) {
+    out.branchStatusTruncated = true;
+    out.branchStatusOmittedLines = params.branchStatusOmittedLines;
+  }
   if (params.detached) out.detached = true;
   if (params.headAbbrev) out.headAbbrev = params.headAbbrev;
   if (params.upstreamRef !== null) out.upstreamRef = params.upstreamRef;
-  if (params.ahead !== null) out.ahead = params.ahead;
-  if (params.behind !== null) out.behind = params.behind;
+  const aheadOk = params.ahead !== null;
+  const behindOk = params.behind !== null;
+  if (aheadOk) out.ahead = params.ahead as string;
+  if (behindOk) out.behind = params.behind as string;
+  // Exactly one of ahead/behind fetched — mark explicitly partial rather than
+  // shipping a half-populated entry that looks complete.
+  if (aheadOk !== behindOk) out.partial = true;
   if (params.upstreamNote) out.upstreamNote = params.upstreamNote;
   return out;
 }
@@ -124,6 +154,12 @@ async function attachCompareRefs(
   if (!compareRefs) return entry;
   const left = compareRefs.left;
   const right = compareRefs.right;
+  // Defense in depth: re-validate here too, since this is an exported function
+  // and a future caller may not have validated tokens before passing them in.
+  if (!isSafeGitAncestorRef(left) || !isSafeGitAncestorRef(right)) {
+    entry.compareRefs = { left, right, note: "(unsafe ref token rejected)" };
+    return entry;
+  }
   const [leftOk, rightOk] = await Promise.all([
     spawnGitAsync(absPath, ["rev-parse", "--verify", left]),
     spawnGitAsync(absPath, ["rev-parse", "--verify", right]),
@@ -137,12 +173,15 @@ async function attachCompareRefs(
     return entry;
   }
   const { ahead, behind } = await fetchCompareAheadBehind(absPath, left, right);
+  const aheadOk = ahead != null;
+  const behindOk = behind != null;
   entry.compareRefs = {
     left,
     right,
-    ...(ahead != null ? { ahead } : {}),
-    ...(behind != null ? { behind } : {}),
-    ...(ahead == null || behind == null ? { note: "(counts unreadable)" } : {}),
+    ...(aheadOk ? { ahead } : {}),
+    ...(behindOk ? { behind } : {}),
+    ...(aheadOk !== behindOk ? { partial: true } : {}),
+    ...(!aheadOk && !behindOk ? { note: "(counts unreadable)" } : {}),
   };
   return entry;
 }
@@ -153,16 +192,35 @@ export async function collectInventoryEntry(
   fixedRemote: string | undefined,
   fixedBranch: string | undefined,
   compareRefs?: { left: string; right: string },
+  maxBranchStatusLines: number = MAX_BRANCH_STATUS_LINES_DEFAULT,
 ): Promise<InventoryEntryJson> {
   const [snap, headR] = await Promise.all([
     gitStatusSnapshotAsync(absPath),
     spawnGitAsync(absPath, ["rev-parse", "--abbrev-ref", "HEAD"]),
   ]);
 
-  const branchStatus = snap.branchLine;
+  let branchStatus = snap.branchLine;
+  let branchStatusTruncated = false;
+  let branchStatusOmittedLines = 0;
+  if (maxBranchStatusLines > 0) {
+    const statusLines = branchStatus.split("\n");
+    if (statusLines.length > maxBranchStatusLines) {
+      branchStatusOmittedLines = statusLines.length - maxBranchStatusLines;
+      branchStatus = statusLines.slice(0, maxBranchStatusLines).join("\n");
+      branchStatusTruncated = true;
+    }
+  }
   const headAbbrev = headR.ok ? headR.stdout.trim() : "";
   const detached = !headR.ok || headAbbrev === "HEAD" || headAbbrev.endsWith("/HEAD");
-  const base = { label, absPath, branchStatus, detached, headAbbrev };
+  const base = {
+    label,
+    absPath,
+    branchStatus,
+    branchStatusTruncated,
+    branchStatusOmittedLines,
+    detached,
+    headAbbrev,
+  };
 
   let entry: InventoryEntryJson;
   if (fixedRemote !== undefined && fixedBranch !== undefined) {
