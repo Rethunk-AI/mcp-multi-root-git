@@ -9,6 +9,24 @@ import { condensePushOutput, redactUrlCredentials } from "./push-output.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+/** Build the `git_push` success JSON payload. */
+function buildGitPushJson(opts: {
+  branch: string;
+  remote: string;
+  upstream: string;
+  setUpstream?: boolean;
+  gitOutput: string;
+}): Record<string, unknown> {
+  return {
+    ok: true,
+    branch: opts.branch,
+    remote: opts.remote,
+    upstream: opts.upstream,
+    ...spreadDefined("setUpstream", opts.setUpstream || undefined),
+    ...spreadDefined("output", opts.gitOutput || undefined),
+  };
+}
+
 export function registerGitPushTool(server: FastMCP): void {
   server.addTool({
     name: "git_push",
@@ -118,14 +136,9 @@ export function registerGitPushTool(server: FastMCP): void {
       // Append condensed git output (ref updates + remote messages; hook noise dropped)
       const gitOutput = condensePushOutput(pushResult.stdout, pushResult.stderr);
 
-      return jsonRespond({
-        ok: true,
-        branch,
-        remote,
-        upstream,
-        ...spreadDefined("setUpstream", args.setUpstream || undefined),
-        ...spreadDefined("output", gitOutput || undefined),
-      });
+      return jsonRespond(
+        buildGitPushJson({ branch, remote, upstream, setUpstream: args.setUpstream, gitOutput }),
+      );
     },
   });
 }

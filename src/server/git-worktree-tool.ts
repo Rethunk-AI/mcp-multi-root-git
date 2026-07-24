@@ -63,6 +63,27 @@ function normalizeWorktreePathForCompare(p: string): string {
   return platform === "darwin" || platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
+/** Build the `git_worktree_add` success JSON payload. */
+function buildGitWorktreeAddJson(opts: {
+  path: string;
+  branch: string;
+  created: boolean;
+  baseRef: string | undefined;
+}): Record<string, unknown> {
+  return {
+    ok: true,
+    path: opts.path,
+    branch: opts.branch,
+    created: opts.created,
+    ...spreadDefined("baseRef", opts.baseRef),
+  };
+}
+
+/** Build the `git_worktree_remove` success JSON payload. */
+function buildGitWorktreeRemoveJson(path: string): Record<string, unknown> {
+  return { ok: true, path };
+}
+
 // ---------------------------------------------------------------------------
 // git_worktree_add
 // ---------------------------------------------------------------------------
@@ -148,13 +169,14 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
         });
       }
 
-      return jsonRespond({
-        ok: true,
-        path: wtPath,
-        branch,
-        created: !branchExists,
-        ...spreadDefined("baseRef", !branchExists ? (baseRef ?? "HEAD") : undefined),
-      });
+      return jsonRespond(
+        buildGitWorktreeAddJson({
+          path: wtPath,
+          branch,
+          created: !branchExists,
+          baseRef: !branchExists ? (baseRef ?? "HEAD") : undefined,
+        }),
+      );
     },
   });
 }
@@ -243,7 +265,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
         });
       }
 
-      return jsonRespond({ ok: true, path: wtPath });
+      return jsonRespond(buildGitWorktreeRemoveJson(wtPath));
     },
   });
 }

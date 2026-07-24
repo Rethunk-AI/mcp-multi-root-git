@@ -25,6 +25,22 @@ interface ContinueConflictReport {
   detail?: string;
 }
 
+/** Build the `git_revert_continue` JSON payload for the resumable-conflict case. */
+function buildGitRevertContinueConflictJson(
+  applied: number,
+  conflict: ContinueConflictReport,
+): Record<string, unknown> {
+  return { ok: false, action: "continue", applied, ...conflict };
+}
+
+/** Build the `git_revert_continue` success JSON payload (`action: "continue"`). */
+function buildGitRevertContinueJson(
+  applied: number,
+  headSha: string | undefined,
+): Record<string, unknown> {
+  return { ok: true, action: "continue", applied, ...spreadDefined("headSha", headSha) };
+}
+
 export function registerGitRevertContinueTool(server: FastMCP): void {
   server.addTool({
     name: "git_revert_continue",
@@ -112,7 +128,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
             conflicts: paths,
             ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
-          return jsonRespond({ ok: false, action: "continue", applied, ...conflict });
+          return jsonRespond(buildGitRevertContinueConflictJson(applied, conflict));
         }
         // Not a new conflict (e.g. the resolved revert would produce an empty commit) —
         // surface a generic, non-resumable-loop error with whatever detail git gave.
@@ -129,12 +145,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      return jsonRespond({
-        ok: true,
-        action: "continue",
-        applied,
-        ...spreadDefined("headSha", headSha),
-      });
+      return jsonRespond(buildGitRevertContinueJson(applied, headSha));
     },
   });
 }

@@ -257,6 +257,39 @@ function rangeLabel(range: string | undefined, diffArgs: string[]): string {
   return range;
 }
 
+/** Build the `git_diff_summary` JSON payload from the already-assembled per-file diffs. */
+function buildGitDiffSummaryJson(opts: {
+  rangeStr: string;
+  totalFiles: number;
+  totalAdditions: number;
+  totalDeletions: number;
+  files: FileDiff[];
+  truncatedFileCount: number;
+  excludedFiles: string[];
+  subprocessTruncated: boolean;
+}): DiffSummary {
+  const {
+    rangeStr,
+    totalFiles,
+    totalAdditions,
+    totalDeletions,
+    files,
+    truncatedFileCount,
+    excludedFiles,
+    subprocessTruncated,
+  } = opts;
+  return {
+    range: rangeStr,
+    totalFiles,
+    totalAdditions,
+    totalDeletions,
+    files,
+    ...spreadWhen(truncatedFileCount > 0, { truncatedFiles: truncatedFileCount }),
+    ...spreadWhen(excludedFiles.length > 0, { excludedFiles }),
+    ...spreadWhen(subprocessTruncated, { truncated: true }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -408,16 +441,16 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       }
 
       const rangeStr = rangeLabel(args.range, diffArgs);
-      const summary: DiffSummary = {
-        range: rangeStr,
+      const summary = buildGitDiffSummaryJson({
+        rangeStr,
         totalFiles,
         totalAdditions,
         totalDeletions,
         files,
-        ...spreadWhen(truncatedFileCount > 0, { truncatedFiles: truncatedFileCount }),
-        ...spreadWhen(excludedFiles.length > 0, { excludedFiles }),
-        ...spreadWhen(subprocessTruncated, { truncated: true }),
-      };
+        truncatedFileCount,
+        excludedFiles,
+        subprocessTruncated,
+      });
 
       return jsonRespond(summary);
     },

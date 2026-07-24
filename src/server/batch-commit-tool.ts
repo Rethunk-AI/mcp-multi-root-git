@@ -649,13 +649,14 @@ async function commitEntry(
 // Rendering
 // ---------------------------------------------------------------------------
 
-function renderJson(
+/** Build the `batch_commit` JSON payload from the already-assembled per-entry results. */
+function buildBatchCommitJson(
   args: BatchCommitArgs,
   results: CommitResult[],
   allOk: boolean,
   push: PushReport | undefined,
-): string {
-  return jsonRespond({
+): Record<string, unknown> {
+  return {
     ...spreadWhen(args.dryRun, { dryRun: true }),
     ok: allOk,
     committed: results.filter((r) => r.ok).length,
@@ -684,7 +685,7 @@ function renderJson(
         ...spreadDefined("output", push?.output),
       },
     }),
-  });
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -831,7 +832,7 @@ async function runBatchCommit(gitTop: string, args: BatchCommitArgs): Promise<st
   const push: PushReport | undefined =
     !args.dryRun && allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
 
-  return renderJson(args, results, allOk, push);
+  return jsonRespond(buildBatchCommitJson(args, results, allOk, push));
 }
 
 export function registerBatchCommitTool(server: FastMCP): void {

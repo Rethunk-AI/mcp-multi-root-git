@@ -340,6 +340,40 @@ async function maybeDeleteBranch(
   return r.ok;
 }
 
+/** Build the `git_merge` JSON payload from the already-assembled per-source results. */
+function buildGitMergeJson(opts: {
+  allOk: boolean;
+  into: string;
+  strategy: string;
+  headSha: string | undefined;
+  results: SourceResult[];
+  totalSources: number;
+}): Record<string, unknown> {
+  const { allOk, into, strategy, headSha, results, totalSources } = opts;
+  return {
+    ok: allOk,
+    into,
+    strategy,
+    ...spreadDefined("headSha", headSha),
+    applied: results.filter((r) => r.ok).length,
+    total: totalSources,
+    results: results.map((r) => ({
+      source: r.source,
+      ok: r.ok,
+      ...spreadDefined("outcome", r.outcome),
+      ...spreadDefined("mergedSha", r.mergedSha),
+      ...spreadDefined("conflictStage", r.conflictStage),
+      ...spreadWhen((r.conflictPaths?.length ?? 0) > 0, {
+        conflictPaths: r.conflictPaths,
+      }),
+      ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
+      ...spreadDefined("worktreeRemoved", r.worktreeRemoved),
+      ...spreadDefined("error", r.error),
+      ...spreadDefined("detail", r.detail),
+    })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -488,28 +522,16 @@ export function registerGitMergeTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      return jsonRespond({
-        ok: allOk,
-        into,
-        strategy,
-        ...spreadDefined("headSha", headSha),
-        applied: results.filter((r) => r.ok).length,
-        total: args.sources.length,
-        results: results.map((r) => ({
-          source: r.source,
-          ok: r.ok,
-          ...spreadDefined("outcome", r.outcome),
-          ...spreadDefined("mergedSha", r.mergedSha),
-          ...spreadDefined("conflictStage", r.conflictStage),
-          ...spreadWhen((r.conflictPaths?.length ?? 0) > 0, {
-            conflictPaths: r.conflictPaths,
-          }),
-          ...spreadWhen(r.branchDeleted === true, { branchDeleted: true }),
-          ...spreadDefined("worktreeRemoved", r.worktreeRemoved),
-          ...spreadDefined("error", r.error),
-          ...spreadDefined("detail", r.detail),
-        })),
-      });
+      return jsonRespond(
+        buildGitMergeJson({
+          allOk,
+          into,
+          strategy,
+          headSha,
+          results,
+          totalSources: args.sources.length,
+        }),
+      );
     },
   });
 }

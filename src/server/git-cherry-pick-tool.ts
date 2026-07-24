@@ -227,6 +227,62 @@ export async function maybeDeleteCherryPickedBranch(
   return r.ok;
 }
 
+/** Build the `git_cherry_pick` JSON payload from the already-assembled per-source reports. */
+function buildGitCherryPickJson(opts: {
+  allOk: boolean;
+  onto: string;
+  headSha: string | undefined;
+  appliedCount: number;
+  pickedCount: number;
+  perSourceReport: SourceReport[];
+  perSourceKept: Map<string, string[]>;
+  conflict: ConflictReport | undefined;
+}): Record<string, unknown> {
+  const {
+    allOk,
+    onto,
+    headSha,
+    appliedCount,
+    pickedCount,
+    perSourceReport,
+    perSourceKept,
+    conflict,
+  } = opts;
+  return {
+    ok: allOk,
+    onto,
+    ...spreadDefined("headSha", headSha),
+    applied: appliedCount,
+    picked: pickedCount,
+    results: perSourceReport.map((s) => ({
+      source: s.raw,
+      kind: s.kind,
+      resolvedCommits: s.commits.length,
+      keptCommits: perSourceKept.get(s.raw)?.length ?? 0,
+      ...spreadWhen(s.branchDeleted === true, { branchDeleted: true }),
+      ...spreadDefined("worktreeRemoved", s.worktreeRemoved),
+    })),
+    ...spreadWhen(conflict !== undefined, {
+      conflict: {
+        stage: conflict?.stage ?? "cherry-pick",
+        ...spreadWhen(conflict?.paused === true, { paused: true }),
+        ...spreadDefined("commit", conflict?.commit),
+        paths: conflict?.paths ?? [],
+        ...spreadDefined("detail", conflict?.detail),
+        ...spreadDefined("error", conflict?.error),
+        ...spreadWhen(conflict?.abortFailed === true, {
+          abortFailed: true,
+          ...spreadDefined("abortDetail", conflict?.abortDetail),
+        }),
+      },
+    }),
+    ...spreadWhen(conflict?.abortFailed === true, {
+      error: ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
+      ...spreadDefined("abortDetail", conflict?.abortDetail),
+    }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -456,39 +512,18 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      return jsonRespond({
-        ok: allOk,
-        onto,
-        ...spreadDefined("headSha", headSha),
-        applied: appliedCount,
-        picked: picks.length,
-        results: perSourceReport.map((s) => ({
-          source: s.raw,
-          kind: s.kind,
-          resolvedCommits: s.commits.length,
-          keptCommits: perSourceKept.get(s.raw)?.length ?? 0,
-          ...spreadWhen(s.branchDeleted === true, { branchDeleted: true }),
-          ...spreadDefined("worktreeRemoved", s.worktreeRemoved),
-        })),
-        ...spreadWhen(conflict !== undefined, {
-          conflict: {
-            stage: conflict?.stage ?? "cherry-pick",
-            ...spreadWhen(conflict?.paused === true, { paused: true }),
-            ...spreadDefined("commit", conflict?.commit),
-            paths: conflict?.paths ?? [],
-            ...spreadDefined("detail", conflict?.detail),
-            ...spreadDefined("error", conflict?.error),
-            ...spreadWhen(conflict?.abortFailed === true, {
-              abortFailed: true,
-              ...spreadDefined("abortDetail", conflict?.abortDetail),
-            }),
-          },
+      return jsonRespond(
+        buildGitCherryPickJson({
+          allOk,
+          onto,
+          headSha,
+          appliedCount,
+          pickedCount: picks.length,
+          perSourceReport,
+          perSourceKept,
+          conflict,
         }),
-        ...spreadWhen(conflict?.abortFailed === true, {
-          error: ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
-          ...spreadDefined("abortDetail", conflict?.abortDetail),
-        }),
-      });
+      );
     },
   });
 }
@@ -503,6 +538,22 @@ interface ContinueConflictReport {
   commit?: string;
   paths: string[];
   detail?: string;
+}
+
+/** Build the `git_cherry_pick_continue` JSON payload for the resumable-conflict case. */
+function buildGitCherryPickContinueConflictJson(
+  applied: number,
+  conflict: ContinueConflictReport,
+): Record<string, unknown> {
+  return { ok: false, action: "continue", applied, conflict };
+}
+
+/** Build the `git_cherry_pick_continue` success JSON payload (`action: "continue"`). */
+function buildGitCherryPickContinueJson(
+  applied: number,
+  headSha: string | undefined,
+): Record<string, unknown> {
+  return { ok: true, action: "continue", applied, ...spreadDefined("headSha", headSha) };
 }
 
 export function registerGitCherryPickContinueTool(server: FastMCP): void {
@@ -596,7 +647,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
             paths,
             ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
-          return jsonRespond({ ok: false, action: "continue", applied, conflict });
+          return jsonRespond(buildGitCherryPickContinueConflictJson(applied, conflict));
         }
         // Not a new conflict (e.g. the resolved pick would produce an empty commit) —
         // surface a generic, non-resumable-loop error with whatever detail git gave.
@@ -613,12 +664,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
       const headProbe = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
       const headSha = headProbe.ok ? headProbe.stdout.trim() : undefined;
 
-      return jsonRespond({
-        ok: true,
-        action: "continue",
-        applied,
-        ...spreadDefined("headSha", headSha),
-      });
+      return jsonRespond(buildGitCherryPickContinueJson(applied, headSha));
     },
   });
 }

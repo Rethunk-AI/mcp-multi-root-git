@@ -61,6 +61,14 @@ type ConflictsJson = {
   files: ConflictFileJson[];
 };
 
+/** Build the `git_conflicts` JSON payload from the already-assembled state + files. */
+function buildGitConflictsJson(
+  state: ConflictState | undefined,
+  files: ConflictFileJson[],
+): ConflictsJson {
+  return { ...spreadDefined("state", state), files };
+}
+
 // ---------------------------------------------------------------------------
 // Operation-state detection
 // ---------------------------------------------------------------------------
@@ -347,12 +355,7 @@ export function registerGitConflictsTool(server: FastMCP): void {
         };
       });
 
-      const result: ConflictsJson = {
-        ...spreadDefined("state", state),
-        files,
-      };
-
-      return jsonRespond(result);
+      return jsonRespond(buildGitConflictsJson(state, files));
     },
   });
 }

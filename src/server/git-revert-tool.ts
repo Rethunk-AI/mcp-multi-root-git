@@ -28,6 +28,51 @@ export async function abortRevert(gitTop: string): Promise<{ ok: boolean; detail
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
+/** Build the `git_revert` paused-on-conflict JSON payload (`onConflict: "pause"`). */
+function buildGitRevertPausedJson(opts: {
+  applied: number;
+  failedSha: string | undefined;
+  paths: string[];
+  detail: string | undefined;
+}): Record<string, unknown> {
+  return {
+    ok: false,
+    paused: true,
+    applied: opts.applied,
+    ...spreadDefined("commit", opts.failedSha),
+    conflicts: opts.paths,
+    ...spreadDefined("detail", opts.detail),
+  };
+}
+
+/** Build the `git_revert` aborted-on-conflict JSON payload (`onConflict: "abort"`, the default). */
+function buildGitRevertAbortedJson(opts: {
+  failedSha: string | undefined;
+  paths: string[];
+  detail: string | undefined;
+  abortResult: { ok: boolean; detail?: string };
+}): Record<string, unknown> {
+  const { failedSha, paths, detail, abortResult } = opts;
+  return {
+    ok: false,
+    aborted: abortResult.ok,
+    ...spreadDefined("commit", failedSha),
+    conflicts: paths,
+    ...spreadDefined("detail", detail),
+    ...spreadWhen(!abortResult.ok, {
+      error: ERROR_CODES.REVERT_ABORT_FAILED,
+      ...spreadDefined("abortDetail", abortResult.detail),
+    }),
+  };
+}
+
+/** Build the `git_revert` success JSON payload (committed reverts). */
+function buildGitRevertJson(
+  reverted: Array<{ source: string; sha: string }>,
+): Record<string, unknown> {
+  return { ok: true, reverted };
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -137,28 +182,25 @@ export function registerGitRevertTool(server: FastMCP): void {
           // cheaply from the HEAD advance so far (resumable via git_revert_continue).
           const adv = await spawnGitAsync(gitTop, ["rev-list", "--count", `${preHead}..HEAD`]);
           const applied = adv.ok ? parseInt(adv.stdout.trim(), 10) || 0 : 0;
-          return jsonRespond({
-            ok: false,
-            paused: true,
-            applied,
-            ...spreadDefined("commit", failedSha),
-            conflicts: paths,
-            ...spreadDefined("detail", gitFailureDetail(r) || undefined),
-          });
+          return jsonRespond(
+            buildGitRevertPausedJson({
+              applied,
+              failedSha,
+              paths,
+              detail: gitFailureDetail(r) || undefined,
+            }),
+          );
         }
 
         const abortResult = await abortRevert(gitTop);
-        return jsonRespond({
-          ok: false,
-          aborted: abortResult.ok,
-          ...spreadDefined("commit", failedSha),
-          conflicts: paths,
-          ...spreadDefined("detail", gitFailureDetail(r) || undefined),
-          ...spreadWhen(!abortResult.ok, {
-            error: ERROR_CODES.REVERT_ABORT_FAILED,
-            ...spreadDefined("abortDetail", abortResult.detail),
+        return jsonRespond(
+          buildGitRevertAbortedJson({
+            failedSha,
+            paths,
+            detail: gitFailureDetail(r) || undefined,
+            abortResult,
           }),
-        });
+        );
       }
 
       // --- No-commit: revert(s) staged, no new commits ---
@@ -199,10 +241,7 @@ export function registerGitRevertTool(server: FastMCP): void {
         if (source !== undefined && sha !== undefined) reverted.push({ source, sha });
       }
 
-      return jsonRespond({
-        ok: true,
-        reverted,
-      });
+      return jsonRespond(buildGitRevertJson(reverted));
     },
   });
 }

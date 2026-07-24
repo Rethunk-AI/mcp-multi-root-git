@@ -14,6 +14,15 @@ import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+/** Build the `git_branch` JSON payload for a create/delete/rename outcome. */
+function buildGitBranchJson(result: {
+  action: "create" | "delete" | "rename";
+  branch: string;
+  sha: string;
+}): Record<string, unknown> {
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -84,7 +93,7 @@ export function registerGitBranchTool(server: FastMCP): void {
           });
         }
 
-        return jsonRespond({ action: "create", branch: name, sha });
+        return jsonRespond(buildGitBranchJson({ action: "create", branch: name, sha }));
       }
 
       if (args.action === "delete") {
@@ -102,7 +111,7 @@ export function registerGitBranchTool(server: FastMCP): void {
           });
         }
 
-        return jsonRespond({ action: "delete", branch: name, sha });
+        return jsonRespond(buildGitBranchJson({ action: "delete", branch: name, sha }));
       }
 
       // action === "rename"
@@ -133,7 +142,7 @@ export function registerGitBranchTool(server: FastMCP): void {
         });
       }
 
-      return jsonRespond({ action: "rename", branch: newName, sha });
+      return jsonRespond(buildGitBranchJson({ action: "rename", branch: newName, sha }));
     },
   });
 }

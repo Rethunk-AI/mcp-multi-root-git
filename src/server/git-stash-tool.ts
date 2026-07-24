@@ -9,6 +9,25 @@ import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+/** Build the `git_stash_apply` JSON payload. */
+function buildGitStashApplyJson(opts: {
+  applied: boolean;
+  index: number;
+  pop: boolean;
+  output: string | undefined;
+  conflictPaths: string[];
+}): Record<string, unknown> {
+  const { applied, index, pop, output, conflictPaths } = opts;
+  return {
+    ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
+    applied,
+    stashIndex: index,
+    popped: pop,
+    ...spreadDefined("output", output || undefined),
+    ...spreadWhen(conflictPaths.length > 0, { conflictPaths }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // git_stash_apply
 // ---------------------------------------------------------------------------
@@ -62,16 +81,26 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       // stash conflicts are not auto-aborted.
       const paths = applied ? [] : await conflictPaths(gitTop);
 
-      return jsonRespond({
-        ...spreadWhen(!applied, { error: ERROR_CODES.STASH_APPLY_FAILED }),
-        applied,
-        stashIndex: args.index,
-        popped: args.pop,
-        ...spreadDefined("output", output || undefined),
-        ...spreadWhen(paths.length > 0, { conflictPaths: paths }),
-      });
+      return jsonRespond(
+        buildGitStashApplyJson({
+          applied,
+          index: args.index,
+          pop: args.pop,
+          output,
+          conflictPaths: paths,
+        }),
+      );
     },
   });
+}
+
+/** Build the `git_stash_push` success JSON payload. */
+function buildGitStashPushJson(opts: {
+  ref: string;
+  sha: string;
+  message: string;
+}): Record<string, unknown> {
+  return { stashed: true, ref: opts.ref, sha: opts.sha, message: opts.message };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +193,7 @@ export function registerGitStashPushTool(server: FastMCP): void {
       const subjectResult = await spawnGitAsync(gitTop, ["log", "-1", "--format=%s", "stash@{0}"]);
       const message = subjectResult.ok ? subjectResult.stdout.trim() : "";
 
-      return jsonRespond({
-        stashed: true,
-        ref: "stash@{0}",
-        sha,
-        message,
-      });
+      return jsonRespond(buildGitStashPushJson({ ref: "stash@{0}", sha, message }));
     },
   });
 }

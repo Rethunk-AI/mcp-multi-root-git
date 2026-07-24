@@ -31,6 +31,33 @@ function dedupePairs(pairs: ParityPair[]): ParityPair[] {
   return out;
 }
 
+type ParityResultRow = {
+  workspaceRoot: string;
+  presetSchemaVersion?: string;
+  status: "OK" | "MISMATCH";
+  pairs: Array<{
+    label: string;
+    leftPath: string;
+    rightPath: string;
+    match: boolean;
+    sha?: string;
+    leftSha?: string;
+    rightSha?: string;
+    error?: string;
+  }>;
+  pairsTruncated?: boolean;
+  pairsOmittedCount?: number;
+  error?: Record<string, unknown>;
+};
+
+/** Build the `git_parity` JSON payload from the already-assembled per-root results. */
+function buildGitParityJson(
+  warning: Record<string, unknown> | undefined,
+  results: ParityResultRow[],
+): Record<string, unknown> {
+  return { ...spreadDefined("warning", warning), parity: results };
+}
+
 export function registerGitParityTool(server: FastMCP): void {
   server.addTool({
     name: "git_parity",
@@ -224,15 +251,7 @@ export function registerGitParityTool(server: FastMCP): void {
 
       // Phase 5: assemble output in pre.roots order (input-order deterministic
       // despite concurrent execution above).
-      const results: {
-        workspaceRoot: string;
-        presetSchemaVersion?: string;
-        status: "OK" | "MISMATCH";
-        pairs: PairResult[];
-        pairsTruncated?: boolean;
-        pairsOmittedCount?: number;
-        error?: Record<string, unknown>;
-      }[] = [];
+      const results: ParityResultRow[] = [];
 
       for (const plan of plans) {
         if (plan.kind === "notRepo") {
@@ -280,7 +299,7 @@ export function registerGitParityTool(server: FastMCP): void {
         });
       }
 
-      return jsonRespond({ ...spreadDefined("warning", warning), parity: results });
+      return jsonRespond(buildGitParityJson(warning, results));
     },
   });
 }

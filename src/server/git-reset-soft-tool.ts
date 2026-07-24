@@ -8,6 +8,22 @@ import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
+/** Build the `git_reset_soft` success JSON payload. */
+function buildGitResetSoftJson(opts: {
+  ref: string;
+  beforeSha: string | undefined;
+  afterSha: string | undefined;
+  stagedCount: number;
+}): Record<string, unknown> {
+  return {
+    ok: true,
+    ref: opts.ref,
+    ...spreadDefined("beforeSha", opts.beforeSha),
+    ...spreadDefined("afterSha", opts.afterSha),
+    stagedCount: opts.stagedCount,
+  };
+}
+
 export function registerGitResetSoftTool(server: FastMCP): void {
   server.addTool({
     name: "git_reset_soft",
@@ -112,13 +128,14 @@ export function registerGitResetSoftTool(server: FastMCP): void {
             .filter((l) => l.length > 0)
         : [];
 
-      return jsonRespond({
-        ok: true,
-        ref: args.ref,
-        ...spreadDefined("beforeSha", beforeSha),
-        ...spreadDefined("afterSha", afterSha),
-        stagedCount: stagedFiles.length,
-      });
+      return jsonRespond(
+        buildGitResetSoftJson({
+          ref: args.ref,
+          beforeSha,
+          afterSha,
+          stagedCount: stagedFiles.length,
+        }),
+      );
     },
   });
 }

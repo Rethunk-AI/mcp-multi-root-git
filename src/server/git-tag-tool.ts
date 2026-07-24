@@ -24,6 +24,11 @@ type TagResult = {
   sha: string;
 };
 
+/** Build the `git_tag` JSON payload. */
+function buildGitTagJson(result: TagResult): Record<string, unknown> {
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -113,11 +118,7 @@ export function registerGitTagTool(server: FastMCP): void {
           });
         }
 
-        return jsonRespond({
-          tag,
-          type: "deleted",
-          sha: "", // Deleted tags have no SHA
-        });
+        return jsonRespond(buildGitTagJson({ tag, type: "deleted", sha: "" }));
       }
 
       // Determine the ref to tag (default HEAD). Commit-ish allows HEAD~1 / main^2.
@@ -164,13 +165,7 @@ export function registerGitTagTool(server: FastMCP): void {
         });
       }
 
-      const result: TagResult = {
-        tag,
-        type: tagType,
-        sha,
-      };
-
-      return jsonRespond(result);
+      return jsonRespond(buildGitTagJson({ tag, type: tagType, sha }));
     },
   });
 }

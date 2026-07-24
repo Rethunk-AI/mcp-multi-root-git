@@ -22,6 +22,11 @@ type PresetRootRow = {
   error?: Record<string, unknown>;
 };
 
+/** Build the `list_presets` JSON payload from the already-assembled per-root rows. */
+function buildListPresetsJson(roots: PresetRootRow[]): Record<string, unknown> {
+  return { roots };
+}
+
 export function registerListPresetsTool(server: FastMCP): void {
   server.addTool({
     name: "list_presets",
@@ -62,7 +67,7 @@ export function registerListPresetsTool(server: FastMCP): void {
         };
       });
 
-      return jsonRespond({ roots: out });
+      return jsonRespond(buildListPresetsJson(out));
     },
   });
 }

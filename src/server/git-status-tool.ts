@@ -24,6 +24,26 @@ const MAX_CHANGED_FILES_HARD_CAP = 20000;
 const MAX_SUBMODULES_DEFAULT = 64;
 const MAX_SUBMODULES_HARD_CAP = 256;
 
+type RepoRow = {
+  label: string;
+  path: string;
+  statusText: string;
+  ok: boolean;
+  changedFilesTruncated?: boolean;
+  changedFilesOmittedCount?: number;
+};
+type StatusGroup = {
+  mcpRoot: string;
+  repos: RepoRow[];
+  submodulesTruncated?: boolean;
+  submodulesOmittedCount?: number;
+};
+
+/** Build the `git_status` JSON payload from the already-assembled per-root groups. */
+function buildGitStatusJson(groups: StatusGroup[]): Record<string, unknown> {
+  return { groups };
+}
+
 /**
  * Cap the changed-file lines in a `git status --short -b` text blob, keeping
  * the leading `##` branch header (if present) uncapped.
@@ -82,20 +102,6 @@ export function registerGitStatusTool(server: FastMCP): void {
       const maxSubmodules = args.maxSubmodules ?? MAX_SUBMODULES_DEFAULT;
       const includeSubmodules = args.includeSubmodules !== false;
 
-      type RepoRow = {
-        label: string;
-        path: string;
-        statusText: string;
-        ok: boolean;
-        changedFilesTruncated?: boolean;
-        changedFilesOmittedCount?: number;
-      };
-      type Group = {
-        mcpRoot: string;
-        repos: RepoRow[];
-        submodulesTruncated?: boolean;
-        submodulesOmittedCount?: number;
-      };
       type Job =
         | { kind: "self"; rootIndex: number; top: string }
         | { kind: "submodule"; rootIndex: number; top: string; rel: string };
@@ -168,7 +174,7 @@ export function registerGitStatusTool(server: FastMCP): void {
       // root into one job list, so Phase 3 stays within a single bounded
       // pool budget instead of nesting a pool-per-root inside a pool-per-root.
       const jobs: Job[] = [];
-      const groups: Group[] = pre.roots.map((rootInput, rootIndex) => {
+      const groups: StatusGroup[] = pre.roots.map((rootInput, rootIndex) => {
         const top = tops[rootIndex];
         if (!top) {
           return {
@@ -208,10 +214,10 @@ export function registerGitStatusTool(server: FastMCP): void {
       for (let i = 0; i < jobs.length; i++) {
         const job = jobs[i] as Job;
         const row = jobResults[i] as RepoRow;
-        (groups[job.rootIndex] as Group).repos.push(row);
+        (groups[job.rootIndex] as StatusGroup).repos.push(row);
       }
 
-      return jsonRespond({ groups });
+      return jsonRespond(buildGitStatusJson(groups));
     },
   });
 }
