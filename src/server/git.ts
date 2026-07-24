@@ -86,31 +86,50 @@ const GIT_NOT_FOUND_BODY: Record<string, unknown> = {
   error: ERROR_CODES.GIT_NOT_FOUND,
 };
 
+/** How long a "missing" verdict is trusted before gateGit re-probes git on PATH (ms). */
+export const GIT_MISSING_RECHECK_MS = 30_000;
+
+let gitMissingAt = 0;
+
 /** Test-only: reset the cached git-on-PATH probe. */
 export function resetGitPathStateForTests(): void {
   gitPathState = "unknown";
+  gitMissingAt = 0;
 }
 
-export function gateGit(): { ok: true } | { ok: false; body: Record<string, unknown> } {
+export interface GitVersionProbeResult {
+  error?: NodeJS.ErrnoException;
+  status: number | null;
+}
+
+function probeGitVersionSync(): GitVersionProbeResult {
+  const r = spawnSync("git", ["--version"], {
+    encoding: "utf8",
+    timeout: GIT_SYNC_TIMEOUT_MS,
+  });
+  return { error: r.error as NodeJS.ErrnoException | undefined, status: r.status };
+}
+
+export function gateGit(
+  /** Test-only override — production callers always use the real spawnSync probe. */
+  probe: () => GitVersionProbeResult = probeGitVersionSync,
+): { ok: true } | { ok: false; body: Record<string, unknown> } {
   if (gitPathState === "ok") {
     return { ok: true };
   }
-  if (gitPathState === "missing") {
+  if (gitPathState === "missing" && Date.now() - gitMissingAt < GIT_MISSING_RECHECK_MS) {
     return {
       ok: false,
       body: GIT_NOT_FOUND_BODY,
     };
   }
-  const r = spawnSync("git", ["--version"], {
-    encoding: "utf8",
-    timeout: GIT_SYNC_TIMEOUT_MS,
-  });
+  const r = probe();
   if (r.error || r.status !== 0) {
     // Do not cache "missing" on timeout — a wedged git may recover.
-    const timedOut =
-      r.error !== undefined && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT";
+    const timedOut = r.error !== undefined && r.error.code === "ETIMEDOUT";
     if (!timedOut) {
       gitPathState = "missing";
+      gitMissingAt = Date.now();
     }
     return {
       ok: false,

@@ -5,14 +5,16 @@
  * by the tool-level integration tests.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 
+import { ERROR_CODES } from "./error-codes.js";
 import {
   asyncPool,
   fetchAheadBehind,
+  GIT_MISSING_RECHECK_MS,
   GIT_SUBPROCESS_MAX_BUFFER_BYTES,
   GIT_SUBPROCESS_PARALLELISM,
   GIT_SUBPROCESS_TIMEOUT_MS,
@@ -282,6 +284,13 @@ describe("fetchAheadBehind", () => {
     expect(ahead).toBeNull();
     expect(behind).toBeNull();
   });
+
+  test("fails closed on an unsafe upstream token without ever building git argv from it", async () => {
+    const dir = makeRepo();
+    const { ahead, behind } = await fetchAheadBehind(dir, "-evil");
+    expect(ahead).toBeNull();
+    expect(behind).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -289,11 +298,61 @@ describe("fetchAheadBehind", () => {
 // ---------------------------------------------------------------------------
 
 describe("gateGit", () => {
+  afterEach(() => {
+    resetGitPathStateForTests();
+    setSystemTime();
+  });
+
   test("returns ok when git is on PATH", () => {
     resetGitPathStateForTests();
     expect(gateGit()).toEqual({ ok: true });
     // Cached path still ok
     expect(gateGit()).toEqual({ ok: true });
+  });
+
+  test("GIT_NOT_FOUND branch: caches the failure verdict, then re-probes after the TTL elapses", () => {
+    resetGitPathStateForTests();
+    let calls = 0;
+    const failingProbe = () => {
+      calls++;
+      return { status: 1 };
+    };
+
+    const r1 = gateGit(failingProbe);
+    expect(r1).toEqual({ ok: false, body: { error: ERROR_CODES.GIT_NOT_FOUND } });
+    expect(calls).toBe(1);
+
+    // Cached failure verdict — probe not re-invoked before the TTL elapses.
+    const r2 = gateGit(failingProbe);
+    expect(r2).toEqual({ ok: false, body: { error: ERROR_CODES.GIT_NOT_FOUND } });
+    expect(calls).toBe(1);
+
+    // Advance past the recheck TTL — the cached "missing" verdict expires
+    // and gateGit re-probes instead of trusting it permanently.
+    setSystemTime(Date.now() + GIT_MISSING_RECHECK_MS + 1);
+    const r3 = gateGit(failingProbe);
+    expect(r3.ok).toBe(false);
+    expect(calls).toBe(2);
+  });
+
+  test("ETIMEDOUT probe failure is never cached — re-probes on every subsequent call", () => {
+    resetGitPathStateForTests();
+    let calls = 0;
+    const timeoutProbe = () => {
+      calls++;
+      const err = new Error("spawnSync git ETIMEDOUT") as NodeJS.ErrnoException;
+      err.code = "ETIMEDOUT";
+      return { error: err, status: null };
+    };
+
+    const r1 = gateGit(timeoutProbe);
+    expect(r1).toEqual({ ok: false, body: { error: ERROR_CODES.GIT_NOT_FOUND } });
+    expect(calls).toBe(1);
+
+    // Not cached — the very next call re-probes immediately (no TTL wait needed).
+    const r2 = gateGit(timeoutProbe);
+    expect(r2.ok).toBe(false);
+    expect(calls).toBe(2);
   });
 });
 
