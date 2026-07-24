@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -359,6 +359,59 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Per-repo serialization
+// ---------------------------------------------------------------------------
+
+/** Chained execution promises, keyed by resolved (realpath) git toplevel. */
+const repoCommitLocks = new Map<string, Promise<unknown>>();
+
+/** Resolves symlinks so distinct caller-supplied paths for the same on-disk repo share one lock. */
+function repoLockKey(gitTop: string): string {
+  try {
+    return realpathSync(gitTop);
+  } catch {
+    return gitTop;
+  }
+}
+
+/**
+ * Serializes `batch_commit` executions per repo, in-process only. The
+ * stage → commit → restore sequence mutates shared index state; two
+ * overlapping calls targeting the same git toplevel could otherwise
+ * interleave their git invocations and corrupt each other's staging.
+ * Chains `run` onto whatever is already queued for `gitTop` — regardless
+ * of whether the prior call succeeded or failed — so calls for the same
+ * repo execute one at a time, in call order.
+ *
+ * This is a single-process mutex (the server runs single-process stdio);
+ * it does not protect against a second server process or a human running
+ * `git` concurrently against the same repo.
+ */
+function withRepoLock<T>(gitTop: string, run: () => Promise<T>): Promise<T> {
+  const key = repoLockKey(gitTop);
+  const prior = repoCommitLocks.get(key) ?? Promise.resolve();
+  const settledPrior = prior.then(
+    () => undefined,
+    () => undefined,
+  );
+  const result = settledPrior.then(run);
+  const settledResult = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  repoCommitLocks.set(key, settledResult);
+  // Best-effort cleanup: drop the map entry once this call settles, unless a
+  // later call has already replaced it (avoids unbounded growth across a
+  // long-lived process without racing a newer chain link).
+  settledResult.then(() => {
+    if (repoCommitLocks.get(key) === settledResult) {
+      repoCommitLocks.delete(key);
+    }
+  });
+  return result;
+}
+
 export function registerBatchCommitTool(server: FastMCP): void {
   server.addTool({
     name: "batch_commit",
@@ -368,6 +421,7 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "are temporarily unstaged around the commit so they are not included " +
       "(hunk-level staging is preserved — pathspec commit mode is not used). " +
       "Stops on first failure (see `files` for mid-entry rollback). " +
+      "Concurrent calls on the same repo serialize in-process only (not cross-process). " +
       'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
       readOnlyHint: false,
@@ -388,228 +442,120 @@ export function registerBatchCommitTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const gitTop = pre.gitTop;
 
-      const results: CommitResult[] = [];
+      return withRepoLock(gitTop, async () => {
+        const results: CommitResult[] = [];
 
-      // Snapshot the full index before dry-run so cleanup restores pre-staged
-      // paths even when dryRun stages additional hunks onto the same paths.
-      let indexTreeBefore: string | undefined;
-      if (args.dryRun) {
-        const wt = await spawnGitAsync(gitTop, ["write-tree"]);
-        if (!wt.ok) {
-          return jsonRespond({
-            error: ERROR_CODES.COMMIT_FAILED,
-            detail: (wt.stderr || wt.stdout).trim() || "failed to snapshot index before dryRun",
-          });
-        }
-        indexTreeBefore = wt.stdout.trim();
-      }
-
-      for (let i = 0; i < args.commits.length; i++) {
-        const entry = args.commits[i];
-        if (!entry) break;
-
-        // Normalize file entries to { path, lines? } format
-        const fileEntries: Array<{ path: string; lines?: { from: number; to: number } }> = [];
-        const filePaths: string[] = [];
-        let invalidLineRange = false;
-        for (const fileEntry of entry.files) {
-          if (typeof fileEntry === "string") {
-            fileEntries.push({ path: fileEntry });
-            filePaths.push(fileEntry);
-          } else {
-            if (fileEntry.lines.from > fileEntry.lines.to) {
-              invalidLineRange = true;
-              filePaths.push(fileEntry.path);
-              break;
-            }
-            fileEntries.push(fileEntry);
-            filePaths.push(fileEntry.path);
-          }
-        }
-        if (invalidLineRange) {
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.INVALID_LINE_RANGE,
-            detail: "lines.from must be <= lines.to",
-          });
-          break;
-        }
-
-        // --- Reject absolute paths ---
-        // CONTRIBUTING.md forbids mutating tools from accepting absolute paths.
-        // `resolvePathForRepo`'s isAbsolute branch is retained for read tools
-        // that legitimately pass workspace-absolute paths (git-show, git-diff,
-        // etc.) — batch_commit gates it here instead of changing that shared
-        // behavior. This also closes the root enabler of the canonicalization
-        // mismatch above: an absolute path never round-trips through
-        // `relative(gitTop, abs)` the way a caller might expect for the
-        // git-relative name comparisons below.
-        const absolutePaths = filePaths.filter((p) => isAbsolute(p.trim()));
-        if (absolutePaths.length > 0) {
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.INVALID_PATHS,
-            detail: `absolute paths are not accepted: ${absolutePaths.join(", ")}`,
-          });
-          break;
-        }
-
-        // --- Validate all paths are under the git toplevel ---
-        const escapedPaths: string[] = [];
-        for (const path of filePaths) {
-          const abs = resolvePathForRepo(path, gitTop);
-          if (!assertRelativePathUnderTop(path, abs, gitTop)) {
-            escapedPaths.push(path);
-          }
-        }
-        if (escapedPaths.length > 0) {
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.PATH_ESCAPES_REPOSITORY,
-            detail: escapedPaths.join(", "),
-          });
-          break;
-        }
-
-        // --- Reject `.` / repo-root / directory pathspecs ---
-        const invalidPaths = filePaths.filter((p) => isWholeTreeOrDirectoryPathspec(p, gitTop));
-        if (invalidPaths.length > 0) {
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.INVALID_PATHS,
-            detail: `directory or whole-tree pathspec rejected: ${invalidPaths.join(", ")}`,
-          });
-          break;
-        }
-
-        // --- Snapshot the index before staging so a mid-entry stage failure
-        // restores the exact pre-entry index state. A bare `git restore
-        // --staged` resets to HEAD and would destroy content already staged
-        // on the same path before this call started; read-tree from this
-        // snapshot restores it byte-identically instead.
-        const entrySnapshotResult = await spawnGitAsync(gitTop, ["write-tree"]);
-        if (!entrySnapshotResult.ok) {
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.COMMIT_FAILED,
-            detail:
-              (entrySnapshotResult.stderr || entrySnapshotResult.stdout).trim() ||
-              "failed to snapshot index before staging",
-          });
-          break;
-        }
-        const entrySnapshot = entrySnapshotResult.stdout.trim();
-
-        // --- Stage files (with optional line ranges) ---
-        let stagingFailed = false;
-        let stagingError = "";
-        for (const fileEntry of fileEntries) {
-          const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
-          if (!stageResult.ok) {
-            stagingFailed = true;
-            stagingError = stageResult.error || "Unknown error";
-            break;
-          }
-        }
-
-        if (stagingFailed) {
-          // Restore the exact pre-entry index state from the snapshot above.
-          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.STAGE_FAILED,
-            detail: stagingError,
-            ...spreadDefined("output", stagingError || undefined),
-          });
-          break;
-        }
-
-        // --- Dry-run mode: collect preview scoped to this entry's paths ---
+        // Snapshot the full index before dry-run so cleanup restores pre-staged
+        // paths even when dryRun stages additional hunks onto the same paths.
+        let indexTreeBefore: string | undefined;
         if (args.dryRun) {
-          // Path-scoped stat so multi-entry previews do not accumulate prior entries.
-          const diffStatResult = await spawnGitAsync(gitTop, [
-            "diff",
-            "--staged",
-            "--stat",
-            "--",
-            ...filePaths,
-          ]);
-          const diffStat = diffStatResult.ok ? (diffStatResult.stdout || "").trim() : undefined;
-
-          results.push({
-            index: i,
-            ok: true,
-            message: entry.message,
-            files: filePaths,
-            staged: filePaths,
-            ...spreadDefined("diffStat", diffStat || undefined),
-          });
-
-          // Restore this entry's pre-staging snapshot before the next so the next
-          // entry starts clean (final read-tree still restores the full pre-call index).
-          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
-          continue;
-        }
-
-        // --- Commit: isolate entry files from unrelated pre-staged index paths ---
-        // `git commit -- <paths>` uses --only (worktree) mode and would squash
-        // hunk-level staging. Instead: snapshot index, temporarily unstage
-        // unrelated staged paths, commit from the index, then restore them.
-        const stagedNamesResult = await spawnGitAsync(gitTop, ["diff", "--cached", "--name-only"]);
-        const stagedNames = stagedNamesResult.ok
-          ? stagedNamesResult.stdout
-              .split("\n")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [];
-        // Canonicalize this entry's paths before comparing against git's own
-        // --name-only output — otherwise a non-canonical caller path (e.g.
-        // "./x.ts") would fail to match its own staged name, get classified as
-        // "unrelated pre-staged", and get silently excluded from the commit
-        // while the tool still returns ok:true.
-        const canonicalPaths = filePaths.map((p) => toGitCanonicalPath(p, gitTop));
-        const stagedNameSet = new Set(stagedNames);
-        const unmatchedCanonicalPaths = canonicalPaths.filter((p) => !stagedNameSet.has(p));
-        if (unmatchedCanonicalPaths.length > 0) {
-          // A path we intended to stage for this entry didn't show up under
-          // its canonical name — never silently drop it; restore and error.
-          await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
-          results.push({
-            index: i,
-            ok: false,
-            message: entry.message,
-            files: filePaths,
-            error: ERROR_CODES.INVALID_PATHS,
-            detail: `staged path could not be matched to git's canonical name: ${unmatchedCanonicalPaths.join(", ")}`,
-          });
-          break;
-        }
-
-        const entryPathSet = new Set(canonicalPaths);
-        const unrelatedStaged = stagedNames.filter((p) => !entryPathSet.has(p));
-
-        let indexSnap: string | undefined;
-        if (unrelatedStaged.length > 0) {
           const wt = await spawnGitAsync(gitTop, ["write-tree"]);
           if (!wt.ok) {
+            return jsonRespond({
+              error: ERROR_CODES.COMMIT_FAILED,
+              detail: (wt.stderr || wt.stdout).trim() || "failed to snapshot index before dryRun",
+            });
+          }
+          indexTreeBefore = wt.stdout.trim();
+        }
+
+        for (let i = 0; i < args.commits.length; i++) {
+          const entry = args.commits[i];
+          if (!entry) break;
+
+          // Normalize file entries to { path, lines? } format
+          const fileEntries: Array<{ path: string; lines?: { from: number; to: number } }> = [];
+          const filePaths: string[] = [];
+          let invalidLineRange = false;
+          for (const fileEntry of entry.files) {
+            if (typeof fileEntry === "string") {
+              fileEntries.push({ path: fileEntry });
+              filePaths.push(fileEntry);
+            } else {
+              if (fileEntry.lines.from > fileEntry.lines.to) {
+                invalidLineRange = true;
+                filePaths.push(fileEntry.path);
+                break;
+              }
+              fileEntries.push(fileEntry);
+              filePaths.push(fileEntry.path);
+            }
+          }
+          if (invalidLineRange) {
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.INVALID_LINE_RANGE,
+              detail: "lines.from must be <= lines.to",
+            });
+            break;
+          }
+
+          // --- Reject absolute paths ---
+          // CONTRIBUTING.md forbids mutating tools from accepting absolute paths.
+          // `resolvePathForRepo`'s isAbsolute branch is retained for read tools
+          // that legitimately pass workspace-absolute paths (git-show, git-diff,
+          // etc.) — batch_commit gates it here instead of changing that shared
+          // behavior. This also closes the root enabler of the canonicalization
+          // mismatch above: an absolute path never round-trips through
+          // `relative(gitTop, abs)` the way a caller might expect for the
+          // git-relative name comparisons below.
+          const absolutePaths = filePaths.filter((p) => isAbsolute(p.trim()));
+          if (absolutePaths.length > 0) {
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.INVALID_PATHS,
+              detail: `absolute paths are not accepted: ${absolutePaths.join(", ")}`,
+            });
+            break;
+          }
+
+          // --- Validate all paths are under the git toplevel ---
+          const escapedPaths: string[] = [];
+          for (const path of filePaths) {
+            const abs = resolvePathForRepo(path, gitTop);
+            if (!assertRelativePathUnderTop(path, abs, gitTop)) {
+              escapedPaths.push(path);
+            }
+          }
+          if (escapedPaths.length > 0) {
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.PATH_ESCAPES_REPOSITORY,
+              detail: escapedPaths.join(", "),
+            });
+            break;
+          }
+
+          // --- Reject `.` / repo-root / directory pathspecs ---
+          const invalidPaths = filePaths.filter((p) => isWholeTreeOrDirectoryPathspec(p, gitTop));
+          if (invalidPaths.length > 0) {
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.INVALID_PATHS,
+              detail: `directory or whole-tree pathspec rejected: ${invalidPaths.join(", ")}`,
+            });
+            break;
+          }
+
+          // --- Snapshot the index before staging so a mid-entry stage failure
+          // restores the exact pre-entry index state. A bare `git restore
+          // --staged` resets to HEAD and would destroy content already staged
+          // on the same path before this call started; read-tree from this
+          // snapshot restores it byte-identically instead.
+          const entrySnapshotResult = await spawnGitAsync(gitTop, ["write-tree"]);
+          if (!entrySnapshotResult.ok) {
             results.push({
               index: i,
               ok: false,
@@ -617,19 +563,154 @@ export function registerBatchCommitTool(server: FastMCP): void {
               files: filePaths,
               error: ERROR_CODES.COMMIT_FAILED,
               detail:
-                (wt.stderr || wt.stdout).trim() ||
-                "failed to snapshot index for pre-staged path isolation",
+                (entrySnapshotResult.stderr || entrySnapshotResult.stdout).trim() ||
+                "failed to snapshot index before staging",
             });
             break;
           }
-          indexSnap = wt.stdout.trim();
-          await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...unrelatedStaged]);
-        }
+          const entrySnapshot = entrySnapshotResult.stdout.trim();
 
-        const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
-        if (!commitResult.ok) {
-          // Restore unrelated staged paths even on failure so we don't leave the
-          // index worse than when we entered this entry.
+          // --- Stage files (with optional line ranges) ---
+          let stagingFailed = false;
+          let stagingError = "";
+          for (const fileEntry of fileEntries) {
+            const stageResult = await stageFile(gitTop, fileEntry.path, fileEntry.lines);
+            if (!stageResult.ok) {
+              stagingFailed = true;
+              stagingError = stageResult.error || "Unknown error";
+              break;
+            }
+          }
+
+          if (stagingFailed) {
+            // Restore the exact pre-entry index state from the snapshot above.
+            await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.STAGE_FAILED,
+              detail: stagingError,
+              ...spreadDefined("output", stagingError || undefined),
+            });
+            break;
+          }
+
+          // --- Dry-run mode: collect preview scoped to this entry's paths ---
+          if (args.dryRun) {
+            // Path-scoped stat so multi-entry previews do not accumulate prior entries.
+            const diffStatResult = await spawnGitAsync(gitTop, [
+              "diff",
+              "--staged",
+              "--stat",
+              "--",
+              ...filePaths,
+            ]);
+            const diffStat = diffStatResult.ok ? (diffStatResult.stdout || "").trim() : undefined;
+
+            results.push({
+              index: i,
+              ok: true,
+              message: entry.message,
+              files: filePaths,
+              staged: filePaths,
+              ...spreadDefined("diffStat", diffStat || undefined),
+            });
+
+            // Restore this entry's pre-staging snapshot before the next so the next
+            // entry starts clean (final read-tree still restores the full pre-call index).
+            await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
+            continue;
+          }
+
+          // --- Commit: isolate entry files from unrelated pre-staged index paths ---
+          // `git commit -- <paths>` uses --only (worktree) mode and would squash
+          // hunk-level staging. Instead: snapshot index, temporarily unstage
+          // unrelated staged paths, commit from the index, then restore them.
+          const stagedNamesResult = await spawnGitAsync(gitTop, [
+            "diff",
+            "--cached",
+            "--name-only",
+          ]);
+          const stagedNames = stagedNamesResult.ok
+            ? stagedNamesResult.stdout
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [];
+          // Canonicalize this entry's paths before comparing against git's own
+          // --name-only output — otherwise a non-canonical caller path (e.g.
+          // "./x.ts") would fail to match its own staged name, get classified as
+          // "unrelated pre-staged", and get silently excluded from the commit
+          // while the tool still returns ok:true.
+          const canonicalPaths = filePaths.map((p) => toGitCanonicalPath(p, gitTop));
+          const stagedNameSet = new Set(stagedNames);
+          const unmatchedCanonicalPaths = canonicalPaths.filter((p) => !stagedNameSet.has(p));
+          if (unmatchedCanonicalPaths.length > 0) {
+            // A path we intended to stage for this entry didn't show up under
+            // its canonical name — never silently drop it; restore and error.
+            await spawnGitAsync(gitTop, ["read-tree", entrySnapshot]);
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.INVALID_PATHS,
+              detail: `staged path could not be matched to git's canonical name: ${unmatchedCanonicalPaths.join(", ")}`,
+            });
+            break;
+          }
+
+          const entryPathSet = new Set(canonicalPaths);
+          const unrelatedStaged = stagedNames.filter((p) => !entryPathSet.has(p));
+
+          let indexSnap: string | undefined;
+          if (unrelatedStaged.length > 0) {
+            const wt = await spawnGitAsync(gitTop, ["write-tree"]);
+            if (!wt.ok) {
+              results.push({
+                index: i,
+                ok: false,
+                message: entry.message,
+                files: filePaths,
+                error: ERROR_CODES.COMMIT_FAILED,
+                detail:
+                  (wt.stderr || wt.stdout).trim() ||
+                  "failed to snapshot index for pre-staged path isolation",
+              });
+              break;
+            }
+            indexSnap = wt.stdout.trim();
+            await spawnGitAsync(gitTop, ["restore", "--staged", "--", ...unrelatedStaged]);
+          }
+
+          const commitResult = await spawnGitAsync(gitTop, ["commit", "-m", entry.message]);
+          if (!commitResult.ok) {
+            // Restore unrelated staged paths even on failure so we don't leave the
+            // index worse than when we entered this entry.
+            if (indexSnap && unrelatedStaged.length > 0) {
+              await spawnGitAsync(gitTop, [
+                "restore",
+                `--source=${indexSnap}`,
+                "--staged",
+                "--",
+                ...unrelatedStaged,
+              ]);
+            }
+            const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
+            results.push({
+              index: i,
+              ok: false,
+              message: entry.message,
+              files: filePaths,
+              error: ERROR_CODES.COMMIT_FAILED,
+              detail: gitOutput,
+              ...spreadDefined("output", gitOutput || undefined),
+            });
+            break;
+          }
+
           if (indexSnap && unrelatedStaged.length > 0) {
             await spawnGitAsync(gitTop, [
               "restore",
@@ -639,135 +720,114 @@ export function registerBatchCommitTool(server: FastMCP): void {
               ...unrelatedStaged,
             ]);
           }
-          const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
+
+          // --- Extract SHA from commit output ---
+          const shaMatch = /\[[\w/.-]+\s+([0-9a-f]+)\]/.exec(commitResult.stdout);
+          const gitOutput = condenseCommitOutput(commitResult.stdout, commitResult.stderr);
           results.push({
             index: i,
-            ok: false,
+            ok: true,
+            sha: shaMatch?.[1],
             message: entry.message,
             files: filePaths,
-            error: ERROR_CODES.COMMIT_FAILED,
-            detail: gitOutput,
             ...spreadDefined("output", gitOutput || undefined),
           });
-          break;
         }
 
-        if (indexSnap && unrelatedStaged.length > 0) {
-          await spawnGitAsync(gitTop, [
-            "restore",
-            `--source=${indexSnap}`,
-            "--staged",
-            "--",
-            ...unrelatedStaged,
-          ]);
+        // --- In dry-run mode, restore the full pre-call index ---
+        if (args.dryRun && indexTreeBefore) {
+          await spawnGitAsync(gitTop, ["read-tree", indexTreeBefore]);
         }
 
-        // --- Extract SHA from commit output ---
-        const shaMatch = /\[[\w/.-]+\s+([0-9a-f]+)\]/.exec(commitResult.stdout);
-        const gitOutput = condenseCommitOutput(commitResult.stdout, commitResult.stderr);
-        results.push({
-          index: i,
-          ok: true,
-          sha: shaMatch?.[1],
-          message: entry.message,
-          files: filePaths,
-          ...spreadDefined("output", gitOutput || undefined),
-        });
-      }
+        const allOk = results.length === args.commits.length && results.every((r) => r.ok);
 
-      // --- In dry-run mode, restore the full pre-call index ---
-      if (args.dryRun && indexTreeBefore) {
-        await spawnGitAsync(gitTop, ["read-tree", indexTreeBefore]);
-      }
+        // --- Optional push after all commits succeed (not in dry-run mode) ---
+        const push: PushReport | undefined =
+          !args.dryRun && allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
 
-      const allOk = results.length === args.commits.length && results.every((r) => r.ok);
-
-      // --- Optional push after all commits succeed (not in dry-run mode) ---
-      const push: PushReport | undefined =
-        !args.dryRun && allOk && args.push === "after" ? await runPushAfter(gitTop) : undefined;
-
-      if (args.format === "json") {
-        return jsonRespond({
-          ...spreadWhen(args.dryRun, { dryRun: true }),
-          ok: allOk,
-          committed: results.filter((r) => r.ok).length,
-          total: args.commits.length,
-          results: results.map((r) => ({
-            index: r.index,
-            ok: r.ok,
-            ...spreadDefined("sha", r.sha),
-            // message/files are the caller's own request echoed back — only worth
-            // repeating on failure, where the caller needs them to diagnose without
-            // cross-referencing the request.
-            ...spreadWhen(!r.ok, { message: r.message, files: r.files }),
-            ...spreadDefined("staged", r.staged),
-            ...spreadDefined("diffStat", r.diffStat),
-            ...spreadDefined("error", r.error),
-            ...spreadDefined("detail", r.detail),
-            ...spreadDefined("output", r.output),
-          })),
-          ...spreadWhen(push !== undefined, {
-            push: {
-              ok: push?.ok ?? false,
-              ...spreadDefined("branch", push?.branch),
-              ...spreadDefined("upstream", push?.upstream),
-              ...spreadDefined("error", push?.error),
-              ...spreadDefined("detail", push?.detail),
-              ...spreadDefined("output", push?.output),
-            },
-          }),
-        });
-      }
-
-      // --- Markdown ---
-      const lines: string[] = [];
-      const dryRunPrefix = args.dryRun ? "DRY RUN — " : "";
-      const header = allOk
-        ? `# Batch commit: ${dryRunPrefix}${results.length}/${args.commits.length} committed`
-        : `# Batch commit: ${dryRunPrefix}${results.filter((r) => r.ok).length}/${args.commits.length} committed (stopped on error)`;
-      lines.push(header, "");
-
-      for (const r of results) {
-        const icon = r.ok ? "✓" : "✗";
-        const sha = r.sha ? ` \`${r.sha}\`` : "";
-        lines.push(`${icon}${sha} ${r.message}`);
-        if (!r.ok && r.detail) {
-          lines.push(`  Error: ${r.error} — ${r.detail}`);
+        if (args.format === "json") {
+          return jsonRespond({
+            ...spreadWhen(args.dryRun, { dryRun: true }),
+            ok: allOk,
+            committed: results.filter((r) => r.ok).length,
+            total: args.commits.length,
+            results: results.map((r) => ({
+              index: r.index,
+              ok: r.ok,
+              ...spreadDefined("sha", r.sha),
+              // message/files are the caller's own request echoed back — only worth
+              // repeating on failure, where the caller needs them to diagnose without
+              // cross-referencing the request.
+              ...spreadWhen(!r.ok, { message: r.message, files: r.files }),
+              ...spreadDefined("staged", r.staged),
+              ...spreadDefined("diffStat", r.diffStat),
+              ...spreadDefined("error", r.error),
+              ...spreadDefined("detail", r.detail),
+              ...spreadDefined("output", r.output),
+            })),
+            ...spreadWhen(push !== undefined, {
+              push: {
+                ok: push?.ok ?? false,
+                ...spreadDefined("branch", push?.branch),
+                ...spreadDefined("upstream", push?.upstream),
+                ...spreadDefined("error", push?.error),
+                ...spreadDefined("detail", push?.detail),
+                ...spreadDefined("output", push?.output),
+              },
+            }),
+          });
         }
-        if (args.dryRun && r.staged) {
-          lines.push(`  Staged: ${r.staged.join(", ")}`);
-        }
-        if (args.dryRun && r.diffStat) {
-          lines.push(`  Diff stat:`);
-          lines.push(`  ${r.diffStat.replace(/\n/g, "\n  ")}`);
-        }
-        if (r.output) {
-          lines.push(`  Output: ${r.output.replace(/\n/g, "\n  ")}`);
-        }
-      }
 
-      if (!allOk && results.length < args.commits.length) {
-        const skipped = args.commits.length - results.length;
-        lines.push("", `${skipped} remaining commit(s) skipped.`);
-      }
+        // --- Markdown ---
+        const lines: string[] = [];
+        const dryRunPrefix = args.dryRun ? "DRY RUN — " : "";
+        const header = allOk
+          ? `# Batch commit: ${dryRunPrefix}${results.length}/${args.commits.length} committed`
+          : `# Batch commit: ${dryRunPrefix}${results.filter((r) => r.ok).length}/${args.commits.length} committed (stopped on error)`;
+        lines.push(header, "");
 
-      if (args.dryRun) {
-        lines.push("", "**DRY RUN — no commits written. All staged files have been unstaged.**");
-      }
-
-      if (push) {
-        lines.push("");
-        if (push.ok) {
-          lines.push(`Push: ✓ ${push.branch} → ${push.upstream}`);
-        } else {
-          lines.push(`Push: ✗ ${push.error}${push.detail ? ` — ${push.detail}` : ""}`);
+        for (const r of results) {
+          const icon = r.ok ? "✓" : "✗";
+          const sha = r.sha ? ` \`${r.sha}\`` : "";
+          lines.push(`${icon}${sha} ${r.message}`);
+          if (!r.ok && r.detail) {
+            lines.push(`  Error: ${r.error} — ${r.detail}`);
+          }
+          if (args.dryRun && r.staged) {
+            lines.push(`  Staged: ${r.staged.join(", ")}`);
+          }
+          if (args.dryRun && r.diffStat) {
+            lines.push(`  Diff stat:`);
+            lines.push(`  ${r.diffStat.replace(/\n/g, "\n  ")}`);
+          }
+          if (r.output) {
+            lines.push(`  Output: ${r.output.replace(/\n/g, "\n  ")}`);
+          }
         }
-        if (push.output) {
-          lines.push(`  Output: ${push.output.replace(/\n/g, "\n  ")}`);
-        }
-      }
 
-      return lines.join("\n");
+        if (!allOk && results.length < args.commits.length) {
+          const skipped = args.commits.length - results.length;
+          lines.push("", `${skipped} remaining commit(s) skipped.`);
+        }
+
+        if (args.dryRun) {
+          lines.push("", "**DRY RUN — no commits written. All staged files have been unstaged.**");
+        }
+
+        if (push) {
+          lines.push("");
+          if (push.ok) {
+            lines.push(`Push: ✓ ${push.branch} → ${push.upstream}`);
+          } else {
+            lines.push(`Push: ✗ ${push.error}${push.detail ? ` — ${push.detail}` : ""}`);
+          }
+          if (push.output) {
+            lines.push(`  Output: ${push.output.replace(/\n/g, "\n  ")}`);
+          }
+        }
+
+        return lines.join("\n");
+      });
     },
   });
 }

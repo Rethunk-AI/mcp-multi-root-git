@@ -653,6 +653,7 @@ One `groups` entry per **contiguous run of lines last touched by the same commit
 - **Failed entry stops the batch.** If staging or commit fails on entry N, the tool aborts and skips remaining entries. On mid-entry `stage_failed`, paths already staged for that entry are unstaged (`git restore --staged`). **Entries that succeeded before the failure remain committed** — they are not rolled back.
 - **Include all files for a logical change in a single `batch_commit` call.** Group related files in each commit entry, list them all in the `files` array, and include all necessary entries in the `commits` array.
 - **dryRun** uses path-scoped `diff --stat`, unstages between entries, and restores the full pre-call index via `write-tree`/`read-tree` (including overlapping pre-staged paths).
+- **Concurrent calls on the same repo serialize in-process.** Two overlapping `batch_commit` calls targeting the same git toplevel run one after another (in call order) within this server process — this does not protect against a second server process or a human running `git` concurrently against the same repo.
 
 Example: to commit two related changes atomically, pass both entries in one call:
 

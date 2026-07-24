@@ -253,6 +253,88 @@ describe("batch_commit execute handler", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Per-repo serialization (in-process mutex)
+// ---------------------------------------------------------------------------
+
+describe("batch_commit per-repo serialization", () => {
+  test("two overlapping calls on the same repo serialize in call order", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "base.ts"), "const b = 0;\n");
+    gitCmd(dir, "add", "base.ts");
+    gitCmd(dir, "commit", "-m", "chore: base");
+    writeFileSync(join(dir, "a.ts"), "const a = 1;\n");
+    writeFileSync(join(dir, "b.ts"), "const b2 = 2;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+
+    // Deliberately not awaited between the two calls: both target the same
+    // repo and their execute() bodies mutate shared index state (write-tree /
+    // stage / commit / read-tree). Without in-process serialization these
+    // could interleave — e.g. one call's `git commit` racing another's
+    // `write-tree`/staging — and corrupt the index or fail with an
+    // `index.lock` error. With serialization, call 1 fully completes (and its
+    // commit lands) before call 2's staging/commit ever starts, giving a
+    // deterministic commit order that matches call order.
+    const p1 = run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: a", files: ["a.ts"] }],
+    });
+    const p2 = run({
+      workspaceRoot: dir,
+      format: "json",
+      commits: [{ message: "feat: b", files: ["b.ts"] }],
+    });
+
+    const [text1, text2] = await Promise.all([p1, p2]);
+    const parsed1 = JSON.parse(text1) as { ok: boolean; committed: number };
+    const parsed2 = JSON.parse(text2) as { ok: boolean; committed: number };
+    expect(parsed1.ok).toBe(true);
+    expect(parsed1.committed).toBe(1);
+    expect(parsed2.ok).toBe(true);
+    expect(parsed2.committed).toBe(1);
+
+    const log = await spawnGitAsync(dir, ["log", "--reverse", "--format=%s"]);
+    const subjects = log.stdout.split("\n").filter(Boolean);
+    expect(subjects).toEqual(["chore: base", "feat: a", "feat: b"]);
+  });
+
+  test("overlapping calls on different repos do not serialize against each other", async () => {
+    const dirA = makeRepo();
+    writeFileSync(join(dirA, "base.ts"), "const b = 0;\n");
+    gitCmd(dirA, "add", "base.ts");
+    gitCmd(dirA, "commit", "-m", "chore: base");
+    writeFileSync(join(dirA, "a.ts"), "const a = 1;\n");
+
+    const dirB = makeRepo();
+    writeFileSync(join(dirB, "base.ts"), "const b = 0;\n");
+    gitCmd(dirB, "add", "base.ts");
+    gitCmd(dirB, "commit", "-m", "chore: base");
+    writeFileSync(join(dirB, "a.ts"), "const a = 1;\n");
+
+    const run = captureTool(registerBatchCommitTool);
+    const [textA, textB] = await Promise.all([
+      run({
+        workspaceRoot: dirA,
+        format: "json",
+        commits: [{ message: "feat: a in repo A", files: ["a.ts"] }],
+      }),
+      run({
+        workspaceRoot: dirB,
+        format: "json",
+        commits: [{ message: "feat: a in repo B", files: ["a.ts"] }],
+      }),
+    ]);
+    const parsedA = JSON.parse(textA) as { ok: boolean; committed: number };
+    const parsedB = JSON.parse(textB) as { ok: boolean; committed: number };
+    expect(parsedA.ok).toBe(true);
+    expect(parsedA.committed).toBe(1);
+    expect(parsedB.ok).toBe(true);
+    expect(parsedB.committed).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // push: "after" behaviour
 // ---------------------------------------------------------------------------
 
