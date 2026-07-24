@@ -55,14 +55,15 @@ interface CommitJson {
   deletions?: number;
 }
 
-interface LogGroupJson {
+type LogGroupJson = {
   workspaceRoot: string;
   repo: string;
   branch: string;
   commits: CommitJson[];
   truncated?: boolean;
   omittedCount?: number;
-}
+  error?: string;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -465,13 +466,13 @@ export function registerGitLogTool(server: FastMCP): void {
               repo: basename(r.workspaceRoot ?? ""),
               branch: "",
               commits: [],
-              ...spreadWhen(true, { error: r.error }),
-            } as unknown as LogGroupJson;
+              error: r.error,
+            };
           }
           const { _error: _e, ...rest } = r;
-          return { ...rest } as LogGroupJson;
+          return rest;
         });
-        return jsonRespond({ groups } as unknown as Record<string, unknown>);
+        return jsonRespond({ groups });
       }
 
       // Oneline
