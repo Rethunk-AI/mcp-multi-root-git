@@ -3,7 +3,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitStatusTool } from "./git-status-tool.js";
@@ -138,5 +138,73 @@ describe("git_status execute handler", () => {
     const repos = parsed.groups[0]?.repos ?? [];
     const subRow = repos.find((r) => r.label === "sub");
     expect(subRow?.ok).toBe(true);
+  });
+
+  test("symlink-based submodule path escape is rejected even though the .gitmodules path is lexically inside", async () => {
+    const dir = makeRepoWithSeed("mcp-status-symlink-escape-");
+    const outside = mkTmpDir("mcp-status-symlink-outside-");
+    writeFileSync(
+      join(dir, ".gitmodules"),
+      `[submodule "linked"]\n  path = linked\n  url = https://example.com\n`,
+    );
+    symlinkSync(outside, join(dir, "linked"), "dir");
+
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ root: dir, format: "json" });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ repos: Array<{ label: string; ok: boolean; statusText: string }> }>;
+    };
+    const repos = parsed.groups[0]?.repos ?? [];
+    const linkedRow = repos.find((r) => r.label === "linked");
+    expect(linkedRow?.ok).toBe(false);
+    expect(linkedRow?.statusText).toContain("escapes");
+  });
+
+  test("maxChangedFiles caps changed-file lines and reports omitted count", async () => {
+    const dir = makeRepoWithSeed("mcp-status-changedcap-");
+    for (const name of ["f1.txt", "f2.txt", "f3.txt", "f4.txt", "f5.txt"]) {
+      writeFileSync(join(dir, name), "x\n");
+    }
+
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ root: dir, format: "json", maxChangedFiles: 2 });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{
+        repos: Array<{
+          statusText: string;
+          changedFilesTruncated?: boolean;
+          changedFilesOmittedCount?: number;
+        }>;
+      }>;
+    };
+    const row = parsed.groups[0]?.repos[0];
+    expect(row?.changedFilesTruncated).toBe(true);
+    expect(row?.changedFilesOmittedCount).toBe(3);
+    // header line + 2 capped file lines
+    expect(row?.statusText.split("\n")).toHaveLength(3);
+  });
+
+  test("maxSubmodules caps submodule fan-out and reports omitted count at the group level", async () => {
+    const dir = makeRepoWithSeed("mcp-status-submodcap-");
+    const gitmodules = ["sub1", "sub2", "sub3"]
+      .map((name) => `[submodule "${name}"]\n  path = ${name}\n  url = https://example.com\n`)
+      .join("");
+    writeFileSync(join(dir, ".gitmodules"), gitmodules);
+
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ root: dir, format: "json", maxSubmodules: 2 });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{
+        repos: Array<{ label: string }>;
+        submodulesTruncated?: boolean;
+        submodulesOmittedCount?: number;
+      }>;
+    };
+    const group = parsed.groups[0];
+    expect(group?.submodulesTruncated).toBe(true);
+    expect(group?.submodulesOmittedCount).toBe(1);
+    // "." row + first 2 submodules only; sub3 never even attempted.
+    expect(group?.repos).toHaveLength(3);
+    expect(group?.repos.map((r) => r.label)).toEqual([".", "sub1", "sub2"]);
   });
 });
