@@ -25,7 +25,9 @@
           "description": "Named preset entries for git_inventory / git_parity."
         }
       },
-      "required": ["presets"]
+      "required": [
+        "presets"
+      ]
     },
     {
       "type": "object",
@@ -42,7 +44,20 @@
       "additionalProperties": {
         "$ref": "#/$defs/presetEntry"
       },
-      "minProperties": 1
+      "minProperties": 1,
+      "not": {
+        "type": "object",
+        "required": [
+          "presets"
+        ],
+        "properties": {
+          "presets": {
+            "type": "object",
+            "maxProperties": 0
+          }
+        },
+        "description": "An empty `presets` value is only ever the wrapped layout's (possibly invalid, empty) preset map, never a legacy preset literally named \"presets\" with an empty entry — otherwise both oneOf branches would match."
+      }
     }
   ],
   "$defs": {
@@ -52,7 +67,9 @@
       "properties": {
         "nestedRoots": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Paths relative to the git toplevel, in order, for git_inventory."
         },
         "parityPairs": {
@@ -61,11 +78,20 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "left": { "type": "string" },
-              "right": { "type": "string" },
-              "label": { "type": "string" }
+              "left": {
+                "type": "string"
+              },
+              "right": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
             },
-            "required": ["left", "right"]
+            "required": [
+              "left",
+              "right"
+            ]
           },
           "description": "Path pairs for git_parity (paths relative to git toplevel unless absolute)."
         },

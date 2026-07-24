@@ -1,11 +1,8 @@
-import { join } from "node:path";
-
 import type { FastMCP } from "fastmcp";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { gitTopLevel } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
-import { loadPresetsFromGitTop, PRESET_FILE_PATH, presetLoadErrorPayload } from "./presets.js";
+import { forEachPresetRoot, type PresetFile } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 
 export function registerPresetsResource(server: FastMCP): void {
@@ -22,48 +19,15 @@ export function registerPresetsResource(server: FastMCP): void {
         return { text: jsonRespond({ error: ERROR_CODES.NO_WORKSPACE_ROOT }) };
       }
 
-      const roots = pre.roots.map((ws) => {
-        const top = gitTopLevel(ws);
-        const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
-        if (!top) {
-          return {
-            workspaceRoot: ws,
-            gitTop: null,
-            presetFile,
-            fileExists: false,
-            presets: {},
-            error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws },
-          };
-        }
-        const loaded = loadPresetsFromGitTop(top);
-        if (!loaded.ok) {
-          if (loaded.reason === "missing") {
-            return {
-              workspaceRoot: ws,
-              gitTop: top,
-              presetFile,
-              fileExists: false,
-              presets: {},
-            };
-          }
-          return {
-            workspaceRoot: ws,
-            gitTop: top,
-            presetFile,
-            fileExists: true,
-            presets: {},
-            error: presetLoadErrorPayload(top, loaded),
-          };
-        }
-        return {
-          workspaceRoot: ws,
-          gitTop: top,
-          presetFile,
-          fileExists: true,
-          ...spreadDefined("presetSchemaVersion", loaded.schemaVersion),
-          presets: loaded.data,
-        };
-      });
+      const roots = forEachPresetRoot(pre.roots, (base, data) => ({
+        workspaceRoot: base.workspaceRoot,
+        gitTop: base.gitTop,
+        presetFile: base.presetFile,
+        fileExists: base.fileExists,
+        ...spreadDefined("presetSchemaVersion", base.presetSchemaVersion),
+        presets: (data ?? {}) as PresetFile,
+        ...spreadDefined("error", base.error),
+      }));
 
       return { text: jsonRespond({ roots }) };
     },

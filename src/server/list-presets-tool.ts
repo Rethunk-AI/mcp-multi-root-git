@@ -1,13 +1,26 @@
-import { join } from "node:path";
-
 import type { FastMCP } from "fastmcp";
 
-import { ERROR_CODES } from "./error-codes.js";
-import { gitTopLevel } from "./git.js";
 import { jsonRespond, spreadDefined } from "./json.js";
-import { loadPresetsFromGitTop, PRESET_FILE_PATH, presetLoadErrorPayload } from "./presets.js";
+import { forEachPresetRoot } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 import { RootPickSchema } from "./schemas.js";
+
+type PresetRow = {
+  name: string;
+  nestedRootsCount: number;
+  parityPairsCount: number;
+  workspaceRootHint?: string;
+};
+
+type PresetRootRow = {
+  workspaceRoot: string;
+  gitTop: string | null;
+  presetFile: string;
+  fileExists: boolean;
+  presetSchemaVersion?: string;
+  presets: PresetRow[];
+  error?: Record<string, unknown>;
+};
 
 export function registerListPresetsTool(server: FastMCP): void {
   server.addTool({
@@ -23,75 +36,28 @@ export function registerListPresetsTool(server: FastMCP): void {
         return jsonRespond(pre.error);
       }
 
-      const out: {
-        workspaceRoot: string;
-        gitTop: string | null;
-        presetFile: string;
-        fileExists: boolean;
-        presetSchemaVersion?: string;
-        presets: {
-          name: string;
-          nestedRootsCount: number;
-          parityPairsCount: number;
-          workspaceRootHint?: string;
-        }[];
-        error?: Record<string, unknown>;
-      }[] = [];
-
-      for (const ws of pre.roots) {
-        const top = gitTopLevel(ws);
-        const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
-        if (!top) {
-          out.push({
-            workspaceRoot: ws,
-            gitTop: null,
-            presetFile,
-            fileExists: false,
-            presets: [],
-            error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws },
-          });
-          continue;
-        }
-        const loaded = loadPresetsFromGitTop(top);
-        if (!loaded.ok) {
-          if (loaded.reason === "missing") {
-            out.push({
-              workspaceRoot: ws,
-              gitTop: top,
-              presetFile,
-              fileExists: false,
-              presets: [],
-            });
-          } else {
-            out.push({
-              workspaceRoot: ws,
-              gitTop: top,
-              presetFile,
-              fileExists: true,
-              presets: [],
-              error: presetLoadErrorPayload(top, loaded),
-            });
-          }
-          continue;
-        }
-        const presets = Object.entries(loaded.data).map(([name, e]) => ({
-          name,
-          nestedRootsCount: e.nestedRoots?.length ?? 0,
-          parityPairsCount: e.parityPairs?.length ?? 0,
-          ...spreadDefined(
-            "workspaceRootHint",
-            e.workspaceRootHint ? e.workspaceRootHint : undefined,
-          ),
-        }));
-        out.push({
-          workspaceRoot: ws,
-          gitTop: top,
-          presetFile,
-          fileExists: true,
-          ...spreadDefined("presetSchemaVersion", loaded.schemaVersion),
+      const out = forEachPresetRoot<PresetRootRow>(pre.roots, (base, data) => {
+        const presets: PresetRow[] = data
+          ? Object.entries(data).map(([name, e]) => ({
+              name,
+              nestedRootsCount: e.nestedRoots?.length ?? 0,
+              parityPairsCount: e.parityPairs?.length ?? 0,
+              ...spreadDefined(
+                "workspaceRootHint",
+                e.workspaceRootHint ? e.workspaceRootHint : undefined,
+              ),
+            }))
+          : [];
+        return {
+          workspaceRoot: base.workspaceRoot,
+          gitTop: base.gitTop,
+          presetFile: base.presetFile,
+          fileExists: base.fileExists,
+          ...spreadDefined("presetSchemaVersion", base.presetSchemaVersion),
           presets,
-        });
-      }
+          ...spreadDefined("error", base.error),
+        };
+      });
 
       if (args.format === "json") {
         return jsonRespond({ roots: out });

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
+import { gitTopLevel } from "./git.js";
 
 /**
  * Schema for `.rethunk/git-mcp-presets.json` at the workspace root.
@@ -29,8 +30,8 @@ const PresetEntrySchema = z
 
 const PresetFileSchema = z.record(z.string(), PresetEntrySchema);
 
-type PresetEntry = z.infer<typeof PresetEntrySchema>;
-type PresetFile = z.infer<typeof PresetFileSchema>;
+export type PresetEntry = z.infer<typeof PresetEntrySchema>;
+export type PresetFile = z.infer<typeof PresetFileSchema>;
 
 export const PRESET_FILE_PATH = ".rethunk/git-mcp-presets.json";
 
@@ -326,4 +327,99 @@ export function applyPresetParityPairs(
     pairs = fromPreset;
   }
   return { ok: true, pairs, presetSchemaVersion: got.presetSchemaVersion };
+}
+
+// ---------------------------------------------------------------------------
+// Shared fan-out helper for list_presets and the rethunk-git://presets resource
+// ---------------------------------------------------------------------------
+
+/** Per-root fields both list_presets and the presets resource emit before their own `presets` shape. */
+export type PresetRootBase = {
+  workspaceRoot: string;
+  gitTop: string | null;
+  presetFile: string;
+  fileExists: boolean;
+  presetSchemaVersion?: string;
+  error?: Record<string, unknown>;
+};
+
+/**
+ * Shared root-iteration + error-handling control flow for `list_presets` and the
+ * `rethunk-git://presets` resource: resolve each workspace root's git toplevel,
+ * compute its preset file path, and load+parse the preset file exactly once per
+ * unique git toplevel per call (multiple workspace roots can share one git toplevel).
+ * `build` shapes the per-root output row from the common base fields plus the parsed
+ * preset data (`undefined` when the file is missing, invalid, or the root isn't a git
+ * repository).
+ */
+export function forEachPresetRoot<T>(
+  roots: string[],
+  build: (base: PresetRootBase, data: PresetFile | undefined) => T,
+): T[] {
+  const loadCache = new Map<string, PresetLoadResult>();
+  const out: T[] = [];
+
+  for (const ws of roots) {
+    const top = gitTopLevel(ws);
+    const presetFile = top ? join(top, PRESET_FILE_PATH) : join(ws, PRESET_FILE_PATH);
+
+    if (!top) {
+      out.push(
+        build(
+          {
+            workspaceRoot: ws,
+            gitTop: null,
+            presetFile,
+            fileExists: false,
+            error: { error: ERROR_CODES.NOT_A_GIT_REPOSITORY, path: ws },
+          },
+          undefined,
+        ),
+      );
+      continue;
+    }
+
+    let loaded = loadCache.get(top);
+    if (!loaded) {
+      loaded = loadPresetsFromGitTop(top);
+      loadCache.set(top, loaded);
+    }
+
+    if (!loaded.ok) {
+      if (loaded.reason === "missing") {
+        out.push(
+          build({ workspaceRoot: ws, gitTop: top, presetFile, fileExists: false }, undefined),
+        );
+      } else {
+        out.push(
+          build(
+            {
+              workspaceRoot: ws,
+              gitTop: top,
+              presetFile,
+              fileExists: true,
+              error: presetLoadErrorPayload(top, loaded),
+            },
+            undefined,
+          ),
+        );
+      }
+      continue;
+    }
+
+    out.push(
+      build(
+        {
+          workspaceRoot: ws,
+          gitTop: top,
+          presetFile,
+          fileExists: true,
+          presetSchemaVersion: loaded.schemaVersion,
+        },
+        loaded.data,
+      ),
+    );
+  }
+
+  return out;
 }
