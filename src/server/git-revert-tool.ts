@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import { conflictPaths, isSafeGitAncestorRef, isWorkingTreeClean } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -24,7 +24,7 @@ export async function revertHead(gitTop: string): Promise<string | undefined> {
 export async function abortRevert(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
   const r = await spawnGitAsync(gitTop, ["revert", "--abort"]);
   if (r.ok) return { ok: true };
-  const detail = (r.stderr || r.stdout).trim();
+  const detail = gitFailureDetail(r);
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
@@ -141,7 +141,7 @@ export function registerGitRevertTool(server: FastMCP): void {
             applied,
             ...spreadDefined("commit", failedSha),
             conflicts: paths,
-            ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
+            ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           });
         }
 
@@ -151,7 +151,7 @@ export function registerGitRevertTool(server: FastMCP): void {
           aborted: abortResult.ok,
           ...spreadDefined("commit", failedSha),
           conflicts: paths,
-          ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
+          ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           ...spreadWhen(!abortResult.ok, {
             error: ERROR_CODES.REVERT_ABORT_FAILED,
             ...spreadDefined("abortDetail", abortResult.detail),

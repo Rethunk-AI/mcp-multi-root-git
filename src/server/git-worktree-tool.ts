@@ -6,7 +6,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import {
   isProtectedBranch,
   isSafeGitRefToken,
@@ -142,7 +142,7 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
         return jsonRespond({
           ok: false,
           error: ERROR_CODES.WORKTREE_ADD_FAILED,
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
         });
       }
 
@@ -235,7 +235,7 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
         return jsonRespond({
           ok: false,
           error: ERROR_CODES.WORKTREE_REMOVE_FAILED,
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
           ...spreadWhen(
             (r.stderr || r.stdout).includes("contains modified") ||
               (r.stderr || r.stdout).includes("is not empty"),

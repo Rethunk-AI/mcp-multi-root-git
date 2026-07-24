@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import { conflictPaths } from "./git-refs.js";
 import { abortRevert, revertHead } from "./git-revert-tool.js";
 import { jsonRespond, spreadDefined } from "./json.js";
@@ -139,7 +139,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
             paused: true,
             ...spreadDefined("commit", failedSha),
             conflicts: paths,
-            ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
+            ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
           if (args.format === "json") {
             return jsonRespond({ ok: false, action: "continue", applied, ...conflict });
@@ -151,7 +151,7 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
         return jsonRespond({
           error: ERROR_CODES.REVERT_CONTINUE_FAILED,
           ...spreadDefined("commit", failedSha),
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
         });
       }
 

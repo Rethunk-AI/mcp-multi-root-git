@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import { isSafeGitAncestorRef, isWorkingTreeClean } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -93,7 +93,7 @@ export function registerGitResetSoftTool(server: FastMCP): void {
       if (!r.ok) {
         return jsonRespond({
           error: ERROR_CODES.RESET_FAILED,
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
         });
       }
 

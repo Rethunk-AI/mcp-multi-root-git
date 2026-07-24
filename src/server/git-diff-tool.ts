@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -229,7 +229,7 @@ export function registerGitDiffTool(server: FastMCP): void {
       if (!result.ok && !result.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
-          detail: (result.stderr || result.stdout).trim(),
+          detail: gitFailureDetail(result),
         });
       }
 

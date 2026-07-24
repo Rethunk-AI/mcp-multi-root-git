@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import { isProtectedBranch, isSafeGitCommitIsh, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -109,7 +109,7 @@ export function registerGitTagTool(server: FastMCP): void {
         if (!delResult.ok) {
           return jsonRespond({
             error: ERROR_CODES.TAG_DELETE_FAILED,
-            detail: (delResult.stderr || delResult.stdout).trim(),
+            detail: gitFailureDetail(delResult),
           });
         }
 
@@ -155,7 +155,7 @@ export function registerGitTagTool(server: FastMCP): void {
       if (!createResult.ok) {
         return jsonRespond({
           error: ERROR_CODES.TAG_CREATE_FAILED,
-          detail: (createResult.stderr || createResult.stdout).trim(),
+          detail: gitFailureDetail(createResult),
         });
       }
 

@@ -257,7 +257,7 @@ export async function gitRevParseHeadAsync(
 ): Promise<{ ok: boolean; sha?: string; text: string }> {
   const r = await spawnGitAsync(cwd, ["rev-parse", "HEAD"], opts);
   if (!r.ok) {
-    return { ok: false, text: (r.stderr || r.stdout || "git rev-parse HEAD failed").trim() };
+    return { ok: false, text: gitFailureDetail(r) || "git rev-parse HEAD failed" };
   }
   return { ok: true, sha: r.stdout.trim(), text: r.stdout.trim() };
 }
@@ -410,6 +410,15 @@ export interface SpawnGitOpts {
    * passed through wholesale.
    */
   env?: Record<string, string>;
+}
+
+/**
+ * Human-readable failure detail from a git subprocess result: prefers
+ * stderr, falls back to stdout, trimmed. Shared by tool error paths across
+ * the codebase to surface git's own diagnostic text.
+ */
+export function gitFailureDetail(result: { stdout: string; stderr: string }): string {
+  return (result.stderr || result.stdout).trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +617,7 @@ export function spawnGitAsync(
 }
 
 function gitStatusFailText(r: { stderr: string; stdout: string }): string {
-  return (r.stderr || r.stdout || "git status failed").trim();
+  return gitFailureDetail(r) || "git status failed";
 }
 
 export async function gitStatusSnapshotAsync(cwd: string): Promise<{

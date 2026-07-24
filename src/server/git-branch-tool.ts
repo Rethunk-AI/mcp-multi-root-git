@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import { isProtectedBranch, isSafeGitAncestorRef, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -99,7 +99,7 @@ export function registerGitBranchTool(server: FastMCP): void {
         if (!createResult.ok) {
           return jsonRespond({
             error: ERROR_CODES.BRANCH_CREATE_FAILED,
-            detail: (createResult.stderr || createResult.stdout).trim(),
+            detail: gitFailureDetail(createResult),
           });
         }
 
@@ -117,7 +117,7 @@ export function registerGitBranchTool(server: FastMCP): void {
         if (!deleteResult.ok) {
           return jsonRespond({
             error: ERROR_CODES.BRANCH_DELETE_FAILED,
-            detail: (deleteResult.stderr || deleteResult.stdout).trim(),
+            detail: gitFailureDetail(deleteResult),
           });
         }
 
@@ -140,7 +140,7 @@ export function registerGitBranchTool(server: FastMCP): void {
       if (!renameResult.ok) {
         return jsonRespond({
           error: ERROR_CODES.BRANCH_RENAME_FAILED,
-          detail: (renameResult.stderr || renameResult.stdout).trim(),
+          detail: gitFailureDetail(renameResult),
         });
       }
 

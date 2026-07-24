@@ -3,7 +3,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import {
   commitListBetween,
   conflictPaths,
@@ -69,7 +69,7 @@ async function cherryPickHead(gitTop: string): Promise<string | undefined> {
 export async function abortCherryPick(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
   const r = await spawnGitAsync(gitTop, ["cherry-pick", "--abort"]);
   if (r.ok) return { ok: true };
-  const detail = (r.stderr || r.stdout).trim();
+  const detail = gitFailureDetail(r);
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
@@ -97,7 +97,7 @@ async function resolveSource(
     if (!r.ok) {
       return {
         error: ERROR_CODES.RANGE_RESOLUTION_FAILED,
-        detail: (r.stderr || r.stdout).trim(),
+        detail: gitFailureDetail(r),
         raw,
       };
     }
@@ -329,7 +329,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
         if (!co.ok) {
           return jsonRespond({
             error: ERROR_CODES.CHECKOUT_FAILED,
-            detail: (co.stderr || co.stdout).trim(),
+            detail: gitFailureDetail(co),
           });
         }
       }
@@ -392,7 +392,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               paused: true,
               ...spreadDefined("commit", failedSha),
               paths,
-              detail: (r.stderr || r.stdout).trim(),
+              detail: gitFailureDetail(r),
               error: ERROR_CODES.CHERRY_PICK_CONFLICTS,
             };
           } else {
@@ -401,7 +401,7 @@ export function registerGitCherryPickTool(server: FastMCP): void {
               stage: "cherry-pick",
               ...spreadDefined("commit", failedSha),
               paths,
-              detail: (r.stderr || r.stdout).trim(),
+              detail: gitFailureDetail(r),
               error: abort.ok
                 ? ERROR_CODES.CHERRY_PICK_CONFLICTS
                 : ERROR_CODES.CHERRY_PICK_ABORT_FAILED,
@@ -660,7 +660,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
             paused: true,
             ...spreadDefined("commit", failedSha),
             paths,
-            ...spreadDefined("detail", (r.stderr || r.stdout).trim() || undefined),
+            ...spreadDefined("detail", gitFailureDetail(r) || undefined),
           };
           if (args.format === "json") {
             return jsonRespond({ ok: false, action: "continue", applied, conflict });
@@ -672,7 +672,7 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
         return jsonRespond({
           error: ERROR_CODES.CHERRY_PICK_CONTINUE_FAILED,
           ...spreadDefined("commit", failedSha),
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
         });
       }
 

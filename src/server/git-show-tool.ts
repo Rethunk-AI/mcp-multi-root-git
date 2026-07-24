@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { GIT_DIFF_DEFAULT_MAX_BYTES, truncateDiffOutput } from "./git-diff-tool.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
@@ -80,7 +80,7 @@ async function runGitShow(opts: {
   if (!r.ok && !r.truncated) {
     return {
       error: ERROR_CODES.GIT_SHOW_FAILED,
-      detail: (r.stderr || r.stdout).trim(),
+      detail: gitFailureDetail(r),
     };
   }
   const subprocessTruncated = r.truncated === true;

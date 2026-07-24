@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 
-import { GIT_SUBPROCESS_MAX_BUFFER_BYTES, GIT_SYNC_TIMEOUT_MS, spawnGitAsync } from "./git.js";
+import {
+  GIT_SUBPROCESS_MAX_BUFFER_BYTES,
+  GIT_SYNC_TIMEOUT_MS,
+  gitFailureDetail,
+  spawnGitAsync,
+} from "./git.js";
 
 // ---------------------------------------------------------------------------
 // Merge conflict helpers (shared between git_merge and git_cherry_pick)
@@ -308,7 +313,7 @@ export async function listWorktrees(
 ): Promise<{ ok: true; worktrees: WorktreeEntry[] } | { ok: false; detail: string }> {
   const r = await spawnGitAsync(cwd, ["worktree", "list", "--porcelain"]);
   if (!r.ok) {
-    return { ok: false, detail: (r.stderr || r.stdout).trim() || "git worktree list failed" };
+    return { ok: false, detail: gitFailureDetail(r) || "git worktree list failed" };
   }
   const out: WorktreeEntry[] = [];
   let cur: Partial<WorktreeEntry> = {};
@@ -354,7 +359,7 @@ export async function inferRemoteFromUpstream(
   cwd: string,
 ): Promise<{ ok: true; remote: string; upstream: string } | { ok: false; detail: string }> {
   const r = await spawnGitAsync(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-  if (!r.ok) return { ok: false, detail: (r.stderr || r.stdout).trim() };
+  if (!r.ok) return { ok: false, detail: gitFailureDetail(r) };
   const upstream = r.stdout.trim();
   const slash = upstream.indexOf("/");
   const remote = slash > 0 ? upstream.slice(0, slash) : "origin";

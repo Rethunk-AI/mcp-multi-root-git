@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -361,7 +361,7 @@ export function registerGitBlameTool(server: FastMCP): void {
       if (!r.ok && !r.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_BLAME_FAILED,
-          detail: (r.stderr || r.stdout).trim(),
+          detail: gitFailureDetail(r),
         });
       }
 

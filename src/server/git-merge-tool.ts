@@ -3,7 +3,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { gitFailureDetail, spawnGitAsync } from "./git.js";
 import {
   conflictPaths,
   getCurrentBranch,
@@ -66,7 +66,7 @@ interface SourceResult {
 export async function abortMerge(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
   const r = await spawnGitAsync(gitTop, ["merge", "--abort"]);
   if (r.ok) return { ok: true };
-  const detail = (r.stderr || r.stdout).trim();
+  const detail = gitFailureDetail(r);
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
@@ -74,7 +74,7 @@ export async function abortMerge(gitTop: string): Promise<{ ok: boolean; detail?
 export async function abortRebase(gitTop: string): Promise<{ ok: boolean; detail?: string }> {
   const r = await spawnGitAsync(gitTop, ["rebase", "--abort"]);
   if (r.ok) return { ok: true };
-  const detail = (r.stderr || r.stdout).trim();
+  const detail = gitFailureDetail(r);
   return detail === "" ? { ok: false } : { ok: false, detail };
 }
 
@@ -119,7 +119,7 @@ async function mergeOneSource(
       source,
       ok: false,
       error: ERROR_CODES.MERGE_BASE_FAILED,
-      detail: (mb.stderr || mb.stdout).trim(),
+      detail: gitFailureDetail(mb),
     };
   }
   const mergeBase = mb.stdout.trim();
@@ -187,7 +187,7 @@ async function fastForward(gitTop: string, source: string): Promise<SourceResult
           conflictStage: "merge",
           conflictPaths: [],
           error: ERROR_CODES.MERGE_ABORT_FAILED,
-          detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+          detail: abort.detail ?? gitFailureDetail(r),
         };
       }
     }
@@ -198,7 +198,7 @@ async function fastForward(gitTop: string, source: string): Promise<SourceResult
       conflictStage: "merge",
       conflictPaths: [],
       error: ERROR_CODES.MERGE_FAILED,
-      detail: (r.stderr || r.stdout).trim(),
+      detail: gitFailureDetail(r),
     };
   }
   const head = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
@@ -229,7 +229,7 @@ async function mergeCommit(
         conflictStage: "merge",
         conflictPaths: paths,
         error: ERROR_CODES.MERGE_ABORT_FAILED,
-        detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+        detail: abort.detail ?? gitFailureDetail(r),
       };
     }
     return {
@@ -239,7 +239,7 @@ async function mergeCommit(
       conflictStage: "merge",
       conflictPaths: paths,
       error: ERROR_CODES.MERGE_CONFLICTS,
-      detail: (r.stderr || r.stdout).trim(),
+      detail: gitFailureDetail(r),
     };
   }
   const head = await spawnGitAsync(gitTop, ["rev-parse", "HEAD"]);
@@ -276,7 +276,7 @@ async function rebaseSourceOntoInto(
         conflictStage: "rebase",
         conflictPaths: paths,
         error: ERROR_CODES.REBASE_ABORT_FAILED,
-        detail: abort.detail ?? (r.stderr || r.stdout).trim(),
+        detail: abort.detail ?? gitFailureDetail(r),
       };
     }
     return {
@@ -286,7 +286,7 @@ async function rebaseSourceOntoInto(
       conflictStage: "rebase",
       conflictPaths: paths,
       error: ERROR_CODES.REBASE_CONFLICTS,
-      detail: (r.stderr || r.stdout).trim(),
+      detail: gitFailureDetail(r),
     };
   }
   // Rebase succeeded; switch back to destination so the caller can FF.
@@ -296,7 +296,7 @@ async function rebaseSourceOntoInto(
       source,
       ok: false,
       error: ERROR_CODES.CHECKOUT_FAILED,
-      detail: (co.stderr || co.stdout).trim(),
+      detail: gitFailureDetail(co),
     };
   }
   return { source, ok: true }; // caller FFs
@@ -430,7 +430,7 @@ export function registerGitMergeTool(server: FastMCP): void {
         if (!co.ok) {
           return jsonRespond({
             error: ERROR_CODES.CHECKOUT_FAILED,
-            detail: (co.stderr || co.stdout).trim(),
+            detail: gitFailureDetail(co),
           });
         }
       }

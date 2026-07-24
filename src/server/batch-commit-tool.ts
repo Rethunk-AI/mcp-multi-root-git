@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { parseGitSubmodulePaths, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, parseGitSubmodulePaths, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { condenseCommitOutput, condensePushOutput } from "./push-output.js";
@@ -242,7 +242,7 @@ async function stageFile(
     const rmResult = await spawnGitAsync(gitTop, ["rm", "--cached", "--", filePath]);
     return {
       ok: rmResult.ok,
-      error: rmResult.ok ? undefined : (rmResult.stderr || rmResult.stdout).trim(),
+      error: rmResult.ok ? undefined : gitFailureDetail(rmResult),
     };
   }
 
@@ -251,7 +251,7 @@ async function stageFile(
     const addResult = await spawnGitAsync(gitTop, ["add", "--", filePath]);
     return {
       ok: addResult.ok,
-      error: addResult.ok ? undefined : (addResult.stderr || addResult.stdout).trim(),
+      error: addResult.ok ? undefined : gitFailureDetail(addResult),
     };
   }
 
@@ -264,7 +264,7 @@ async function stageFile(
   if (tracked.ok) {
     const diffResult = await spawnGitAsync(gitTop, ["diff", "--", filePath]);
     if (!diffResult.ok && !diffResult.stdout.trim()) {
-      return { ok: false, error: (diffResult.stderr || diffResult.stdout).trim() };
+      return { ok: false, error: gitFailureDetail(diffResult) };
     }
     diffStdout = diffResult.stdout;
   } else {
@@ -279,7 +279,7 @@ async function stageFile(
     if (!diffResult.stdout.trim()) {
       return {
         ok: false,
-        error: (diffResult.stderr || diffResult.stdout || "No hunks found in line range").trim(),
+        error: gitFailureDetail(diffResult) || "No hunks found in line range",
       };
     }
     diffStdout = diffResult.stdout;
@@ -310,7 +310,7 @@ async function stageFile(
 
   return {
     ok: applyResult.ok,
-    error: applyResult.ok ? undefined : (applyResult.stderr || applyResult.stdout).trim(),
+    error: applyResult.ok ? undefined : gitFailureDetail(applyResult),
   };
 }
 
@@ -358,7 +358,7 @@ export async function runPushAfter(gitTop: string): Promise<PushReport> {
       branch,
       upstream: t.upstream,
       error: ERROR_CODES.PUSH_FAILED,
-      detail: (pushResult.stderr || pushResult.stdout).trim(),
+      detail: gitFailureDetail(pushResult),
     };
   }
   const gitOutput = condensePushOutput(pushResult.stdout, pushResult.stderr);
@@ -453,7 +453,7 @@ async function snapshotIndex(
 ): Promise<{ ok: true; tree: string } | { ok: false; detail: string }> {
   const wt = await spawnGitAsync(gitTop, ["write-tree"]);
   if (!wt.ok) {
-    return { ok: false, detail: (wt.stderr || wt.stdout).trim() };
+    return { ok: false, detail: gitFailureDetail(wt) };
   }
   return { ok: true, tree: wt.stdout.trim() };
 }
@@ -610,9 +610,7 @@ async function commitEntry(
       return {
         ok: false,
         error: ERROR_CODES.COMMIT_FAILED,
-        detail:
-          (wt.stderr || wt.stdout).trim() ||
-          "failed to snapshot index for pre-staged path isolation",
+        detail: gitFailureDetail(wt) || "failed to snapshot index for pre-staged path isolation",
       };
     }
     indexSnap = wt.stdout.trim();
@@ -625,7 +623,7 @@ async function commitEntry(
     // stage_failed — rather than only restoring the unrelated paths, so
     // this entry's own staged files don't linger in the index either.
     await rollbackEntry(gitTop, entrySnapshot);
-    const gitOutput = (commitResult.stderr || commitResult.stdout).trim();
+    const gitOutput = gitFailureDetail(commitResult);
     return {
       ok: false,
       error: ERROR_CODES.COMMIT_FAILED,

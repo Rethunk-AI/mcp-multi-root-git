@@ -4,7 +4,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh, isSafeGitRangeToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -324,7 +324,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       if (!statResult.ok && !statResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
-          detail: (statResult.stderr || statResult.stdout).trim(),
+          detail: gitFailureDetail(statResult),
         });
       }
       const statMap = parseNumstatOutput(statResult.stdout);
@@ -334,7 +334,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       if (!diffResult.ok && !diffResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
-          detail: (diffResult.stderr || diffResult.stdout).trim(),
+          detail: gitFailureDetail(diffResult),
         });
       }
       // Either subprocess hitting the buffer cap still yields usable partial

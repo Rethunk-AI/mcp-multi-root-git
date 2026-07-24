@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
+import { gitFailureDetail, isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
 import { condensePushOutput, redactUrlCredentials } from "./push-output.js";
@@ -100,7 +100,7 @@ export function registerGitPushTool(server: FastMCP): void {
           branch,
           remote,
           error: ERROR_CODES.PUSH_FAILED,
-          detail: redactUrlCredentials((pushResult.stderr || pushResult.stdout).trim()),
+          detail: redactUrlCredentials(gitFailureDetail(pushResult)),
         });
       }
 
