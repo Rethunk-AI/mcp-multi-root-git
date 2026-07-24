@@ -5,7 +5,13 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } from "./git.js";
+import {
+  asyncPool,
+  GIT_SUBPROCESS_PARALLELISM,
+  gitTopLevel,
+  resolveGitSubprocessMaxBufferBytes,
+  spawnGitAsync,
+} from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadWhen } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
@@ -17,6 +23,8 @@ import { RootPickSchema } from "./schemas.js";
 
 const MAX_MATCHES_HARD_CAP = 1000;
 const DEFAULT_MAX_MATCHES = 200;
+/** Max entries accepted in `paths` per call. */
+const MAX_PATHS = 256;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,8 +79,12 @@ async function runPickaxe(opts: RunPickaxeOpts): Promise<RunPickaxeResult> {
   if (ref) args.push(ref);
   if (paths.length > 0) args.push("--", ...paths);
 
-  const r = await spawnGitAsync(top, args);
-  if (!r.ok) {
+  const r = await spawnGitAsync(top, args, {
+    maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
+  });
+  // A subprocess-level buffer cap (r.truncated) still yields a usable partial
+  // commit list — parse and return it instead of failing outright.
+  if (!r.ok && !r.truncated) {
     return {
       error: ERROR_CODES.GIT_GREP_FAILED,
       detail: r.stderr.trim() || r.stdout.trim(),
@@ -89,10 +101,10 @@ async function runPickaxe(opts: RunPickaxeOpts): Promise<RunPickaxeResult> {
     if (sha) commits.push({ sha, subject });
   }
 
-  const truncated = commits.length > maxMatches;
+  const capTruncated = commits.length > maxMatches;
   return {
-    commits: truncated ? commits.slice(0, maxMatches) : commits,
-    truncated,
+    commits: capTruncated ? commits.slice(0, maxMatches) : commits,
+    truncated: capTruncated || r.truncated === true,
   };
 }
 
@@ -135,6 +147,9 @@ export function registerGitGrepTool(server: FastMCP): void {
       "Pickaxe history search across one or more roots: which commits added or removed a term " +
       '(`git log -S`) or changed lines matching a regex (`git log -G`), via `pickaxe: { mode: "S"|"G", term }`. ' +
       "Returns `commits[]` (sha + subject) per root. Set `ref` to limit history to that tip. " +
+      "Case-sensitive by default (opt into `ignoreCase`) — unlike `git_log`'s `grep`, which is " +
+      "case-insensitive by default. `G` mode regex complexity is bounded only by the subprocess " +
+      "timeout, not rejected upfront. " +
       "For working-tree content search use the client's native grep/rg tooling instead — " +
       "content mode was removed in v6.",
     annotations: {
@@ -153,15 +168,21 @@ export function registerGitGrepTool(server: FastMCP): void {
         .string()
         .optional()
         .describe("Commit/branch/tag to use as the history tip. Must be a safe ref token."),
+      path: z.string().optional().describe("Limit history to this path. Unioned with `paths`."),
       paths: z
         .array(z.string())
+        .max(MAX_PATHS)
         .optional()
-        .describe("Limit history to these paths (must resolve within the repo root)."),
+        .describe(
+          `Limit history to these paths (max ${MAX_PATHS}, must resolve within the repo root).`,
+        ),
       ignoreCase: z
         .boolean()
         .optional()
         .default(false)
-        .describe("Case-insensitive match (`-i`; affects `G` mode regexes)."),
+        .describe(
+          "Case-insensitive match (`-i`; affects `G` mode regexes). Default false (case-sensitive) — see `git_log`'s `grep`/`ignoreCase` for the opposite default.",
+        ),
       maxMatches: z
         .number()
         .int()
@@ -184,7 +205,16 @@ export function registerGitGrepTool(server: FastMCP): void {
       }
       const ref = (args.ref as string | undefined)?.trim() || undefined;
 
-      const rawPaths = Array.isArray(args.paths) ? (args.paths as string[]) : [];
+      // Union singular `path` + `paths` array (dedup, order preserved).
+      const rawPathsInput: string[] = [];
+      const singlePath = (args.path as string | undefined)?.trim();
+      if (singlePath) rawPathsInput.push(singlePath);
+      if (Array.isArray(args.paths)) {
+        for (const p of args.paths as string[]) {
+          if (typeof p === "string" && p.trim()) rawPathsInput.push(p.trim());
+        }
+      }
+      const rawPaths = [...new Set(rawPathsInput)];
 
       const ignoreCase = (args.ignoreCase as boolean | undefined) ?? false;
       const maxMatches = Math.min(

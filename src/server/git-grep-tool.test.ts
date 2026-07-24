@@ -16,9 +16,17 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import type { ZodTypeAny } from "zod";
 
 import { registerGitGrepTool } from "./git-grep-tool.js";
-import { addCommit, captureTool, cleanupTmpPaths, gitCmd, makeRepo } from "./test-harness.js";
+import {
+  addCommit,
+  captureTool,
+  captureToolDefinitions,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepo,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -204,5 +212,98 @@ describe("git_grep_tool", () => {
     ) as { results: Array<{ commits?: unknown[] }> };
     expect(parsed.results).toHaveLength(2);
     expect(parsed.results.every((r) => (r.commits?.length ?? 0) >= 1)).toBe(true);
+  });
+
+  test("ignoreCase: false (default) is case-sensitive for G mode regex", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "foo.txt", "const Widget = 1;\n", "feat: add Widget");
+
+    const tool = captureTool(registerGitGrepTool);
+    const caseSensitive = JSON.parse(
+      await tool({
+        root: repo,
+        pickaxe: { mode: "G", term: "widget" },
+        format: "json",
+      }),
+    ) as { results: Array<{ commits?: unknown[] }> };
+    expect(caseSensitive.results[0]?.commits).toEqual([]);
+
+    const caseInsensitive = JSON.parse(
+      await tool({
+        root: repo,
+        pickaxe: { mode: "G", term: "widget" },
+        ignoreCase: true,
+        format: "json",
+      }),
+    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
+    const subjects = (caseInsensitive.results[0]?.commits ?? []).map((c) => c.subject);
+    expect(subjects).toContain("feat: add Widget");
+  });
+
+  test("path (singular) is unioned with paths, deduplicated", async () => {
+    const repo = makeRepo();
+    addCommit(repo, "a.txt", "union-term\n", "feat: a");
+    addCommit(repo, "b.txt", "union-term\n", "feat: b");
+    addCommit(repo, "c.txt", "union-term\n", "feat: c");
+
+    const tool = captureTool(registerGitGrepTool);
+    const parsed = JSON.parse(
+      await tool({
+        root: repo,
+        pickaxe: { mode: "S", term: "union-term" },
+        path: "a.txt",
+        paths: ["b.txt", "a.txt"],
+        format: "json",
+      }),
+    ) as { results: Array<{ commits?: Array<{ subject: string }> }> };
+
+    const subjects = (parsed.results[0]?.commits ?? []).map((c) => c.subject);
+    expect(subjects).toContain("feat: a");
+    expect(subjects).toContain("feat: b");
+    expect(subjects).not.toContain("feat: c");
+  });
+
+  test("paths array schema rejects more than the max cap", () => {
+    const def = captureToolDefinitions(registerGitGrepTool).find((d) => d.name === "git_grep");
+    const manyPaths = Array.from({ length: 257 }, (_, i) => `f${i}.txt`);
+    const schema = def?.parameters as ZodTypeAny;
+    const result = schema.safeParse({
+      root: "/tmp",
+      pickaxe: { mode: "S", term: "x" },
+      paths: manyPaths,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("subprocess-level buffer truncation returns partial commits + truncated:true, not git_grep_failed", async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 20; i++) {
+      addCommit(
+        repo,
+        `f${i}.txt`,
+        `bufcap-term\n`,
+        `feat: commit number ${i} with quite a lot of extra padding text stuffed in here to grow the pickaxe log output past the buffer cap`,
+      );
+    }
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const tool = captureTool(registerGitGrepTool);
+      const result = await tool({
+        root: repo,
+        pickaxe: { mode: "S", term: "bufcap-term" },
+        format: "json",
+      });
+      const parsed = JSON.parse(result) as {
+        results: Array<{ error?: string; truncated?: boolean; commits?: unknown[] }>;
+      };
+      expect(parsed.results[0]?.error).toBeUndefined();
+      expect(parsed.results[0]?.truncated).toBe(true);
+      expect(Array.isArray(parsed.results[0]?.commits)).toBe(true);
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
   });
 });
