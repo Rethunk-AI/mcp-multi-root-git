@@ -189,7 +189,7 @@ export function registerGitDiffTool(server: FastMCP): void {
         rawPaths.push(args.path.trim());
       }
       if (Array.isArray(args.paths)) {
-        for (const p of args.paths as string[]) {
+        for (const p of args.paths) {
           if (typeof p === "string" && p.trim()) {
             rawPaths.push(p.trim());
           }
@@ -253,7 +253,7 @@ export function registerGitDiffTool(server: FastMCP): void {
           range: label,
           diff: diffText,
           ...spreadWhen(truncated, { truncated: true }),
-        } as unknown as Record<string, unknown>);
+        });
       }
 
       // Markdown output

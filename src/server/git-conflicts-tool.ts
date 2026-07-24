@@ -56,10 +56,10 @@ interface ConflictFileJson {
   truncated?: boolean;
 }
 
-interface ConflictsJson {
+type ConflictsJson = {
   state?: ConflictState;
   files: ConflictFileJson[];
-}
+};
 
 // ---------------------------------------------------------------------------
 // Operation-state detection
@@ -393,7 +393,7 @@ export function registerGitConflictsTool(server: FastMCP): void {
       };
 
       if (args.format === "json") {
-        return jsonRespond(result as unknown as Record<string, unknown>);
+        return jsonRespond(result);
       }
       return renderConflictsMarkdown(result);
     },

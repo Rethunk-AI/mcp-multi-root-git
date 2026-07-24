@@ -43,7 +43,7 @@ interface FileDiff {
   diff: string;
 }
 
-interface DiffSummary {
+type DiffSummary = {
   range: string;
   totalFiles: number;
   totalAdditions: number;
@@ -53,7 +53,7 @@ interface DiffSummary {
   excludedFiles?: string[];
   /** Present (true) only when a subprocess hit the stdout/stderr buffer cap. */
   truncated?: boolean;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -419,7 +419,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
 
       // --- Format output ---
       if (args.format === "json") {
-        return jsonRespond(summary as unknown as Record<string, unknown>);
+        return jsonRespond(summary);
       }
 
       // --- Markdown output ---

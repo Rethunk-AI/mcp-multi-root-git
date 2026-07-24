@@ -12,11 +12,11 @@ import { WorkspacePickSchema } from "./schemas.js";
 // Types
 // ---------------------------------------------------------------------------
 
-interface BranchResult {
+type BranchResult = {
   action: "create" | "delete" | "rename";
   branch: string;
   sha: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,7 +168,7 @@ function respond(
   renamedFrom?: string,
 ): string {
   if (format === "json") {
-    return jsonRespond(result as unknown as Record<string, unknown>);
+    return jsonRespond(result);
   }
 
   const lines: string[] = [];

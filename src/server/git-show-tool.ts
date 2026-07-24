@@ -21,7 +21,7 @@ const MAX_PATHS = 256;
 // Types
 // ---------------------------------------------------------------------------
 
-interface ShowJson {
+type ShowJson = {
   ref: string;
   path?: string;
   paths?: string[];
@@ -31,7 +31,7 @@ interface ShowJson {
   diff?: string;
   /** Present (true) only when content was cut — subprocess buffer cap or maxBytes. */
   truncated?: boolean;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -268,19 +268,19 @@ export function registerGitShowTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const top = pre.gitTop;
 
-      if (!isSafeGitCommitIsh(args.ref as string)) {
+      if (!isSafeGitCommitIsh(args.ref)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
 
       if (args.path !== undefined) {
-        const resolved = resolvePathForRepo(args.path as string, top);
-        if (!assertRelativePathUnderTop(args.path as string, resolved, top)) {
+        const resolved = resolvePathForRepo(args.path, top);
+        if (!assertRelativePathUnderTop(args.path, resolved, top)) {
           return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
         }
       }
 
       if (Array.isArray(args.paths)) {
-        for (const p of args.paths as string[]) {
+        for (const p of args.paths) {
           const resolved = resolvePathForRepo(p, top);
           if (!assertRelativePathUnderTop(p, resolved, top)) {
             return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: p });
@@ -290,10 +290,10 @@ export function registerGitShowTool(server: FastMCP): void {
 
       const result = await runGitShow({
         top,
-        ref: args.ref as string,
-        path: args.path as string | undefined,
-        paths: args.paths as string[] | undefined,
-        stat: args.stat as boolean | undefined,
+        ref: args.ref,
+        path: args.path,
+        paths: args.paths,
+        stat: args.stat,
         maxBytes: typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES,
       });
 
@@ -302,7 +302,7 @@ export function registerGitShowTool(server: FastMCP): void {
       }
 
       if (args.format === "json") {
-        return jsonRespond(result as unknown as Record<string, unknown>);
+        return jsonRespond(result);
       }
 
       // Markdown

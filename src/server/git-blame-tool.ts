@@ -35,13 +35,13 @@ interface BlameGroup {
   lines: { line: number; content: string }[];
 }
 
-interface BlameJson {
+type BlameJson = {
   ref?: string;
   path: string;
   groups: BlameGroup[];
   truncated?: boolean;
   omittedLines?: number;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Porcelain parser
@@ -316,21 +316,20 @@ export function registerGitBlameTool(server: FastMCP): void {
       const top = pre.gitTop;
 
       // Path confinement
-      const resolved = resolvePathForRepo(args.path as string, top);
-      if (!assertRelativePathUnderTop(args.path as string, resolved, top)) {
+      const resolved = resolvePathForRepo(args.path, top);
+      if (!assertRelativePathUnderTop(args.path, resolved, top)) {
         return jsonRespond({ error: ERROR_CODES.PATH_ESCAPES_REPO, path: args.path });
       }
 
       // Ref validation
       if (args.ref !== undefined) {
-        if (!isSafeGitCommitIsh(args.ref as string)) {
+        if (!isSafeGitCommitIsh(args.ref)) {
           return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
         }
       }
 
       // Line range validation
-      const startLine = args.startLine as number | undefined;
-      const endLine = args.endLine as number | undefined;
+      const { startLine, endLine } = args;
       if (startLine !== undefined || endLine !== undefined) {
         if (startLine === undefined || endLine === undefined) {
           return jsonRespond({ error: ERROR_CODES.INVALID_LINE_RANGE });
@@ -346,12 +345,12 @@ export function registerGitBlameTool(server: FastMCP): void {
       if (args.detectMoves === true) blameArgs.push("-M");
       if (args.detectCopies === true) blameArgs.push("-C");
       if (args.ref !== undefined) {
-        blameArgs.push(args.ref as string);
+        blameArgs.push(args.ref);
       }
       if (startLine !== undefined && endLine !== undefined) {
         blameArgs.push(`-L${startLine},${endLine}`);
       }
-      blameArgs.push("--", args.path as string);
+      blameArgs.push("--", args.path);
 
       const r = await spawnGitAsync(top, blameArgs, {
         maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
@@ -366,14 +365,17 @@ export function registerGitBlameTool(server: FastMCP): void {
       }
 
       const allLines = parsePorcelain(r.stdout);
-      const maxLines = (args.maxLines as number | undefined) ?? 2000;
+      // `?? 2000` is defense-in-depth: production calls are always
+      // zod-validated (defaults applied) before reaching `execute`, but the
+      // test harness invokes `execute` directly with raw args.
+      const maxLines = args.maxLines ?? 2000;
       const capTruncated = allLines.length > maxLines;
       const blameLines = capTruncated ? allLines.slice(0, maxLines) : allLines;
       const truncated = capTruncated || r.truncated === true;
 
       const blameJson: BlameJson = {
-        ...spreadDefined("ref", args.ref as string | undefined),
-        path: args.path as string,
+        ...spreadDefined("ref", args.ref),
+        path: args.path,
         groups: groupBlameLines(blameLines),
         // omittedLines is only meaningful when our own maxLines cap fired —
         // when truncation instead came solely from the subprocess buffer cap,
@@ -385,7 +387,7 @@ export function registerGitBlameTool(server: FastMCP): void {
       };
 
       if (args.format === "json") {
-        return jsonRespond(blameJson as unknown as Record<string, unknown>);
+        return jsonRespond(blameJson);
       }
 
       return renderBlameMarkdown(blameJson);

@@ -131,7 +131,7 @@ export function registerGitStashPushTool(server: FastMCP): void {
       // Union + dedup + confine paths within the repo (escaping-attempt rejected).
       const rawPaths: string[] = [];
       if (Array.isArray(args.paths)) {
-        for (const p of args.paths as string[]) {
+        for (const p of args.paths) {
           if (typeof p === "string" && p.trim()) {
             rawPaths.push(p.trim());
           }

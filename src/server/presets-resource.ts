@@ -2,7 +2,7 @@ import type { FastMCP } from "fastmcp";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { jsonRespond, spreadDefined } from "./json.js";
-import { forEachPresetRoot, type PresetFile } from "./presets.js";
+import { forEachPresetRoot } from "./presets.js";
 import { requireGitAndRoots } from "./roots.js";
 
 export function registerPresetsResource(server: FastMCP): void {
@@ -25,7 +25,7 @@ export function registerPresetsResource(server: FastMCP): void {
         presetFile: base.presetFile,
         fileExists: base.fileExists,
         ...spreadDefined("presetSchemaVersion", base.presetSchemaVersion),
-        presets: (data ?? {}) as PresetFile,
+        presets: data ?? {},
         ...spreadDefined("error", base.error),
       }));
 

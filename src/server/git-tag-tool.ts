@@ -12,11 +12,11 @@ import { WorkspacePickSchema } from "./schemas.js";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TagResult {
+type TagResult = {
   tag: string;
   type: "annotated" | "lightweight" | "deleted";
   sha: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,7 +118,7 @@ export function registerGitTagTool(server: FastMCP): void {
             tag,
             type: "deleted",
             sha: "", // Deleted tags have no SHA
-          } as unknown as Record<string, unknown>);
+          });
         }
 
         return `Deleted tag: ${tag}`;
@@ -175,7 +175,7 @@ export function registerGitTagTool(server: FastMCP): void {
       };
 
       if (args.format === "json") {
-        return jsonRespond(result as unknown as Record<string, unknown>);
+        return jsonRespond(result);
       }
 
       // Markdown output

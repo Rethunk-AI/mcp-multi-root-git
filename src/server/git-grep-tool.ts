@@ -198,29 +198,29 @@ export function registerGitGrepTool(server: FastMCP): void {
       const pre = requireGitAndRoots(server, args, undefined);
       if (!pre.ok) return jsonRespond(pre.error);
 
-      const pickaxe = args.pickaxe as { mode: "S" | "G"; term: string };
+      const pickaxe = args.pickaxe;
 
-      if (args.ref !== undefined && !isSafeGitAncestorRef(args.ref as string)) {
+      if (args.ref !== undefined && !isSafeGitAncestorRef(args.ref)) {
         return jsonRespond({ error: ERROR_CODES.UNSAFE_REF_TOKEN, ref: args.ref });
       }
-      const ref = (args.ref as string | undefined)?.trim() || undefined;
+      const ref = args.ref?.trim() || undefined;
 
       // Union singular `path` + `paths` array (dedup, order preserved).
       const rawPathsInput: string[] = [];
-      const singlePath = (args.path as string | undefined)?.trim();
+      const singlePath = args.path?.trim();
       if (singlePath) rawPathsInput.push(singlePath);
       if (Array.isArray(args.paths)) {
-        for (const p of args.paths as string[]) {
+        for (const p of args.paths) {
           if (typeof p === "string" && p.trim()) rawPathsInput.push(p.trim());
         }
       }
       const rawPaths = [...new Set(rawPathsInput)];
 
-      const ignoreCase = (args.ignoreCase as boolean | undefined) ?? false;
-      const maxMatches = Math.min(
-        (args.maxMatches as number | undefined) ?? DEFAULT_MAX_MATCHES,
-        MAX_MATCHES_HARD_CAP,
-      );
+      // The `??` fallbacks below are defense-in-depth: production calls are
+      // always zod-validated (defaults applied) before reaching `execute`,
+      // but the test harness invokes `execute` directly with raw args.
+      const ignoreCase = args.ignoreCase ?? false;
+      const maxMatches = Math.min(args.maxMatches ?? DEFAULT_MAX_MATCHES, MAX_MATCHES_HARD_CAP);
 
       // Fan out across roots. Path confinement is per-root since each root has
       // its own git toplevel.
@@ -273,7 +273,7 @@ export function registerGitGrepTool(server: FastMCP): void {
       );
 
       if (args.format === "json") {
-        return jsonRespond({ results: groups } as unknown as Record<string, unknown>);
+        return jsonRespond({ results: groups });
       }
 
       const mdChunks = ["# git grep", ...groups.map((g) => renderGrepMarkdown(g))];
