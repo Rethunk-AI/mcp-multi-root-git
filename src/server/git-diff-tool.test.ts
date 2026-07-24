@@ -8,11 +8,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ZodTypeAny } from "zod";
 
 import { registerGitDiffTool } from "./git-diff-tool.js";
 import {
   addCommit,
   captureTool,
+  captureToolDefinitions,
   cleanupTmpPaths,
   gitCmd,
   makeRepoWithSeed,
@@ -225,5 +227,59 @@ describe("git_diff execute handler", () => {
 
     expect(parsed.truncated).toBe(true);
     expect(Buffer.byteLength(parsed.diff, "utf8")).toBeLessThanOrEqual(1024);
+  });
+
+  test("maxBytes truncation cuts at a line boundary — every returned line exactly matches a full source line", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const lines = Array.from({ length: 50 }, (_, i) => `line-${i}-${"y".repeat(30)}`).join("\n");
+    addCommit(repo, "multi.txt", "seed\n", "chore: multi");
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(repo, "multi.txt"), `${lines}\n`);
+
+    const run = captureTool(registerGitDiffTool);
+    const fullText = await run({ workspaceRoot: repo, format: "json" });
+    const fullParsed = JSON.parse(fullText) as { diff: string };
+    const fullLines = new Set(fullParsed.diff.split("\n"));
+
+    const text = await run({ workspaceRoot: repo, format: "json", maxBytes: 1024 });
+    const parsed = JSON.parse(text) as { diff: string; truncated?: boolean };
+
+    expect(parsed.truncated).toBe(true);
+    expect(Buffer.byteLength(parsed.diff, "utf8")).toBeLessThanOrEqual(1024);
+    // Every returned line must be one of the full diff's complete lines —
+    // never a byte-sliced partial cut of a longer line.
+    for (const line of parsed.diff.split("\n")) {
+      expect(fullLines.has(line)).toBe(true);
+    }
+  });
+
+  test("paths array schema rejects more than the max cap", () => {
+    const def = captureToolDefinitions(registerGitDiffTool).find((d) => d.name === "git_diff");
+    const manyPaths = Array.from({ length: 257 }, (_, i) => `f${i}.txt`);
+    const schema = def?.parameters as ZodTypeAny;
+    const result = schema.safeParse({ workspaceRoot: "/tmp", paths: manyPaths });
+    expect(result.success).toBe(false);
+  });
+
+  test("subprocess-level buffer truncation returns partial diff + truncated:true, not git_diff_failed", async () => {
+    const repo = makeRepoWithSeed("mcp-git-diff-test-");
+    const big = `${"z".repeat(4000)}\n`;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(repo, "seed.txt"), big);
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const run = captureTool(registerGitDiffTool);
+      const text = await run({ workspaceRoot: repo, format: "json" });
+      const parsed = JSON.parse(text) as { diff?: string; truncated?: boolean; error?: string };
+
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.truncated).toBe(true);
+      expect(typeof parsed.diff).toBe("string");
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
   });
 });

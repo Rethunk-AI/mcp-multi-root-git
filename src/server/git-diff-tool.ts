@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
@@ -15,6 +15,9 @@ import { WorkspacePickSchema } from "./schemas.js";
 
 /** Default byte cap on raw diff stdout to keep agent context bounded. */
 export const GIT_DIFF_DEFAULT_MAX_BYTES = 512_000;
+
+/** Max entries accepted in `paths` per call. */
+const MAX_PATHS = 256;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,16 +88,33 @@ export function rangeLabel(opts: {
   return label;
 }
 
-/** Cap diff text at maxBytes; UTF-8 safe via Buffer slice. */
+/**
+ * Cap diff text at maxBytes, cutting at a line boundary (never mid-line) so
+ * the returned text is always well-formed diff lines rather than an
+ * arbitrary byte offset. Always keeps at least one line, even if that line
+ * alone exceeds maxBytes.
+ */
 export function truncateDiffOutput(
   diff: string,
   maxBytes: number,
 ): { text: string; truncated: boolean } {
-  const buf = Buffer.from(diff, "utf8");
-  if (buf.length <= maxBytes) {
+  const totalBytes = Buffer.byteLength(diff, "utf8");
+  if (totalBytes <= maxBytes) {
     return { text: diff, truncated: false };
   }
-  return { text: buf.subarray(0, maxBytes).toString("utf8"), truncated: true };
+
+  const lines = diff.split("\n");
+  let usedBytes = 0;
+  let cutIndex = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const lineBytes = Buffer.byteLength(line, "utf8") + (i > 0 ? 1 : 0); // +1 for joiner "\n"
+    if (usedBytes + lineBytes > maxBytes) break;
+    usedBytes += lineBytes;
+    cutIndex = i + 1;
+  }
+  if (cutIndex === 0 && lines.length > 0) cutIndex = 1;
+  return { text: lines.slice(0, cutIndex).join("\n"), truncated: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,9 +150,10 @@ export function registerGitDiffTool(server: FastMCP): void {
         .describe("Scope to a single file. Unioned with `paths` if both given."),
       paths: z
         .array(z.string())
+        .max(MAX_PATHS)
         .optional()
         .describe(
-          "Scope to multiple files (must be within repo root). Unioned with `path` if both given.",
+          `Scope to multiple files (must be within repo root, max ${MAX_PATHS}). Unioned with \`path\` if both given.`,
         ),
       staged: z
         .boolean()
@@ -154,7 +175,7 @@ export function registerGitDiffTool(server: FastMCP): void {
         .optional()
         .default(GIT_DIFF_DEFAULT_MAX_BYTES)
         .describe(
-          `Max UTF-8 bytes of diff text to return (default ${GIT_DIFF_DEFAULT_MAX_BYTES}). Oversized output is truncated with truncated:true.`,
+          `Max UTF-8 bytes of diff text to return (default ${GIT_DIFF_DEFAULT_MAX_BYTES}), cut at a line boundary. Oversized output is truncated with truncated:true.`,
         ),
     }),
     execute: async (args) => {
@@ -197,9 +218,15 @@ export function registerGitDiffTool(server: FastMCP): void {
         return jsonRespond({ error: diffArgsResult.error });
       }
 
-      // Run git diff
-      const result = await spawnGitAsync(gitTop, diffArgsResult.args);
-      if (!result.ok) {
+      // Run git diff. maxBufferBytes is recomputed per call (not the cached
+      // module constant) so tests can shrink GIT_SUBPROCESS_MAX_BUFFER_BYTES
+      // at request time without needing multi-MiB fixtures.
+      const result = await spawnGitAsync(gitTop, diffArgsResult.args, {
+        maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
+      });
+      // A subprocess-level buffer cap (result.truncated) still yields usable
+      // partial stdout — build the normal payload from it instead of failing.
+      if (!result.ok && !result.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (result.stderr || result.stdout).trim(),
@@ -208,7 +235,11 @@ export function registerGitDiffTool(server: FastMCP): void {
 
       const maxBytes =
         typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES;
-      const { text: diffText, truncated } = truncateDiffOutput(result.stdout, maxBytes);
+      const { text: diffText, truncated: byteTruncated } = truncateDiffOutput(
+        result.stdout,
+        maxBytes,
+      );
+      const truncated = byteTruncated || result.truncated === true;
 
       const label = rangeLabel({
         base: args.base,
