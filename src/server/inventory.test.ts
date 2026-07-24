@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   buildInventorySectionMarkdown,
   collectInventoryEntry,
+  MAX_INVENTORY_ROOTS_DEFAULT,
   makeSkipEntry,
   validateRepoPath,
 } from "./inventory.js";
@@ -17,9 +18,11 @@ import { cleanupTmpPaths, gitCmd, makeRepoWithSeed, mkTmpDir } from "./test-harn
 
 afterEach(cleanupTmpPaths);
 
-function makeRepo(): string {
-  return makeRepoWithSeed("mcp-inventory-test-");
-}
+describe("MAX_INVENTORY_ROOTS_DEFAULT", () => {
+  test("is a positive number", () => {
+    expect(MAX_INVENTORY_ROOTS_DEFAULT).toBeGreaterThan(0);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // makeSkipEntry
@@ -134,20 +137,20 @@ describe("buildInventorySectionMarkdown", () => {
 
 describe("validateRepoPath", () => {
   test("valid nested path reports underTop=true", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = validateRepoPath("packages/sub", dir);
     expect(result.underTop).toBe(true);
     expect(result.abs).toContain("packages/sub");
   });
 
   test("dotdot path that escapes the root reports underTop=false", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = validateRepoPath("../escape", dir);
     expect(result.underTop).toBe(false);
   });
 
   test("absolute path outside root reports underTop=false", () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const result = validateRepoPath("/tmp/outside", dir);
     expect(result.underTop).toBe(false);
   });
@@ -159,7 +162,7 @@ describe("validateRepoPath", () => {
 
 describe("collectInventoryEntry", () => {
   test("auto mode without upstream reports no upstream note", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const entry = await collectInventoryEntry("test-repo", dir, undefined, undefined);
     expect(entry.label).toBe("test-repo");
     expect(entry.path).toBe(dir);
@@ -169,7 +172,7 @@ describe("collectInventoryEntry", () => {
   });
 
   test("auto mode with configured upstream returns ahead/behind", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const bare = mkTmpDir("mcp-inventory-remote-");
     gitCmd(bare, "init", "--bare", "-b", "main");
     gitCmd(dir, "remote", "add", "origin", bare);
@@ -183,7 +186,7 @@ describe("collectInventoryEntry", () => {
   });
 
   test("fixed mode with valid remote ref returns ahead/behind", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const bare = mkTmpDir("mcp-inventory-remote-fixed-");
     gitCmd(bare, "init", "--bare", "-b", "main");
     gitCmd(dir, "remote", "add", "origin", bare);
@@ -197,7 +200,7 @@ describe("collectInventoryEntry", () => {
   });
 
   test("fixed mode with non-existent remote ref returns a note", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const entry = await collectInventoryEntry("test-repo", dir, "ghost-remote", "main");
     expect(entry.upstreamMode).toBe("fixed");
     expect(entry.upstreamRef).toBe("ghost-remote/main");
@@ -205,7 +208,7 @@ describe("collectInventoryEntry", () => {
   });
 
   test("detached HEAD is detected", async () => {
-    const dir = makeRepo();
+    const dir = makeRepoWithSeed();
     const sha = gitCmd(dir, "rev-parse", "HEAD").trim();
     gitCmd(dir, "checkout", sha);
 

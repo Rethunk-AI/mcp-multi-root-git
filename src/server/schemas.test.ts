@@ -4,12 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import {
-  MAX_INVENTORY_ROOTS_DEFAULT,
-  MAX_ROOT_PATHS,
-  RootPickSchema,
-  WorkspacePickSchema,
-} from "./schemas.js";
+import { MAX_ROOT_PATHS, RootPickSchema, WorkspacePickSchema } from "./schemas.js";
 
 describe("MAX_ROOT_PATHS", () => {
   test("is 256", () => {
@@ -52,11 +47,5 @@ describe("RootPickSchema", () => {
     // Length enforcement is in resolveRootPathList, not Zod — so parse succeeds.
     const parsed = RootPickSchema.parse({ root: many });
     expect(Array.isArray(parsed.root) && parsed.root.length).toBe(MAX_ROOT_PATHS + 1);
-  });
-});
-
-describe("MAX_INVENTORY_ROOTS_DEFAULT", () => {
-  test("is re-exported as a positive number", () => {
-    expect(MAX_INVENTORY_ROOTS_DEFAULT).toBeGreaterThan(0);
   });
 });

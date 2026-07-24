@@ -15,13 +15,14 @@ import {
   collectInventoryEntry,
   type InventoryEntryJson,
   MAX_BRANCH_STATUS_LINES_DEFAULT,
+  MAX_INVENTORY_ROOTS_DEFAULT,
   makeSkipEntry,
   validateRepoPath,
 } from "./inventory.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { applyPresetNestedRoots } from "./presets.js";
 import { requireGitAndRootsAsync } from "./roots.js";
-import { MAX_INVENTORY_ROOTS_DEFAULT, RootPickSchema } from "./schemas.js";
+import { MAX_ROOT_PATHS, RootPickSchema } from "./schemas.js";
 
 /** Reason a per-root inventory group could not be produced (preset/nestedRoots failure). Same shape as other per-root fan-out errors: an `error` code plus context. */
 type InventoryGroupError = Record<string, unknown>;
@@ -53,7 +54,13 @@ export function registerGitInventoryTool(server: FastMCP): void {
         .describe(
           "Ahead/behind between two local refs (e.g. main vs a feature branch), independent of upstream tracking.",
         ),
-      maxRoots: z.number().int().min(1).max(256).optional().default(MAX_INVENTORY_ROOTS_DEFAULT),
+      maxRoots: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_ROOT_PATHS)
+        .optional()
+        .default(MAX_INVENTORY_ROOTS_DEFAULT),
       maxBranchStatusLines: z
         .number()
         .int()
@@ -110,6 +117,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
       }
 
       const useFixed = upstream.mode === "fixed";
+      const fixedUpstream = upstream.mode === "fixed" ? upstream : undefined;
 
       const allJson: {
         workspaceRoot: string;
@@ -348,7 +356,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           if (args.format === "json") {
             allJson.push({
               workspaceRoot: plan.workspaceRoot,
-              ...(upstream.mode === "fixed" ? { upstream } : {}),
+              ...spreadDefined("upstream", fixedUpstream),
               entries: [
                 makeSkipEntry(
                   plan.workspaceRoot,
@@ -367,7 +375,7 @@ export function registerGitInventoryTool(server: FastMCP): void {
           if (args.format === "json") {
             allJson.push({
               workspaceRoot: plan.top,
-              ...(upstream.mode === "fixed" ? { upstream } : {}),
+              ...spreadDefined("upstream", fixedUpstream),
               entries: [],
               error: plan.error,
             });
@@ -387,17 +395,18 @@ export function registerGitInventoryTool(server: FastMCP): void {
                 ...plan.slots.filter((s) => s.type === "computed").map((s) => s.entry),
               ];
 
+        const nestedRootsTruncated = plan.kind === "nested" && plan.nestedRootsTruncated;
+        const nestedRootsOmittedCount = plan.kind === "nested" ? plan.nestedRootsOmittedCount : 0;
+
         if (args.format === "json") {
           allJson.push({
             workspaceRoot: plan.top,
             ...spreadDefined("presetSchemaVersion", plan.presetSchemaVersion),
-            ...(plan.kind === "nested"
-              ? spreadWhen(plan.nestedRootsTruncated, {
-                  nestedRootsTruncated: true,
-                  nestedRootsOmittedCount: plan.nestedRootsOmittedCount,
-                })
-              : {}),
-            ...(upstream.mode === "fixed" ? { upstream } : {}),
+            ...spreadWhen(nestedRootsTruncated, {
+              nestedRootsTruncated: true,
+              nestedRootsOmittedCount,
+            }),
+            ...spreadDefined("upstream", fixedUpstream),
             entries,
           });
         } else {

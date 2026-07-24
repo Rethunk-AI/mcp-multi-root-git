@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { MAX_INVENTORY_ROOTS_DEFAULT } from "./inventory.js";
-
 const FormatSchema = z.enum(["markdown", "json"]).optional().default("json");
 
 /** Max entries when `root` is an array (matches `git_inventory` `maxRoots` hard cap). */
@@ -28,5 +26,3 @@ export const RootPickSchema = z.object({
     .describe('Repo path, array of paths, or "*" for all MCP roots.'),
   format: FormatSchema,
 });
-
-export { MAX_INVENTORY_ROOTS_DEFAULT };
