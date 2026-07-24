@@ -1,4 +1,6 @@
+import { realpathSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { platform } from "node:process";
 
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
@@ -41,6 +43,24 @@ function resolveWorktreePath(
     return { ok: false, error: ERROR_CODES.INVALID_PATHS, path: rawPath };
   }
   return { ok: true, path: wtPath };
+}
+
+/**
+ * Canonicalize a path for the registration-check comparison: resolve symlinks
+ * (`git worktree list` reports the canonical path, but a caller may pass a
+ * symlinked alias) and, on case-insensitive filesystems (macOS/Windows),
+ * lowercase it. Falls back to the input unchanged when it does not exist
+ * (e.g. already removed) — comparison then degrades to a plain string match.
+ */
+function normalizeWorktreePathForCompare(p: string): string {
+  let resolved = p;
+  try {
+    resolved = realpathSync(p);
+  } catch {
+    // Path may not exist (stale registration, already-removed worktree) —
+    // fall back to comparing the raw resolved path.
+  }
+  return platform === "darwin" || platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +216,12 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
         });
       }
       const trees: WorktreeEntry[] = listed.worktrees;
-      const isRegistered = trees.some((t) => t.path === wtPath || t.path === args.path);
+      const normalizedCandidates = new Set(
+        [wtPath, args.path].map(normalizeWorktreePathForCompare),
+      );
+      const isRegistered = trees.some((t) =>
+        normalizedCandidates.has(normalizeWorktreePathForCompare(t.path)),
+      );
       if (!isRegistered) {
         return jsonRespond({ error: ERROR_CODES.WORKTREE_NOT_FOUND, path: args.path });
       }

@@ -3,7 +3,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { registerGitWorktreeAddTool, registerGitWorktreeRemoveTool } from "./git-worktree-tool.js";
@@ -321,6 +321,23 @@ describe("git_worktree_remove", () => {
     });
     const okParsed = JSON.parse(okText) as { ok: boolean };
     expect(okParsed.ok).toBe(true);
+    expect(existsSync(wtPath)).toBe(false);
+  });
+
+  test("registration check normalizes a symlinked alias to the registered worktree path", async () => {
+    const dir = makeRepo();
+    const wtPath = trackTmpPath(join(dir, "../wt-symlink-target"));
+    gitCmd(dir, "worktree", "add", "-b", "feature/symlink-target", wtPath);
+
+    const symlinkPath = trackTmpPath(join(dir, "../wt-symlink-alias"));
+    symlinkSync(wtPath, symlinkPath, "dir");
+
+    const run = captureTool(registerGitWorktreeRemoveTool);
+    const text = await run({ workspaceRoot: dir, path: symlinkPath, format: "json" });
+    const parsed = JSON.parse(text) as { ok: boolean; error?: string };
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.ok).toBe(true);
     expect(existsSync(wtPath)).toBe(false);
   });
 
