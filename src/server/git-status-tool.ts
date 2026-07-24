@@ -49,7 +49,9 @@ export function registerGitStatusTool(server: FastMCP): void {
     name: "git_status",
     description: "Read-only `git status --short -b` per root + submodules.",
     annotations: {
+      title: "Git Status",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
       includeSubmodules: z.boolean().optional().default(true),

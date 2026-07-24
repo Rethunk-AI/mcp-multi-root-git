@@ -905,9 +905,11 @@ export function registerBatchCommitTool(server: FastMCP): void {
       "Concurrent calls on the same repo serialize in-process only (not cross-process). " +
       'Optional `push: "after"` pushes after all commits succeed. `dryRun: true` previews without writing.',
     annotations: {
+      title: "Batch Commit",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: BatchCommitParamsSchema,
     execute: async (args) => {

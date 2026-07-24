@@ -28,7 +28,9 @@ export function registerListPresetsTool(server: FastMCP): void {
     description:
       "List presets (name, nestedRoots, parityPairs) from .rethunk/git-mcp-presets.json.",
     annotations: {
+      title: "List Presets",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema,
     execute: async (args) => {

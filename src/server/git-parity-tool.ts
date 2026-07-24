@@ -36,7 +36,9 @@ export function registerGitParityTool(server: FastMCP): void {
     name: "git_parity",
     description: "Read-only HEAD parity for path pairs.",
     annotations: {
+      title: "Git Parity",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
       pairs: z

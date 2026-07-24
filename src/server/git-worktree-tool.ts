@@ -73,9 +73,11 @@ export function registerGitWorktreeAddTool(server: FastMCP): void {
     description:
       "Add a new git worktree. Creates `branch` from `baseRef` (default: HEAD) if it doesn't exist. Refuses protected branch names.",
     annotations: {
+      title: "Git Worktree Add",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       path: z
@@ -172,9 +174,11 @@ export function registerGitWorktreeRemoveTool(server: FastMCP): void {
     description:
       "Remove a git worktree. Pass `force: true` to remove with uncommitted changes. Refuses to remove the main worktree.",
     annotations: {
+      title: "Git Worktree Remove",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       path: z

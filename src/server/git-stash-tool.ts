@@ -21,10 +21,12 @@ export function registerGitStashApplyTool(server: FastMCP): void {
       "On conflict, unlike git_merge/git_cherry_pick/git_revert, this never auto-aborts — the " +
       "working tree is left exactly as git left it, with conflict markers in place.",
     annotations: {
+      title: "Git Stash Apply",
       readOnlyHint: false,
       // pop:true deletes a stash entry — treat the tool as destructive for client filters.
       destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       index: z
@@ -95,9 +97,11 @@ export function registerGitStashPushTool(server: FastMCP): void {
       "staged changes in the index, and `paths` to scope the stash to specific files. " +
       "Returns the new stash ref/SHA, or `stashed: false` if there was nothing to stash.",
     annotations: {
+      title: "Git Stash Push",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       message: z

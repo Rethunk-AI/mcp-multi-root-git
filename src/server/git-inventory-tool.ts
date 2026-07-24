@@ -33,7 +33,9 @@ export function registerGitInventoryTool(server: FastMCP): void {
     description:
       "Read-only status + ahead/behind per root. Optional `compareRefs` adds ahead/behind between two local refs (independent of upstream).",
     annotations: {
+      title: "Git Inventory",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
       nestedRoots: z.array(z.string()).optional(),

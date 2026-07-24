@@ -68,9 +68,11 @@ export function registerGitRevertContinueTool(server: FastMCP): void {
       'so this tool can be called again to keep walking the sources. `action: "abort"` rolls back the ' +
       "whole in-progress revert via `git revert --abort`.",
     annotations: {
+      title: "Git Revert Continue",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       action: z

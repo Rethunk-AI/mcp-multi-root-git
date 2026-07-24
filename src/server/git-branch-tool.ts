@@ -40,9 +40,11 @@ export function registerGitBranchTool(server: FastMCP): void {
       "`action: 'rename'` renames `name` to `newName`. Refuses protected branch names " +
       "(main/master/dev/develop/stable/trunk/prod/production/release*/hotfix*) in any role.",
     annotations: {
+      title: "Git Branch",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       action: z.enum(["create", "delete", "rename"]).describe("Which branch operation to perform."),

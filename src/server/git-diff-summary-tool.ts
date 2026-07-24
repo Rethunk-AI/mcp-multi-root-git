@@ -268,7 +268,9 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       "Structured diff viewer: per-file diffs with counts, truncated to configurable limits. " +
       "Noise files (lock files, dist, etc.) excluded by default. Use `range` to target staged, HEAD, or a revision range.",
     annotations: {
+      title: "Git Diff Summary",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       range: z

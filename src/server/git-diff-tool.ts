@@ -129,7 +129,9 @@ export function registerGitDiffTool(server: FastMCP): void {
       "`base`/`head` for revision ranges, `path`/`paths` to scope, `unified` for context lines. " +
       "Output is capped by `maxBytes` (default 512000) to bound agent context.",
     annotations: {
+      title: "Git Diff",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       base: z

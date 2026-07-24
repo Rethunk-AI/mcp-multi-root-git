@@ -17,9 +17,11 @@ export function registerGitPushTool(server: FastMCP): void {
       "Use `setUpstream: true` to set tracking (`-u`) when no upstream is configured yet. " +
       "Refuses on detached HEAD. Does not force-push.",
     annotations: {
+      title: "Git Push",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       remote: z

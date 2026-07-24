@@ -262,7 +262,9 @@ export function registerGitBlameTool(server: FastMCP): void {
       "File authorship, grouped into contiguous same-commit line runs (sha, author, date, summary once per run). Optionally restrict to a commit-ish ref and/or a line range. " +
       "`ignoreWhitespace`/`detectMoves`/`detectCopies` mirror git blame's `-w`/`-M`/`-C`.",
     annotations: {
+      title: "Git Blame",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       path: z.string().min(1).describe("Repo-relative path to the file to blame."),

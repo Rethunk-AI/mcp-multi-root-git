@@ -349,7 +349,9 @@ export function registerGitConflictsTool(server: FastMCP): void {
       "added-by-us/added-by-them/deleted-by-us/deleted-by-them) plus the parsed ours/theirs " +
       "(and base, for diff3-style markers) hunks.",
     annotations: {
+      title: "Git Conflicts",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       withHunks: z

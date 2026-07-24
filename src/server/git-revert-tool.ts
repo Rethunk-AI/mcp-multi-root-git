@@ -44,9 +44,11 @@ export function registerGitRevertTool(server: FastMCP): void {
       "stages the revert(s) without committing (working tree intentionally left staged in that " +
       "case). `mainline` selects the parent to diff against when reverting a merge commit.",
     annotations: {
+      title: "Git Revert",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       sources: z

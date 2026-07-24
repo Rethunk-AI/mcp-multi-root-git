@@ -16,9 +16,11 @@ export function registerGitResetSoftTool(server: FastMCP): void {
       "Use to re-split committed work. Refuses on a dirty tree. Refuses when `ref` is not " +
       "an ancestor of HEAD unless `force: true`.",
     annotations: {
+      title: "Git Reset Soft",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       ref: z

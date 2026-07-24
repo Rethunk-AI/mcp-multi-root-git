@@ -224,7 +224,9 @@ export function registerGitShowTool(server: FastMCP): void {
     description:
       "Inspect commit content by ref/SHA. Returns commit message and diff (or --stat diffstat when stat:true). Optionally filter to specific paths via path or paths[].",
     annotations: {
+      title: "Git Show",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       ref: z

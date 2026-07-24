@@ -244,9 +244,11 @@ export function registerGitCherryPickTool(server: FastMCP): void {
       "ancestry when a source branch's own history includes merge commits patch-id can't verify. " +
       "Protected names always skipped.",
     annotations: {
+      title: "Git Cherry-Pick",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       sources: z
@@ -572,20 +574,20 @@ export function registerGitCherryPickContinueTool(server: FastMCP): void {
   server.addTool({
     name: "git_cherry_pick_continue",
     description:
-      "Resume or abort a cherry-pick left in progress — typically by `git_cherry_pick`'s " +
-      '`onConflict: "pause"`, but this tool is stateless and reads `CHERRY_PICK_HEAD` / the native ' +
-      "sequencer live off `.git`, so it works regardless of how the in-progress state was left. " +
-      '`action: "continue"` (default) requires every previously conflicted path to be staged (no ' +
-      "remaining unmerged entries — `cherry_pick_unresolved_paths` otherwise), then runs " +
-      "`git -c core.editor=true cherry-pick --continue` so git's sequencer both commits the resolved " +
-      "pick and resumes through any remaining picks in the same range. If a *later* pick then " +
-      "conflicts, the response reports it the same way as a paused `git_cherry_pick` call (`conflict." +
-      'paused: true`) so this tool can be called again to keep walking the range. `action: "abort"` ' +
-      "rolls back the whole in-progress cherry-pick via `git cherry-pick --abort`.",
+      "Resume or abort a cherry-pick left in progress (typically by `git_cherry_pick`'s " +
+      '`onConflict: "pause"`). Stateless — reads `CHERRY_PICK_HEAD` directly, so it works ' +
+      "regardless of how the pause happened. " +
+      '`action: "continue"` (default) requires all conflicted paths staged (else ' +
+      "`cherry_pick_unresolved_paths`), then runs `cherry-pick --continue`, committing the " +
+      "resolved pick and resuming any remaining picks in the range. A later conflict reports " +
+      "`conflict.paused: true` the same as `git_cherry_pick`, so call again to keep walking. " +
+      '`action: "abort"` rolls back the whole in-progress cherry-pick via `cherry-pick --abort`.',
     annotations: {
+      title: "Git Cherry-Pick Continue",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       action: z

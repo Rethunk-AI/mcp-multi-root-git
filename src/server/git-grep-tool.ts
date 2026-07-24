@@ -153,7 +153,9 @@ export function registerGitGrepTool(server: FastMCP): void {
       "For working-tree content search use the client's native grep/rg tooling instead — " +
       "content mode was removed in v6.",
     annotations: {
+      title: "Git Grep",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
       pickaxe: z

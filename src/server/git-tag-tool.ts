@@ -52,8 +52,11 @@ export function registerGitTagTool(server: FastMCP): void {
       "(main/master/dev/develop/stable/trunk/prod/production/release*/hotfix*) as a tag name, " +
       "same guardrail as git_branch/git_worktree_add.",
     annotations: {
+      title: "Git Tag",
       readOnlyHint: false,
       destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       tag: z.string().min(1).describe("Tag name (e.g. 'v1.2.3')."),

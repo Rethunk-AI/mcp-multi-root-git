@@ -294,7 +294,9 @@ export function registerGitLogTool(server: FastMCP): void {
       "Read-only `git log` across one or more roots. Returns author, date, subject, optional diff stats. " +
       "`follow: true` passes `--follow` for rename-aware history (requires exactly one `paths` entry).",
     annotations: {
+      title: "Git Log",
       readOnlyHint: true,
+      openWorldHint: false,
     },
     parameters: RootPickSchema.extend({
       format: z

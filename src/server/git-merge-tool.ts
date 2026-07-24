@@ -354,9 +354,11 @@ export function registerGitMergeTool(server: FastMCP): void {
       "delete merged branches/worktrees (protected names skipped: main, master, dev, develop, stable, trunk, " +
       "prod, production, release/*, hotfix/*).",
     annotations: {
+      title: "Git Merge",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: false,
     },
     parameters: WorkspacePickSchema.extend({
       sources: z
