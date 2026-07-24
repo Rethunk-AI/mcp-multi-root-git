@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 import type { FastMCP } from "fastmcp";
@@ -18,6 +18,27 @@ import { WorkspacePickSchema } from "./schemas.js";
 
 type ConflictState = "merge" | "cherry-pick" | "revert" | "rebase";
 
+/** Conflict subtype derived from `git status --porcelain` XY codes. */
+type ConflictType =
+  | "both-modified"
+  | "both-added"
+  | "both-deleted"
+  | "added-by-us"
+  | "added-by-them"
+  | "deleted-by-us"
+  | "deleted-by-them";
+
+/** Maps `git status --porcelain=v1` unmerged XY codes to a named conflict type. */
+const CONFLICT_TYPE_BY_STATUS_CODE: Record<string, ConflictType> = {
+  UU: "both-modified",
+  AA: "both-added",
+  DD: "both-deleted",
+  AU: "added-by-us",
+  UA: "added-by-them",
+  DU: "deleted-by-us",
+  UD: "deleted-by-them",
+};
+
 interface ConflictHunk {
   startLine: number;
   ours: string;
@@ -30,6 +51,7 @@ interface ConflictHunk {
 interface ConflictFileJson {
   path: string;
   error?: string;
+  conflictType?: ConflictType;
   hunks?: ConflictHunk[];
   truncated?: boolean;
 }
@@ -63,6 +85,26 @@ export async function detectConflictState(gitTop: string): Promise<ConflictState
     return "rebase";
   }
   return undefined;
+}
+
+/**
+ * Classify each conflicted path via `git status --porcelain=v1` XY codes
+ * (UU/AA/DD/AU/UA/DU/UD) into a named conflict type. Paths whose code isn't
+ * one of the known unmerged codes (shouldn't happen for genuinely conflicted
+ * paths) are simply absent from the returned map.
+ */
+export async function getConflictTypes(gitTop: string): Promise<Map<string, ConflictType>> {
+  const map = new Map<string, ConflictType>();
+  const r = await spawnGitAsync(gitTop, ["status", "--porcelain=v1", "-z"]);
+  if (!r.ok) return map;
+  for (const entry of r.stdout.split("\0")) {
+    if (!entry || entry.length < 4) continue;
+    const code = entry.slice(0, 2);
+    const path = entry.slice(3);
+    const type = CONFLICT_TYPE_BY_STATUS_CODE[code];
+    if (type) map.set(path, type);
+  }
+  return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +208,41 @@ function isLikelyBinary(buf: Buffer): boolean {
   return false;
 }
 
+const BINARY_SNIFF_BYTES = 8000;
+/** Heuristic average bytes/line for the bounded initial read (see readBoundedText). */
+const BOUNDED_READ_BYTES_PER_LINE = 200;
+const BOUNDED_READ_MARGIN_LINES = 50;
+const BOUNDED_READ_MAX_ATTEMPTS = 6;
+
+/**
+ * Read up to roughly `maxLinesPerFile` (+ margin) lines worth of bytes
+ * without loading the whole file, doubling the read budget (quadrupling,
+ * really) until enough newlines are seen or the file is exhausted. Falls
+ * back to a full read for pathological files (e.g. one huge line) after
+ * BOUNDED_READ_MAX_ATTEMPTS — no worse than the previous always-full-read
+ * behavior for that edge case, while the common case (and the large-binary
+ * case, handled separately before this is ever called) now avoids it.
+ */
+function readBoundedText(fd: number, size: number, maxLinesPerFile: number): string {
+  let budget = (maxLinesPerFile + BOUNDED_READ_MARGIN_LINES) * BOUNDED_READ_BYTES_PER_LINE;
+  for (let attempt = 0; attempt < BOUNDED_READ_MAX_ATTEMPTS; attempt++) {
+    const readLen = Math.min(size, budget);
+    const buf = Buffer.alloc(readLen);
+    if (readLen > 0) readSync(fd, buf, 0, readLen, 0);
+    if (readLen >= size) return buf.toString("utf8");
+    const text = buf.toString("utf8");
+    let newlineCount = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") newlineCount++;
+    }
+    if (newlineCount > maxLinesPerFile) return text;
+    budget *= 4;
+  }
+  const buf = Buffer.alloc(size);
+  if (size > 0) readSync(fd, buf, 0, size, 0);
+  return buf.toString("utf8");
+}
+
 // ---------------------------------------------------------------------------
 // Per-file resolution
 // ---------------------------------------------------------------------------
@@ -180,17 +257,35 @@ export function readConflictFile(
     return { path: relPath, error: ERROR_CODES.PATH_ESCAPES_REPO };
   }
 
-  let buf: Buffer;
+  let fd: number;
   try {
-    buf = readFileSync(resolved);
+    fd = openSync(resolved, "r");
   } catch {
     return { path: relPath };
   }
-  if (isLikelyBinary(buf)) {
+
+  let hunks: ConflictHunk[];
+  let truncated: boolean;
+  try {
+    const size = fstatSync(fd).size;
+
+    // Sniff only the first BINARY_SNIFF_BYTES — never load a huge binary
+    // file entirely just to discover it's binary and discard it.
+    const sniffLen = Math.min(size, BINARY_SNIFF_BYTES);
+    const sniffBuf = Buffer.alloc(sniffLen);
+    if (sniffLen > 0) readSync(fd, sniffBuf, 0, sniffLen, 0);
+    if (isLikelyBinary(sniffBuf)) {
+      return { path: relPath };
+    }
+
+    const text = readBoundedText(fd, size, maxLinesPerFile);
+    ({ hunks, truncated } = parseConflictHunks(text, maxLinesPerFile));
+  } catch {
     return { path: relPath };
+  } finally {
+    closeSync(fd);
   }
 
-  const { hunks, truncated } = parseConflictHunks(buf.toString("utf8"), maxLinesPerFile);
   return {
     path: relPath,
     ...spreadWhen(hunks.length > 0, { hunks }),
@@ -214,6 +309,7 @@ function renderConflictsMarkdown(result: ConflictsJson): string {
 
   for (const f of result.files) {
     lines.push(`## ${f.path}`);
+    if (f.conflictType) lines.push(`_type: ${f.conflictType}_`);
     if (f.error) lines.push(`_error: ${f.error}_`);
     if (f.truncated) lines.push("_(truncated)_");
     if (!f.hunks || f.hunks.length === 0) {
@@ -249,7 +345,9 @@ export function registerGitConflictsTool(server: FastMCP): void {
     description:
       "Inspect unresolved merge conflicts after git_merge/git_cherry_pick reports them. " +
       "Reports the in-progress operation (merge/cherry-pick/revert/rebase, when detectable) and, " +
-      "per conflicted file, the parsed ours/theirs (and base, for diff3-style markers) hunks.",
+      "per conflicted file, its conflictType (both-modified/both-added/both-deleted/" +
+      "added-by-us/added-by-them/deleted-by-us/deleted-by-them) plus the parsed ours/theirs " +
+      "(and base, for diff3-style markers) hunks.",
     annotations: {
       readOnlyHint: true,
     },
@@ -274,13 +372,20 @@ export function registerGitConflictsTool(server: FastMCP): void {
       const gitTop = pre.gitTop;
 
       const state = await detectConflictState(gitTop);
-      const paths = await conflictPaths(gitTop);
+      const [paths, conflictTypes] = await Promise.all([
+        conflictPaths(gitTop),
+        getConflictTypes(gitTop),
+      ]);
       const withHunks = args.withHunks !== false;
       const maxLinesPerFile = typeof args.maxLinesPerFile === "number" ? args.maxLinesPerFile : 200;
 
-      const files: ConflictFileJson[] = paths.map((p) =>
-        withHunks ? readConflictFile(gitTop, p, maxLinesPerFile) : { path: p },
-      );
+      const files: ConflictFileJson[] = paths.map((p) => {
+        const base = withHunks ? readConflictFile(gitTop, p, maxLinesPerFile) : { path: p };
+        return {
+          ...base,
+          ...spreadDefined("conflictType", conflictTypes.get(p)),
+        };
+      });
 
       const result: ConflictsJson = {
         ...spreadDefined("state", state),

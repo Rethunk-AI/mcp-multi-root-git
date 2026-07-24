@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import {
   detectConflictState,
+  getConflictTypes,
   parseConflictHunks,
   readConflictFile,
   registerGitConflictsTool,
@@ -83,6 +84,16 @@ describe("git_conflicts merge state and hunks", () => {
     expect(hunk?.theirs).toBe("ALPHA");
     expect(hunk?.oursLabel).toBe("HEAD");
     expect(hunk?.theirsLabel).toBe("feature");
+  });
+
+  test("both-sides-modified conflict is classified as conflictType both-modified", async () => {
+    const dir = makeMergeConflictRepo();
+    const run = captureTool(registerGitConflictsTool);
+
+    const text = await run({ workspaceRoot: dir, format: "json" });
+    const parsed = JSON.parse(text) as { files: Array<{ path: string; conflictType?: string }> };
+
+    expect(parsed.files[0]?.conflictType).toBe("both-modified");
   });
 
   test("markdown format includes state and conflict path", async () => {
@@ -221,5 +232,45 @@ describe("readConflictFile path confinement", () => {
     const dir = makeRepoWithSeed("mcp-conflicts-escape-");
     const result = readConflictFile(dir, "../../etc/passwd", 200);
     expect(result).toEqual({ path: "../../etc/passwd", error: "path_escapes_repo" });
+  });
+});
+
+describe("readConflictFile binary short-circuit (bounded read)", () => {
+  test("a file with a NUL byte early on is reported with no hunks/error, not read in full", () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-binary-");
+    // A NUL byte within the first 8000 bytes must trip the binary sniff
+    // before the (much larger) rest of the file is ever read.
+    const buf = Buffer.concat([
+      Buffer.from("<<<<<<< HEAD\n"),
+      Buffer.from([0]),
+      Buffer.alloc(5 * 1024 * 1024, "x".charCodeAt(0)),
+    ]);
+    writeFileSync(join(dir, "binary.bin"), buf);
+
+    const result = readConflictFile(dir, "binary.bin", 200);
+    expect(result).toEqual({ path: "binary.bin" });
+  });
+});
+
+describe("getConflictTypes", () => {
+  test("both-added conflict is classified as conflictType both-added", async () => {
+    const dir = makeRepoWithSeed("mcp-conflicts-both-added-");
+    gitCmd(dir, "checkout", "-b", "feature");
+    writeFileSync(join(dir, "new.txt"), "feature-version\n");
+    gitCmd(dir, "add", "new.txt");
+    gitCmd(dir, "commit", "-m", "feat: add new.txt on feature");
+    gitCmd(dir, "checkout", "main");
+    writeFileSync(join(dir, "new.txt"), "main-version\n");
+    gitCmd(dir, "add", "new.txt");
+    gitCmd(dir, "commit", "-m", "chore: add new.txt on main");
+
+    try {
+      gitCmd(dir, "merge", "feature", "-q");
+    } catch {
+      // Expected: merge conflict.
+    }
+
+    const types = await getConflictTypes(dir);
+    expect(types.get("new.txt")).toBe("both-added");
   });
 });
