@@ -139,7 +139,20 @@ export async function getCurrentBranch(cwd: string): Promise<string | null> {
 /** Resolve a ref to its full SHA; `null` if unknown. */
 export async function resolveRef(cwd: string, ref: string): Promise<string | null> {
   if (!isSafeGitRefToken(ref)) return null;
-  const r = await spawnGitAsync(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  return getRefSha(cwd, ref);
+}
+
+/**
+ * Resolve a ref (branch/commit-ish, including ancestor notation like
+ * `HEAD~3`) to its full SHA via `rev-parse --verify --quiet <ref>^{commit}` —
+ * `--verify` requires the ref resolve to a commit object, `--quiet`
+ * suppresses git's stderr noise on failure. Unlike `resolveRef`, this does
+ * not itself gate on `isSafeGitRefToken` (which rejects `~`/`^`), so callers
+ * that accept ancestor notation must validate the ref (e.g. via
+ * `isSafeGitAncestorRef`) before calling.
+ */
+export async function getRefSha(gitTop: string, ref: string): Promise<string | null> {
+  const r = await spawnGitAsync(gitTop, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   if (!r.ok) return null;
   const sha = r.stdout.trim();
   return sha === "" ? null : sha;

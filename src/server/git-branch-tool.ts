@@ -3,7 +3,12 @@ import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, spawnGitAsync } from "./git.js";
-import { isProtectedBranch, isSafeGitAncestorRef, isSafeGitRefToken } from "./git-refs.js";
+import {
+  getRefSha,
+  isProtectedBranch,
+  isSafeGitAncestorRef,
+  isSafeGitRefToken,
+} from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -21,19 +26,6 @@ type BranchResult = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Resolve a ref (branch/commit-ish) to its full SHA; `null` if unresolvable. */
-async function getRefSha(gitTop: string, ref: string): Promise<string | null> {
-  const result = await spawnGitAsync(gitTop, [
-    "rev-parse",
-    "--verify",
-    "--quiet",
-    `${ref}^{commit}`,
-  ]);
-  if (!result.ok) return null;
-  const sha = result.stdout.trim();
-  return sha === "" ? null : sha;
-}
 
 // ---------------------------------------------------------------------------
 // Tool registration

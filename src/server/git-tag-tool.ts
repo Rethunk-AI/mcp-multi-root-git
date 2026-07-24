@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
 import { gitFailureDetail, spawnGitAsync } from "./git.js";
-import { isProtectedBranch, isSafeGitCommitIsh, isSafeGitRefToken } from "./git-refs.js";
+import { getRefSha, isProtectedBranch, isSafeGitCommitIsh, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -21,15 +21,6 @@ type TagResult = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Get the SHA of a given ref (tag, commit, branch, etc).
- */
-async function getRefSha(gitTop: string, ref: string): Promise<string | null> {
-  const result = await spawnGitAsync(gitTop, ["rev-parse", ref]);
-  if (!result.ok) return null;
-  return result.stdout.trim();
-}
 
 /**
  * Check if a tag is annotated or lightweight.
