@@ -207,4 +207,23 @@ describe("git_status execute handler", () => {
     expect(group?.repos).toHaveLength(3);
     expect(group?.repos.map((r) => r.label)).toEqual([".", "sub1", "sub2"]);
   });
+
+  test("3-root fan-out with unequal per-root work stays input-order deterministic", async () => {
+    // Root-level work now runs through a bounded pool instead of a strict
+    // for-loop; giving roots different amounts of submodule work makes them
+    // finish at different times, so this proves the pool still emits results
+    // in `pre.roots` order rather than completion order.
+    const dir1 = makeRepoWithSeed("mcp-status-order-1-");
+    const dir2 = makeRepoWithSeed("mcp-status-order-2-");
+    const dir3 = makeRepoWithSeed("mcp-status-order-3-");
+    const gitmodules2 = ["a", "b"]
+      .map((name) => `[submodule "${name}"]\n  path = ${name}\n  url = https://example.com\n`)
+      .join("");
+    writeFileSync(join(dir2, ".gitmodules"), gitmodules2);
+
+    const run = captureTool(registerGitStatusTool);
+    const text = await run({ root: [dir1, dir2, dir3], format: "json" });
+    const parsed = JSON.parse(text) as { groups: Array<{ mcpRoot: string }> };
+    expect(parsed.groups.map((g) => g.mcpRoot)).toEqual([dir1, dir2, dir3]);
+  });
 });
