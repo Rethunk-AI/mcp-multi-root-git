@@ -93,6 +93,52 @@ export function writeTestGitConfig(repo: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Process mutation guards — env var / stderr monkey-patching that always
+// restores on throw. Extracted from duplicated per-file try/finally blocks;
+// prefer these over hand-rolling the same guard in a new test file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Temporarily set (or, when `value` is undefined, delete) a single env var
+ * for the duration of `fn`, restoring the prior value even if `fn` throws.
+ */
+export function withEnvVar(name: string, value: string | undefined, fn: () => void): void {
+  const saved = process.env[name];
+  try {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+    fn();
+  } finally {
+    if (saved !== undefined) process.env[name] = saved;
+    else delete process.env[name];
+  }
+}
+
+/**
+ * Capture writes to `process.stderr` for the duration of `fn` (e.g. to
+ * assert on, or silence, expected warnings), restoring the original writer
+ * even if `fn` throws. Returns the captured chunks in write order.
+ */
+export function withStderrCapture(fn: () => void): string[] {
+  const writes: string[] = [];
+  // Not forwarded to, so no need to bind — captured only to restore identity.
+  const orig = process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array, encodingOrCb?: unknown, cb?: unknown) => {
+    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    writes.push(text);
+    if (typeof encodingOrCb === "function") encodingOrCb();
+    else if (typeof cb === "function") cb();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    fn();
+  } finally {
+    process.stderr.write = orig;
+  }
+  return writes;
+}
+
+// ---------------------------------------------------------------------------
 // Fake server
 // ---------------------------------------------------------------------------
 
@@ -184,6 +230,14 @@ export function gitCmd(cwd: string, ...args: string[]): string {
   const opts: ExecSyncOptionsWithStringEncoding = {
     cwd,
     encoding: "utf8",
+    // execFileSync's default stdio leaves stdout piped (captured/returned)
+    // but lets stderr inherit the parent's — without this override, git's
+    // own stderr chatter (push/checkout/worktree status lines, hints, and
+    // the deliberate failures exercised by error-path tests) spams bun's
+    // test output across ~250 invocations. Fully piping stderr also means
+    // execFileSync attaches it to the thrown Error on failure, so per-test
+    // stderr assertions have something to read.
+    stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "Test User",

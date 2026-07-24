@@ -13,6 +13,8 @@ import {
   mkTmpDir,
   registerTmpCleanup,
   trackTmpPath,
+  withEnvVar,
+  withStderrCapture,
 } from "./test-harness.js";
 
 registerTmpCleanup();
@@ -104,5 +106,85 @@ describe("git helpers", () => {
 
   test("registerTmpCleanup is exported for per-file setup", () => {
     expect(typeof registerTmpCleanup).toBe("function");
+  });
+
+  test("gitCmd failures do not leak stderr to the parent process, and attach it to the thrown error", () => {
+    const dir = makeRepo("harness-stderr-");
+    let caughtStderr: string | undefined;
+    const writes = withStderrCapture(() => {
+      try {
+        gitCmd(dir, "show", "refs/does-not-exist");
+      } catch (err) {
+        caughtStderr = (err as { stderr?: string }).stderr;
+      }
+    });
+    expect(writes).toEqual([]);
+    expect(caughtStderr).toBeTruthy();
+    cleanupTmpPaths();
+  });
+});
+
+describe("withEnvVar", () => {
+  const PROBE = "MCP_TEST_HARNESS_ENV_PROBE";
+
+  afterEach(() => {
+    delete process.env[PROBE];
+  });
+
+  test("sets the value for the duration of fn and restores the previous value", () => {
+    process.env[PROBE] = "before";
+    withEnvVar(PROBE, "during", () => {
+      expect(process.env[PROBE]).toBe("during");
+    });
+    expect(process.env[PROBE]).toBe("before");
+  });
+
+  test("deletes the var when value is undefined, then restores the previous value", () => {
+    process.env[PROBE] = "before";
+    withEnvVar(PROBE, undefined, () => {
+      expect(process.env[PROBE]).toBeUndefined();
+    });
+    expect(process.env[PROBE]).toBe("before");
+  });
+
+  test("restores to unset when the var was unset beforehand", () => {
+    delete process.env[PROBE];
+    withEnvVar(PROBE, "during", () => {
+      expect(process.env[PROBE]).toBe("during");
+    });
+    expect(process.env[PROBE]).toBeUndefined();
+  });
+
+  test("restores the previous value even when fn throws", () => {
+    process.env[PROBE] = "before";
+    expect(() =>
+      withEnvVar(PROBE, "during", () => {
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(process.env[PROBE]).toBe("before");
+  });
+});
+
+describe("withStderrCapture", () => {
+  test("captures writes in order and restores the original writer", () => {
+    const orig = process.stderr.write;
+    const writes = withStderrCapture(() => {
+      process.stderr.write("first\n");
+      process.stderr.write("second\n");
+    });
+    expect(writes).toEqual(["first\n", "second\n"]);
+    expect(process.stderr.write).toBe(orig);
+  });
+
+  test("restores the original writer even when fn throws", () => {
+    const orig = process.stderr.write;
+    expect(() =>
+      withStderrCapture(() => {
+        process.stderr.write("oops\n");
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(process.stderr.write).toBe(orig);
   });
 });
