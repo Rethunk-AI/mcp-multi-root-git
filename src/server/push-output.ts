@@ -29,21 +29,35 @@ export function redactUrlCredentials(line: string): string {
 
 /**
  * Merge both streams (git splits state across stdout/stderr and hooks write to
- * either), keep only state-bearing lines, and account for what was dropped.
+ * either), keep only lines matching `keepPatterns`, redact credentials, and
+ * append a one-line summary of how many lines were dropped.
  */
-export function condensePushOutput(stdout: string, stderr: string): string {
+function condenseGitOutput(
+  stdout: string,
+  stderr: string,
+  keepPatterns: RegExp[],
+  omittedLabel: string,
+): string {
   const lines = [stdout, stderr]
     .join("\n")
     .split("\n")
     .filter((line) => line.trim().length > 0);
   const kept = lines
-    .filter((line) => KEEP_PATTERNS.some((p) => p.test(line)))
+    .filter((line) => keepPatterns.some((p) => p.test(line)))
     .map(redactUrlCredentials);
   const omitted = lines.length - kept.length;
   if (omitted > 0) {
-    kept.push(`(${omitted} line${omitted === 1 ? "" : "s"} of hook/progress output omitted)`);
+    kept.push(`(${omitted} line${omitted === 1 ? "" : "s"} of ${omittedLabel} omitted)`);
   }
   return kept.join("\n").trim();
+}
+
+/**
+ * Merge both streams (git splits state across stdout/stderr and hooks write to
+ * either), keep only state-bearing lines, and account for what was dropped.
+ */
+export function condensePushOutput(stdout: string, stderr: string): string {
+  return condenseGitOutput(stdout, stderr, KEEP_PATTERNS, "hook/progress output");
 }
 
 const COMMIT_KEEP_PATTERNS: RegExp[] = [
@@ -64,18 +78,5 @@ const COMMIT_KEEP_PATTERNS: RegExp[] = [
  * Failures must keep the full output, so callers only run this on success.
  */
 export function condenseCommitOutput(stdout: string, stderr: string): string {
-  const lines = [stdout, stderr]
-    .join("\n")
-    .split("\n")
-    .filter((line) => line.trim().length > 0);
-  const kept = lines
-    .filter((line) => COMMIT_KEEP_PATTERNS.some((p) => p.test(line)))
-    .map(redactUrlCredentials);
-  const omitted = lines.length - kept.length;
-  if (omitted > 0) {
-    kept.push(
-      `(${omitted} line${omitted === 1 ? "" : "s"} of commit confirmation/hook output omitted)`,
-    );
-  }
-  return kept.join("\n").trim();
+  return condenseGitOutput(stdout, stderr, COMMIT_KEEP_PATTERNS, "commit confirmation/hook output");
 }
