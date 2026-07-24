@@ -14,6 +14,7 @@ import {
   parseDiffOutput,
   parseNumstatOutput,
   registerGitDiffSummaryTool,
+  resolveDiffRangeArgs,
   truncateDiffBody,
 } from "./git-diff-summary-tool.js";
 import {
@@ -282,6 +283,44 @@ describe("buildDiffArgs", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Unit: resolveDiffRangeArgs (real refs must not be shadowed by magic strings)
+// ---------------------------------------------------------------------------
+
+describe("resolveDiffRangeArgs", () => {
+  test("no literal ref named 'staged' → falls back to --cached magic mapping", async () => {
+    const dir = makeRepo();
+    const r = await resolveDiffRangeArgs(dir, "staged");
+    expect(r).toEqual({ ok: true, args: ["--cached"] });
+  });
+
+  test("a real branch literally named 'staged' takes precedence over the magic string", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "branch", "staged");
+    const r = await resolveDiffRangeArgs(dir, "staged");
+    expect(r).toEqual({ ok: true, args: ["staged"] });
+  });
+
+  test("a real branch literally named 'head' (lowercase) takes precedence over the HEAD magic mapping", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "branch", "head");
+    const r = await resolveDiffRangeArgs(dir, "head");
+    expect(r).toEqual({ ok: true, args: ["head"] });
+  });
+
+  test("typed 'HEAD' still resolves to HEAD (real ref path and magic path agree)", async () => {
+    const dir = makeRepo();
+    const r = await resolveDiffRangeArgs(dir, "HEAD");
+    expect(r).toEqual({ ok: true, args: ["HEAD"] });
+  });
+
+  test("non-magic ranges pass through to buildDiffArgs unchanged", async () => {
+    const dir = makeRepo();
+    const r = await resolveDiffRangeArgs(dir, "main..feature");
+    expect(r).toEqual({ ok: true, args: ["main..feature"] });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Execute handler: end-to-end via fake server harness
 // ---------------------------------------------------------------------------
 
@@ -498,5 +537,43 @@ describe("git_diff_summary execute handler", () => {
     expect(renamed?.status).toBe("renamed");
     expect(renamed?.oldPath).toBe("old.ts");
     expect((renamed?.additions ?? 0) + (renamed?.deletions ?? 0)).toBeGreaterThan(0);
+  });
+
+  test("subprocess-level buffer truncation returns partial summary + truncated:true, not git_diff_failed", async () => {
+    const dir = makeRepo();
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(dir, "seed.txt"), `${"z".repeat(4000)}\n`);
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const run = captureTool(registerGitDiffSummaryTool);
+      const text = await run({ workspaceRoot: dir, format: "json" });
+      const parsed = JSON.parse(text) as { error?: string; truncated?: boolean; files?: unknown };
+
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.truncated).toBe(true);
+      expect(Array.isArray(parsed.files)).toBe(true);
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
+  });
+
+  test("range literally named 'staged' as a real branch diffs against that branch, not --cached", async () => {
+    const dir = makeRepo();
+    gitCmd(dir, "checkout", "-b", "staged");
+    addCommit(dir, "on-staged-branch.ts", "const s = 1;\n", "feat: on staged branch");
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "on-main.ts", "const m = 1;\n", "feat: on main");
+
+    const run = captureTool(registerGitDiffSummaryTool);
+    const text = await run({ workspaceRoot: dir, format: "json", range: "staged" });
+    const parsed = JSON.parse(text) as { range: string; files: Array<{ path: string }> };
+    // `git diff staged` (a real branch, not the --cached magic string) compares
+    // the working tree against that branch's tip — on-main.ts (present on
+    // main, absent from staged) must show up as a difference.
+    expect(parsed.range).toBe("staged");
+    expect(parsed.files.map((f) => f.path)).toContain("on-main.ts");
   });
 });

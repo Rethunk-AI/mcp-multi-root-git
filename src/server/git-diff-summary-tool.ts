@@ -4,8 +4,8 @@ import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
-import { isSafeGitRangeToken } from "./git-refs.js";
+import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { isSafeGitCommitIsh, isSafeGitRangeToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
@@ -51,6 +51,8 @@ interface DiffSummary {
   files: FileDiff[];
   truncatedFiles?: number;
   excludedFiles?: string[];
+  /** Present (true) only when a subprocess hit the stdout/stderr buffer cap. */
+  truncated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +218,38 @@ export function buildDiffArgs(
   return { ok: true, args: [trimmed] };
 }
 
+/**
+ * Same as `buildDiffArgs`, but first checks whether `range` is a literal ref
+ * (branch/tag/commit-ish) that exists in `gitTop` — e.g. a branch actually
+ * named "staged" or "head". A real ref of that exact name takes precedence
+ * over the synthetic `staged`/`cached`/`head` magic strings so it is never
+ * shadowed and unreachable. When no such literal ref exists, falls back to
+ * `buildDiffArgs`'s normal magic-string handling.
+ */
+export async function resolveDiffRangeArgs(
+  gitTop: string,
+  range: string | undefined,
+): Promise<{ ok: true; args: string[] } | { ok: false; error: string }> {
+  if (range !== undefined && range !== "") {
+    const trimmed = range.trim();
+    const normalized = trimmed.toLowerCase();
+    if (normalized === "staged" || normalized === "cached" || normalized === "head") {
+      if (isSafeGitCommitIsh(trimmed)) {
+        const refCheck = await spawnGitAsync(gitTop, [
+          "rev-parse",
+          "--verify",
+          "--quiet",
+          `${trimmed}^{commit}`,
+        ]);
+        if (refCheck.ok) {
+          return { ok: true, args: [trimmed] };
+        }
+      }
+    }
+  }
+  return buildDiffArgs(range);
+}
+
 /** Human-readable label for the range. */
 function rangeLabel(range: string | undefined, diffArgs: string[]): string {
   if (!range || range === "") return "unstaged changes";
@@ -274,16 +308,20 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       if (!pre.ok) return jsonRespond(pre.error);
       const gitTop = pre.gitTop;
 
-      // --- Build git diff args ---
-      const diffArgsResult = buildDiffArgs(args.range);
+      // --- Build git diff args (real refs of the same name beat staged/cached/head magic strings) ---
+      const diffArgsResult = await resolveDiffRangeArgs(gitTop, args.range);
       if (!diffArgsResult.ok) {
         return jsonRespond({ error: diffArgsResult.error });
       }
       const diffArgs = diffArgsResult.args;
 
+      const maxBufferBytes = resolveGitSubprocessMaxBufferBytes();
+
       // --- Run git diff --numstat for exact addition/deletion counts ---
-      const statResult = await spawnGitAsync(gitTop, ["diff", "--numstat", ...diffArgs]);
-      if (!statResult.ok) {
+      const statResult = await spawnGitAsync(gitTop, ["diff", "--numstat", ...diffArgs], {
+        maxBufferBytes,
+      });
+      if (!statResult.ok && !statResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (statResult.stderr || statResult.stdout).trim(),
@@ -292,13 +330,17 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       const statMap = parseNumstatOutput(statResult.stdout);
 
       // --- Run git diff ---
-      const diffResult = await spawnGitAsync(gitTop, ["diff", ...diffArgs]);
-      if (!diffResult.ok) {
+      const diffResult = await spawnGitAsync(gitTop, ["diff", ...diffArgs], { maxBufferBytes });
+      if (!diffResult.ok && !diffResult.truncated) {
         return jsonRespond({
           error: ERROR_CODES.GIT_DIFF_FAILED,
           detail: (diffResult.stderr || diffResult.stdout).trim(),
         });
       }
+      // Either subprocess hitting the buffer cap still yields usable partial
+      // output — surface it via the top-level truncated flag rather than
+      // failing the whole call.
+      const subprocessTruncated = statResult.truncated === true || diffResult.truncated === true;
 
       // --- Parse diff chunks ---
       const chunks = parseDiffOutput(diffResult.stdout);
@@ -372,6 +414,7 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
         files,
         ...spreadWhen(truncatedFileCount > 0, { truncatedFiles: truncatedFileCount }),
         ...spreadWhen(excludedFiles.length > 0, { excludedFiles }),
+        ...spreadWhen(subprocessTruncated, { truncated: true }),
       };
 
       // --- Format output ---
@@ -392,6 +435,9 @@ export function registerGitDiffSummaryTool(server: FastMCP): void {
       }
       if (truncatedFileCount > 0) {
         summaryLine += `, ${truncatedFileCount} more file(s) omitted (maxFiles=${maxFiles})`;
+      }
+      if (subprocessTruncated) {
+        summaryLine += ", underlying git output truncated (buffer cap) — result may be partial";
       }
       lines.push(summaryLine, "");
 
