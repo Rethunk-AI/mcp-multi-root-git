@@ -156,6 +156,42 @@ describe("git_tag execute handler", () => {
     expect(parsed.detail.length).toBeGreaterThan(0);
   });
 
+  test("rejects protected names (exact and release*/hotfix* pattern) for create", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    const run = captureTool(registerGitTagTool);
+
+    const createText = await run({
+      workspaceRoot: repo,
+      tag: "main",
+      format: "json",
+    });
+    expect(JSON.parse(createText)).toEqual({ error: "protected_branch", tag: "main" });
+
+    const patternText = await run({
+      workspaceRoot: repo,
+      tag: "release/1.0",
+      format: "json",
+    });
+    expect(JSON.parse(patternText)).toEqual({ error: "protected_branch", tag: "release/1.0" });
+  });
+
+  test("rejects protected names for delete, even for an existing tag", async () => {
+    const repo = makeRepoWithSeed("mcp-git-tag-test-");
+    // Bypass the tool to create the tag directly, then confirm the tool
+    // still refuses to delete a protected-name tag through the server.
+    gitCmd(repo, "tag", "prod");
+    const run = captureTool(registerGitTagTool);
+
+    const text = await run({
+      workspaceRoot: repo,
+      tag: "prod",
+      delete: true,
+      format: "json",
+    });
+    expect(JSON.parse(text)).toEqual({ error: "protected_branch", tag: "prod" });
+    expect(gitCmd(repo, "tag", "--list", "prod").trim()).not.toBe("");
+  });
+
   test("creates a tag at HEAD~1 via commit-ish ref", async () => {
     const repo = makeRepoWithSeed("mcp-git-tag-test-");
     writeFileSync(join(repo, "second.txt"), "second\n");
