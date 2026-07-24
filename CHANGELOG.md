@@ -4,6 +4,58 @@ All notable changes to `@rethunk/mcp-multi-root-git` are documented here. Format
 
 ## [Unreleased]
 
+### Added
+
+- **`git_revert_continue`** — new tool (25th registered) to resume (`action: "continue"`, default) or roll back (`action: "abort"`) a revert left in progress, mirroring `git_cherry_pick_continue`. Stateless: probes `REVERT_HEAD` live off `.git`. Errors `no_revert_in_progress`, `revert_unresolved_paths`, `revert_continue_failed`, `revert_abort_failed`.
+- **`git_revert` `onConflict`** — `"abort"` (default, unchanged) or `"pause"`: on conflict, leave the conflict and native revert sequencer state in place instead of rolling back, so it can be resolved and resumed via `git_revert_continue`. A second `git_revert` call while one is already in progress now returns `revert_in_progress` (with the conflicting `commit`) instead of the generic `working_tree_dirty`.
+- **`git_log`** — new `until` (paired with `since`), `merges: "only" | "exclude"`, `ignoreCase` (grep case-sensitivity, default `true`), and a singular `path` param unioned with `paths`.
+- **`git_grep` / `git_show`** — singular `path` param unioned with `paths`.
+- **`git_blame`** — new `authorMail`, `ignoreWhitespace` (`-w`), `detectMoves` (`-M`), `detectCopies` (`-C`); SHA-256 object-format repos now supported (`sha` may be 64 hex chars, not just 40).
+- **`git_show` `maxBytes`** — caps returned diff/stat content (default `512000`), cut at a line boundary; recognizes merge-commit combined-diff bodies (`diff --cc` / `diff --combined`), not just plain two-parent diffs.
+- **`git_conflicts` `conflictType`** — classifies each conflicted file from git's index stages (`both-modified`, `both-added`, `both-deleted`, `added-by-us`, `added-by-them`, `deleted-by-us`, `deleted-by-them`).
+- **`git_tag`** — refuses protected branch names for both create and delete (`protected_branch`, field `tag`), reusing `git_branch`/`git_merge`'s protected-names guard.
+- **`git_reset_soft` `force`** — `ref` must now be an ancestor of HEAD (`reset_not_ancestor` otherwise) unless `force: true` is passed, closing a silent-history-loss footgun.
+- **Output caps** — `git_inventory` `maxBranchStatusLines` (default 500, with `branchStatusTruncated`/`branchStatusOmittedLines`); `git_parity` `maxPairs` (default 64, hard cap 256, with `pairsTruncated`/`pairsOmittedCount`; also dedupes preset+inline pairs); `git_status` `maxChangedFiles` (default 500) / `maxSubmodules` (default 64) with matching truncation fields.
+- **Orphaned git subprocess reaper** — an `exit`/signal handler now force-kills any still-running git children so a killed server process can't leave orphaned git subprocesses behind.
+- **Session-scoped MCP root resolution** — file-root lookups for `"*"` / omitted `root` can now scope to the calling session (HTTP transports) instead of always spanning every connected session.
+- **Dependabot config** — `.github/dependabot.yml` added, with update PRs disabled (updates are applied manually; see CONTRIBUTING).
+
+### Changed
+
+- **`list_presets`** — rows now return the preset's actual `nestedRoots` / `parityPairs` arrays (omitted when empty) instead of `nestedRootsCount` / `parityPairsCount`; description shortened.
+- **`git_inventory` / `git_parity` per-root preset failures** — a `preset`/`nestedRoots` resolution problem, or (for `git_parity`) a root left with zero pairs, no longer aborts the whole call. That root instead gets a per-root error entry (`{workspaceRoot, entries: [], error}` / `{workspaceRoot, status: "MISMATCH", pairs: [], error}`) and the sweep continues over the remaining roots. Both tools also gain a top-level `warning: {code: "workspace_root_hint_mismatch", preset, hint}` when a multi-root `preset` argument's `workspaceRootHint` matches no candidate root.
+- **`git_inventory` ahead/behind `partial` flag** — when exactly one of ahead/behind could be fetched, the entry (or `compareRefs`) now carries an explicit `partial: true` instead of silently reporting an inconsistent pair as complete.
+- **`git_cherry_pick` branch deletion** — patch-id equivalence deletion now automatically falls back to strict `git branch -d` ancestry when the source branch's own history includes merge commits (patch-id can't verify a merge's unique content).
+
+### Fixed
+
+- **`batch_commit`** — a relative path that couldn't be matched to git's canonical staged name after staging is now a hard `invalid_paths` error instead of being silently dropped from the commit; absolute paths are rejected outright (`invalid_paths`, per CONTRIBUTING's mutating-tools rule); rollback on mid-entry failure now restores the **pre-call** index (`write-tree`/`read-tree` snapshot) instead of resetting to HEAD, so paths staged before the `batch_commit` call survive a failed entry.
+- **Read tools at the subprocess buffer cap** — `git_log`, `git_grep`, `git_show`, `git_blame`, `git_diff`, `git_diff_summary` now return their normal payload built from the partial output plus `truncated: true` when `spawnGitAsync` hits `GIT_SUBPROCESS_MAX_BUFFER_BYTES`, instead of failing the whole call with a `*_failed` error.
+- **`git_diff` line-boundary truncation** — `maxBytes` now cuts at a line boundary (never mid-line); a single line alone exceeding `maxBytes` is dropped whole rather than truncated mid-line.
+- **`git_diff_summary` ref shadowing** — a real ref literally named `staged`, `cached`, or `head` now takes precedence over the synthetic range magic strings instead of being permanently unreachable.
+- **`git_show` merge/combined-diff parsing** — patches for merge commits (`diff --cc` / `diff --combined`) are now recognized instead of only the plain two-parent `diff --git` form.
+- **`git_merge`** — `up_to_date` sources now receive the same cleanup fields (`branchDeleted`, `worktreeRemoved`) as every other successful outcome instead of always omitting them; a second `git_merge` call while one is already in progress now returns `merge_in_progress` (with `commit`) instead of proceeding into an inconsistent state.
+- **`git_cherry_pick`** — the too-many-commits cap is now enforced before SHA dedupe (previously dedupe could mask an oversize pick list); conflicts now carry a `cherry_pick_conflicts` error code on the `conflict` object (both the `onConflict: "abort"` successful-abort case and the `onConflict: "pause"` case).
+- **`condensePushOutput` / commit-output condensing** — mode-change (`mode change 100644 => 100755 <path>`) and forced-update ref-update lines are no longer dropped from the condensed success output.
+- **`spawnGitAsync`** — fixed a post-settle stdout/stderr accumulation bug (data arriving after the promise resolved was silently lost or double-counted) and now surfaces the real error when the child process itself fails to spawn (previously masked as a generic non-zero exit).
+- **`gateGit`** — a git-missing verdict is now re-probed after 30s instead of being cached for the life of the process, so installing git after server start is picked up without a restart.
+- **`commitPatchId`** — gained a timeout and output-size cap so a pathological diff can't hang or balloon a patch-id comparison during branch-deletion equivalence checks.
+- **Preset file wrapped-shape detection** — structural detection of the wrapped-vs-legacy-map preset file layout is hardened against a legacy preset literally named `presets` or `nestedRoots`/`parityPairs` being misidentified as the wrapper.
+- **`git_worktree_remove`** — the registration check now normalizes both the candidate and each registered worktree path (resolves symlinks, lowercases on case-insensitive filesystems) before comparing, so a symlinked alias or differently-cased path still matches its registration.
+- **`isSafeGitUpstreamToken` / `fetchAheadBehind`** — hardened token validation and ahead/behind fetch handling against additional edge cases.
+
+### Security
+
+- **`git_push` / `batch_commit` `push: "after"`** — output (both the condensed success output and `push_failed` `detail`) now redacts userinfo credentials embedded in HTTPS remote URLs (`scheme://user:pass@host` → `scheme://***@host`) before it reaches the tool result.
+
+### CI/dev
+
+- **`ci.yml`** — added run-concurrency cancellation (supersede in-progress runs on new pushes), per-job `timeout-minutes`, and a floor job pinned to the minimum supported Node version; dependency/build artifacts are now reused across jobs instead of rebuilt, and coverage output is uploaded as a workflow artifact.
+- **`release.yml`** — tightened `permissions` blocks and added a pre-publish build step immediately before `npm publish` so a stale `dist/` can't ship.
+- **Biome** — `noConsole` and `noImplicitReturns` lint rules enabled (with a `scripts/**` override for `noConsole`, since CLI scripts legitimately write to stdout/stderr).
+- **`test-harness.ts`** — tests now isolate global git config so a developer's local `~/.gitconfig` (aliases, custom hooks paths, signing settings) can't leak into fixture repos and change test behavior.
+- **`scripts/check-coverage.ts`** — logic extracted into an exported, injectable `runCheckCoverage` function with direct unit tests, instead of only being exercised indirectly via the CI pipeline.
+
 ## [5.0.0] — 2026-07-21
 
 **Breaking: `format` now defaults to `"json"` on every tool.** Callers that omitted `format` previously got markdown; they now get minified JSON. Pass `format: "markdown"` explicitly to keep the old behavior.
