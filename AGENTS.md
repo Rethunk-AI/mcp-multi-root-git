@@ -5,6 +5,7 @@ IDEs injecting this as context: do not re-link from rules.
 **Package:** [`@rethunk/mcp-multi-root-git`](https://www.npmjs.com/package/@rethunk/mcp-multi-root-git). MCP **stdio** server. Entry [`src/server.ts`](src/server.ts) → FastMCP + `registerRethunkGitTools`. Build output [`dist/server.js`](dist/server.js) (publish ships full `dist/`).
 
 **Canonical docs — do not duplicate:**
+
 - Install + per-client wiring → [docs/install.md](docs/install.md)
 - Tools, JSON shape, resources, root resolution → [docs/mcp-tools.md](docs/mcp-tools.md)
 - Dev setup, CI, commit conventions → [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -14,7 +15,7 @@ IDEs injecting this as context: do not re-link from rules.
 ## Implementation map
 
 | File | Symbols |
-|------|---------|
+| ------ | --------- |
 | [`src/server.ts`](src/server.ts) | `FastMCP` + `roots: { enabled: true }`; `MCP_JSON_FORMAT_VERSION`; `registerRethunkGitTools` |
 | [`src/server/json.ts`](src/server/json.ts) | `jsonRespond()` (minified, no envelope), `readMcpServerVersion()`, `spreadWhen`, `spreadDefined` |
 | [`src/server/git.ts`](src/server/git.ts) | `gateGit`, `spawnGitAsync` (optional `{ timeoutMs, signal }`), `asyncPool`, `GIT_SUBPROCESS_PARALLELISM`, `GIT_SUBPROCESS_TIMEOUT_MS`, `gitTopLevel`, `gitRevParseGitDir`, `gitRevParseHead`, `parseGitSubmodulePaths`, `hasGitMetadata`, `gitStatusSnapshotAsync`, `gitStatusShortBranchAsync`, `fetchAheadBehind`, `isSafeGitUpstreamToken` |
@@ -62,7 +63,7 @@ IDEs injecting this as context: do not re-link from rules.
 
 Local: `bun run build` | `bun run lint` | `bun run typecheck` | `bun run schema:tools:check` | `bun run schema:individual:check` | `bun run test`. CI ([`ci.yml`](.github/workflows/ci.yml)) runs the same gates once each on PRs + `main` after `bun install --frozen-lockfile` (schema checks, lint, typecheck, `bun run test:coverage` + `bun run coverage:check`, build), and uploads prerelease `npm pack` artifact. Tag `v*.*.*` matching `package.json` version → [`release.yml`](.github/workflows/release.yml) publishes to GitHub Packages as `@rethunk-ai/mcp-multi-root-git` + cuts GitHub Release. npmjs publish is manual (see [HUMANS.md](HUMANS.md)).
 
-Optional [`.githooks/`](.githooks): `bun run setup-hooks` once per clone. pre-commit=`lint`; pre-push=frozen install + build + lint + test.
+Optional [`.githooks/`](.githooks): `bun run setup-hooks` once per clone. pre-commit=`lint`; pre-push=`bun install --frozen-lockfile` then `bun run ci` (real gate order: `schema:tools:check` → `schema:individual:check` → `lint` → `typecheck` → `test:coverage` → `coverage:check` (80% line floor) → `build`).
 
 Path confinement: [`src/repo-paths.ts`](src/repo-paths.ts) — extend tests when changing.
 

@@ -58,7 +58,7 @@ If you installed from **GitHub Packages**, use **`./node_modules/@rethunk-ai/mcp
 1. **Wrapped (recommended):** `{ "schemaVersion": "1", "presets": { "<name>": { ... } } }`.
 2. **Legacy map:** `{ "<preset-name>": { ... } }` with optional top-level `"schemaVersion"` and `"$schema"`.
 
-Invalid JSON returns **`invalid_json`**; schema violations return **`invalid_schema`** (not a silent empty result).
+Invalid JSON or schema-violating files return **`preset_file_invalid`** with a discriminator **`kind`** of **`invalid_json`** or **`schema`** (not a silent empty result) — see [docs/mcp-tools.md](docs/mcp-tools.md) error-code tables.
 
 ### Preset entry (quick reference)
 
@@ -82,34 +82,7 @@ Maintainers regenerate and verify them as part of [CONTRIBUTING.md](CONTRIBUTING
 
 ## Sibling clone batches
 
-Pass a **`root` array** on the fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep`) when you want one read-only call to inspect independent sibling clones that are not all exposed as MCP workspace roots. This is most useful from agent workflows rooted at a parent directory or when an MCP client exposes only one repo root.
-
-Example `git_status` batch:
-
-```json
-{
-  "format": "json",
-  "root": [
-    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
-    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
-  ]
-}
-```
-
-Example `git_parity` batch using the same pair in each sibling clone:
-
-```json
-{
-  "format": "json",
-  "root": [
-    "/usr/local/src/com.github/Rethunk-AI/mcp-multi-root-git",
-    "/usr/local/src/com.github/Rethunk-AI/rethunk-github-mcp"
-  ],
-  "pairs": [{ "left": "packages/shared", "right": "apps/web/shared", "label": "shared" }]
-}
-```
-
-Multi-repo routing is read-only by design. Mutating tools such as **`batch_commit`**, **`git_push`**, **`git_merge`**, and **`git_cherry_pick`** accept only `workspaceRoot`; use it or MCP roots for writes. Full parameter rules and error codes live in **[docs/mcp-tools.md](docs/mcp-tools.md#root-resolution)**.
+Pass a **`root` array** on the fan-out read tools (`git_status`, `git_inventory`, `git_parity`, `list_presets`, `git_log`, `git_grep`) to inspect independent sibling clones not all exposed as MCP workspace roots in one read-only call. Mutating tools (`batch_commit`, `git_push`, `git_merge`, `git_cherry_pick`, etc.) accept only `workspaceRoot`. Examples, full parameter rules, and error codes: **[docs/mcp-tools.md](docs/mcp-tools.md)** — see the `git_parity` root array example and [Root resolution](docs/mcp-tools.md#root-resolution).
 
 ## Prerequisites
 
@@ -128,7 +101,7 @@ Add the server to your MCP client config under a stable name (e.g. `rethunk-git`
 Call tools by their registered id (prefix depends on client config name):
 
 | Operation | Tool |
-|-----------|------|
+| ----------- | ------ |
 | Check status across workspace roots | `git_status` |
 | Status + ahead/behind for submodules | `git_inventory` |
 | Compare HEAD between path pairs | `git_parity` |

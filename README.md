@@ -25,7 +25,7 @@ Full install, prerequisites, and MCP client wiring: [HUMANS.md](HUMANS.md) and [
 ## Highlights
 
 - **Multi-root fan-out** — `git_status`, `git_inventory`, `git_parity`, `git_log`, and `git_grep` route across one repo, an explicit list, or every MCP root (`"*"`)
-- **Structured JSON** — minified tool payloads (format version 5); optional fields omitted when empty
+- **Structured JSON** — minified tool payloads (format version 6); optional fields omitted when empty
 - **Presets** — `.rethunk/git-mcp-presets.json` at the git toplevel for nested roots and parity pairs
 - **Read and write git** — diffs, blame, conflicts, stash, `batch_commit`, push, merge, cherry-pick, revert, branches, tags, and worktrees (writes take a single `workspaceRoot`)
 - **Deliberately small surface** — 24 tools; every tool must clear the [inclusion criteria](CONTRIBUTING.md#tool-inclusion-criteria) (enforced policy on writes, fan-out call compression, or large-output compression)
@@ -34,7 +34,7 @@ Full install, prerequisites, and MCP client wiring: [HUMANS.md](HUMANS.md) and [
 ## Documentation
 
 | Doc | Audience |
-|-----|----------|
+| ----- | ---------- |
 | **[docs/install.md](docs/install.md)** | Single source for prerequisites, running the package, and every supported MCP client (plus from-source and troubleshooting) |
 | **[docs/mcp-tools.md](docs/mcp-tools.md)** | Tool ids, client naming, `format` / JSON, resource URI, workspace root resolution (canonical reference) |
 | **[schemas/index.json](schemas/index.json)** | Published JSON schemas for all MCP tool parameters (JSON Schema draft 2020-12 format) |

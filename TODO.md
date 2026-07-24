@@ -6,4 +6,4 @@ Feature asks driven by real pain points from agent sessions. Each item lists the
 
 ## Medium value — deepen current tools
 
-_(cleared)_ The three prior asks shipped: `git_grep` pickaxe (`pickaxe: { mode, term }`), `git_log` `follow` (single-path rename history), and `git_inventory` `compareRefs` (ahead/behind between arbitrary refs). See [CHANGELOG.md](CHANGELOG.md) `[Unreleased]` and [docs/mcp-tools.md](docs/mcp-tools.md).
+_(cleared)_ The three prior asks shipped: `git_grep` pickaxe (`pickaxe: { mode, term }`), `git_log` `follow` (single-path rename history), and `git_inventory` `compareRefs` (ahead/behind between arbitrary refs). See [CHANGELOG.md](CHANGELOG.md) `[3.3.0]` and [docs/mcp-tools.md](docs/mcp-tools.md).

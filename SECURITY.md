@@ -4,10 +4,11 @@
 
 **DO NOT** open a public GitHub issue for security vulnerabilities. Instead, please report them responsibly to:
 
-**Email:** security@rethunk.tech  
+**Email:** <security@rethunk.tech>  
 **Response SLA:** We aim to respond to security reports within 24 hours.
 
 When reporting a vulnerability, please include:
+
 - Description of the vulnerability
 - Affected component(s) and version(s)
 - Steps to reproduce (if applicable)
@@ -16,14 +17,14 @@ When reporting a vulnerability, please include:
 
 ## Scope & Risk Profile
 
-`mcp-multi-root-git` is an MCP **stdio** server that exposes **30** git tools to LLMs. It runs with the OS user's permissions and can read and modify local repositories the operator (or client) can reach.
+`mcp-multi-root-git` is an MCP **stdio** server that exposes **24** git tools to LLMs. It runs with the OS user's permissions and can read and modify local repositories the operator (or client) can reach.
 
-### Tool surface (30)
+### Tool surface (24)
 
 **Fan-out read** (`root`: one path, path list, or `"*"`):
 
 | Tool | Risk note |
-|------|-----------|
+| ------ | ----------- |
 | `git_status` | Working-tree / branch metadata |
 | `git_inventory` | Status + ahead/behind across roots |
 | `git_parity` | HEAD equality across path pairs |
@@ -34,7 +35,7 @@ When reporting a vulnerability, please include:
 **Single-repo read** (`workspaceRoot`):
 
 | Tool | Risk note |
-|------|-----------|
+| ------ | ----------- |
 | `git_diff_summary` | Structured diffs (truncated) |
 | `git_diff` | Raw scoped diff text |
 | `git_show` | Commit message + diff, or **file content at a ref** |
@@ -44,7 +45,7 @@ When reporting a vulnerability, please include:
 **Mutating** (`workspaceRoot` only — no multi-repo fan-out on writes):
 
 | Tool | Effect |
-|------|--------|
+| ------ | -------- |
 | `batch_commit` | Stages listed paths / hunks and creates commits; optional push-after |
 | `git_push` | Pushes current branch; **never** force-pushes |
 | `git_merge` | Merges sources into a destination; optional cleanup skips protected names |
@@ -71,16 +72,18 @@ MCP roots still matter for discovery and for `root: "*"` fan-out (session-advert
 
 ### Path confinement (file args under a chosen repo)
 
-Once a git toplevel is selected, file-path arguments (commit paths, blame path, diff paths, stash pathspecs, worktree paths, etc.) are confined with `realpath`-based checks in `src/repo-paths.ts` (`resolvePathForRepo` / `assertRelativePathUnderTop` / `isStrictlyUnderGitTop`). Paths must resolve strictly under that toplevel; symlink escape outside the chosen repo is rejected.
+Once a git toplevel is selected, file-path arguments (commit paths, blame path, diff paths, stash pathspecs, etc.) are confined with `realpath`-based checks in `src/repo-paths.ts` (`resolvePathForRepo` / `assertRelativePathUnderTop` / `isStrictlyUnderGitTop`). Paths must resolve strictly under that toplevel; symlink escape outside the chosen repo is rejected.
 
 This is **per-repo path confinement**, not an MCP-root allowlist. Choosing the wrong toplevel (see trust model above) is outside that control.
+
+**Exception — `git_worktree_add` / `git_worktree_remove` `path` is not repo-confined.** By design (`src/server/git-worktree-tool.ts`), sibling worktrees outside the chosen git toplevel are an intentional, documented use case, so `path` is **not** run through `resolvePathForRepo` / `assertRelativePathUnderTop`. The only guards are argv-injection guards: empty/whitespace-only, NUL bytes, and leading-dash / option-like basenames are rejected (`invalid_paths`) so the path can't be parsed as a git flag; the resolved path can otherwise point anywhere on disk the OS user can write (any path, not just siblings of the repo). Blast radius: a caller can create or remove a linked worktree at an arbitrary filesystem location reachable by the OS user, not just under the selected repo.
 
 ### Write operations risk
 
 Mutating tools can lose uncommitted work, move refs, create or delete branches/tags/worktrees/stashes, or publish commits. Shipped controls (not aspirational TODOs):
 
 | Control | Behavior |
-|---------|----------|
+| --------- | ---------- |
 | No force-push | `git_push` has **no** `--force` / `--force-with-lease` mode for any branch |
 | Soft reset only | `git_reset_soft` is soft; hard/mixed reset are not exposed |
 | Non-rewriting revert | `git_revert` adds inverse commits; does not rewrite tip history |
@@ -145,7 +148,7 @@ Latest release only.
 
 ## Known Vulnerabilities
 
-None currently known. Reports are welcome via security@rethunk.tech.
+None currently known. Reports are welcome via <security@rethunk.tech>.
 
 ## Testing & Validation
 
@@ -159,7 +162,7 @@ None currently known. Reports are welcome via security@rethunk.tech.
 
 If a security vulnerability is discovered:
 
-1. **Report immediately** to security@rethunk.tech (do not disclose publicly)
+1. **Report immediately** to <security@rethunk.tech> (do not disclose publicly)
 2. **Include reproduction steps** and affected version(s)
 3. **Allow 24-48 hours** for initial response and triage
 4. **Coordinate disclosure** timeline if a patch is required
@@ -167,9 +170,9 @@ If a security vulnerability is discovered:
 
 ## Contact
 
-- **Security Issues:** security@rethunk.tech
-- **General Support:** support@rethunk.tech
-- **Website:** https://rethunk.tech
+- **Security Issues:** <security@rethunk.tech>
+- **General Support:** <support@rethunk.tech>
+- **Website:** <https://rethunk.tech>
 
 ---
 
