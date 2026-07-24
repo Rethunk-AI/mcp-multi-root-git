@@ -11,10 +11,21 @@ const KEEP_PATTERNS: RegExp[] = [
   /^To\s\S/, // destination line ("To github.com:owner/repo.git")
   /^remote:/, // server-side messages (vulnerability banners, PR links)
   /^\s*[0-9a-f]+\.\.[0-9a-f]+\s+\S+\s+->\s+\S+/, // fast-forward ref update
+  /^\s*\+\s+[0-9a-f]+\.\.\.[0-9a-f]+\s+\S+\s+->\s+\S+\s+\(forced update\)/, // forced-update ref update
   /^\s*\*\s+\[new (?:branch|tag|ref)\]/, // newly created ref
   /^branch '.+' set up to track/, // -u tracking notice
   /^Everything up-to-date$/,
 ];
+
+/**
+ * Redact userinfo credentials embedded in a URL (`scheme://user:pass@host` ->
+ * `scheme://***@host`). Git echoes the remote URL verbatim on the `To <dest>`
+ * line and in failure output; when the remote uses an HTTPS PAT/credential
+ * URL, that secret must never reach the tool result.
+ */
+export function redactUrlCredentials(line: string): string {
+  return line.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^\s@/]+@/g, "$1***@");
+}
 
 /**
  * Merge both streams (git splits state across stdout/stderr and hooks write to
@@ -25,7 +36,9 @@ export function condensePushOutput(stdout: string, stderr: string): string {
     .join("\n")
     .split("\n")
     .filter((line) => line.trim().length > 0);
-  const kept = lines.filter((line) => KEEP_PATTERNS.some((p) => p.test(line)));
+  const kept = lines
+    .filter((line) => KEEP_PATTERNS.some((p) => p.test(line)))
+    .map(redactUrlCredentials);
   const omitted = lines.length - kept.length;
   if (omitted > 0) {
     kept.push(`(${omitted} line${omitted === 1 ? "" : "s"} of hook/progress output omitted)`);
@@ -36,6 +49,7 @@ export function condensePushOutput(stdout: string, stderr: string): string {
 const COMMIT_KEEP_PATTERNS: RegExp[] = [
   /^\s*\d+\s+files?\s+changed/, // diffstat summary ("2 files changed, 41 insertions(+), 2 deletions(-)")
   /^\s*(create|delete) mode \d+ /, // new/removed file mode lines
+  /^\s*mode change \d+ => \d+ /, // permission-bit change ("mode change 100644 => 100755 <path>")
   /^\s*rename .+=>.+\(\d+%\)/, // rename detection
 ];
 
@@ -54,7 +68,9 @@ export function condenseCommitOutput(stdout: string, stderr: string): string {
     .join("\n")
     .split("\n")
     .filter((line) => line.trim().length > 0);
-  const kept = lines.filter((line) => COMMIT_KEEP_PATTERNS.some((p) => p.test(line)));
+  const kept = lines
+    .filter((line) => COMMIT_KEEP_PATTERNS.some((p) => p.test(line)))
+    .map(redactUrlCredentials);
   const omitted = lines.length - kept.length;
   if (omitted > 0) {
     kept.push(

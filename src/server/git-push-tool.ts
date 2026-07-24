@@ -5,7 +5,7 @@ import { ERROR_CODES } from "./error-codes.js";
 import { isSafeGitUpstreamToken, spawnGitAsync } from "./git.js";
 import { getCurrentBranch, inferRemoteFromUpstream, isSafeGitRefToken } from "./git-refs.js";
 import { jsonRespond, spreadDefined } from "./json.js";
-import { condensePushOutput } from "./push-output.js";
+import { condensePushOutput, redactUrlCredentials } from "./push-output.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
 
@@ -100,7 +100,7 @@ export function registerGitPushTool(server: FastMCP): void {
           branch,
           remote,
           error: ERROR_CODES.PUSH_FAILED,
-          detail: (pushResult.stderr || pushResult.stdout).trim(),
+          detail: redactUrlCredentials((pushResult.stderr || pushResult.stdout).trim()),
         });
       }
 

@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { condenseCommitOutput, condensePushOutput } from "./push-output.js";
+import { condenseCommitOutput, condensePushOutput, redactUrlCredentials } from "./push-output.js";
 
 describe("condensePushOutput", () => {
   test("keeps destination and ref-update lines from stderr", () => {
@@ -70,6 +70,24 @@ describe("condensePushOutput", () => {
     const out = condensePushOutput("\n\n\n", "To github.com:owner/repo.git");
     expect(out).toBe("To github.com:owner/repo.git");
   });
+
+  test("redacts a PAT embedded in the destination URL's userinfo", () => {
+    const stderr = [
+      "To https://x-access-token:ghp_S3cr3tTok3n@github.com/owner/repo.git",
+      "   aaa1111..bbb2222  main -> main",
+    ].join("\n");
+    const out = condensePushOutput("", stderr);
+    expect(out).toContain("To https://***@github.com/owner/repo.git");
+    expect(out).not.toContain("ghp_S3cr3tTok3n");
+  });
+
+  test("keeps a forced-update ref line", () => {
+    const stderr = [
+      "To github.com:owner/repo.git",
+      " + 1234567...89abcde main -> main (forced update)",
+    ].join("\n");
+    expect(condensePushOutput("", stderr)).toBe(stderr);
+  });
 });
 
 describe("condenseCommitOutput", () => {
@@ -109,5 +127,34 @@ describe("condenseCommitOutput", () => {
 
   test("empty input returns empty string", () => {
     expect(condenseCommitOutput("", "")).toBe("");
+  });
+
+  test("keeps mode-change lines (currently misclassified as noise)", () => {
+    const stdout = [
+      "[main abc1234] chore: make script executable",
+      " 1 file changed, 0 insertions(+), 0 deletions(-)",
+      " mode change 100644 => 100755 script.sh",
+    ].join("\n");
+    const out = condenseCommitOutput(stdout, "");
+    expect(out).toContain("mode change 100644 => 100755 script.sh");
+    expect(out).not.toContain("[main abc1234]");
+  });
+});
+
+describe("redactUrlCredentials", () => {
+  test("redacts scheme://user:pass@ userinfo", () => {
+    expect(
+      redactUrlCredentials("https://x-access-token:ghp_abc123@github.com/owner/repo.git"),
+    ).toBe("https://***@github.com/owner/repo.git");
+  });
+
+  test("leaves URLs without embedded credentials untouched", () => {
+    const line = "To https://github.com/owner/repo.git";
+    expect(redactUrlCredentials(line)).toBe(line);
+  });
+
+  test("leaves non-URL lines untouched", () => {
+    const line = "   8dd82ea..e36aa4d  main -> main";
+    expect(redactUrlCredentials(line)).toBe(line);
   });
 });
