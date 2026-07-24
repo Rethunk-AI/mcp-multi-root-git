@@ -3,11 +3,19 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { spawnGitAsync } from "./git.js";
+import { resolveGitSubprocessMaxBufferBytes, spawnGitAsync } from "./git.js";
+import { GIT_DIFF_DEFAULT_MAX_BYTES, truncateDiffOutput } from "./git-diff-tool.js";
 import { isSafeGitCommitIsh } from "./git-refs.js";
 import { jsonRespond } from "./json.js";
 import { requireSingleRepo } from "./roots.js";
 import { WorkspacePickSchema } from "./schemas.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Max entries accepted in `paths` per call. */
+const MAX_PATHS = 256;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +29,8 @@ interface ShowJson {
   message: string;
   statOutput?: string;
   diff?: string;
+  /** Present (true) only when content was cut — subprocess buffer cap or maxBytes. */
+  truncated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,8 +48,9 @@ async function runGitShow(opts: {
   path?: string;
   paths?: string[];
   stat?: boolean;
+  maxBytes: number;
 }): Promise<ShowJson | { error: string; detail?: string }> {
-  const { top, ref, path, paths, stat } = opts;
+  const { top, ref, path, paths, stat, maxBytes } = opts;
 
   // Merge single path + paths array into a unified list (deduped, order preserved).
   const effectivePaths: string[] = [];
@@ -61,13 +72,18 @@ async function runGitShow(opts: {
     showArgs.push("--", ...effectivePaths);
   }
 
-  const r = await spawnGitAsync(top, showArgs);
-  if (!r.ok) {
+  const r = await spawnGitAsync(top, showArgs, {
+    maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
+  });
+  // A subprocess-level buffer cap (r.truncated) still yields a usable partial
+  // commit message + diff — build the normal payload from it instead of failing.
+  if (!r.ok && !r.truncated) {
     return {
       error: ERROR_CODES.GIT_SHOW_FAILED,
       detail: (r.stderr || r.stdout).trim(),
     };
   }
+  const subprocessTruncated = r.truncated === true;
 
   // Parse the output. For a commit, git show outputs:
   // - Header (commit, Author, Date, etc.)
@@ -101,7 +117,14 @@ async function runGitShow(opts: {
       const isStatLine =
         stat &&
         (line.match(/^\s+\S.*\|/) !== null || line.match(/^\s*\d+ files? changed/) !== null);
-      const isDiffLine = !stat && line.startsWith("diff --git");
+      // "diff --cc" (and the 3+-parent "diff --combined") introduce the
+      // combined-diff body git show emits for merge commits, in place of the
+      // usual "diff --git" per-file header.
+      const isDiffLine =
+        !stat &&
+        (line.startsWith("diff --git") ||
+          line.startsWith("diff --cc") ||
+          line.startsWith("diff --combined"));
 
       if (isStatLine || isDiffLine) {
         inMessage = false;
@@ -116,7 +139,11 @@ async function runGitShow(opts: {
   }
 
   message = messageLines.join("\n").trim();
-  const contentStr = contentLines.join("\n").trim();
+  const rawContentStr = contentLines.join("\n").trim();
+  const { text: contentStr, truncated: byteTruncated } = truncateDiffOutput(
+    rawContentStr,
+    maxBytes,
+  );
 
   const result: ShowJson = {
     ref,
@@ -135,6 +162,9 @@ async function runGitShow(opts: {
     }
   } else if (contentStr) {
     result.diff = contentStr;
+  }
+  if (subprocessTruncated || byteTruncated) {
+    result.truncated = true;
   }
   return result;
 }
@@ -177,6 +207,10 @@ function renderShowMarkdown(result: ShowJson): string {
     lines.push("```");
   }
 
+  if (result.truncated) {
+    lines.push("", "_(truncated — raise `maxBytes` or scope with `path`/`paths`)_");
+  }
+
   return lines.join("\n");
 }
 
@@ -207,15 +241,26 @@ export function registerGitShowTool(server: FastMCP): void {
         ),
       paths: z
         .array(z.string())
+        .max(MAX_PATHS)
         .optional()
         .describe(
-          "Optional list of file paths to filter the shown diff/stat. Merged with `path` when both are provided.",
+          `Optional list of file paths (max ${MAX_PATHS}) to filter the shown diff/stat. Merged with \`path\` when both are provided.`,
         ),
       stat: z
         .boolean()
         .optional()
         .describe(
           "When true, show --stat diffstat (files changed summary) instead of the full patch.",
+        ),
+      maxBytes: z
+        .number()
+        .int()
+        .min(1024)
+        .max(10_000_000)
+        .optional()
+        .default(GIT_DIFF_DEFAULT_MAX_BYTES)
+        .describe(
+          `Max UTF-8 bytes of diff/stat content to return (default ${GIT_DIFF_DEFAULT_MAX_BYTES}), cut at a line boundary. Oversized output is truncated with truncated:true.`,
         ),
     }),
     execute: async (args) => {
@@ -249,6 +294,7 @@ export function registerGitShowTool(server: FastMCP): void {
         path: args.path as string | undefined,
         paths: args.paths as string[] | undefined,
         stat: args.stat as boolean | undefined,
+        maxBytes: typeof args.maxBytes === "number" ? args.maxBytes : GIT_DIFF_DEFAULT_MAX_BYTES,
       });
 
       if ("error" in result) {

@@ -16,9 +16,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ZodTypeAny } from "zod";
 
 import { registerGitShowTool } from "./git-show-tool.js";
-import { addCommit, captureTool, cleanupTmpPaths, gitCmd, makeRepo } from "./test-harness.js";
+import {
+  addCommit,
+  captureTool,
+  captureToolDefinitions,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepo,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -225,5 +233,96 @@ describe("git_show_tool", () => {
     });
 
     expect(result).toContain("path_escapes_repo");
+  });
+
+  test("paths array schema rejects more than the max cap", () => {
+    const def = captureToolDefinitions(registerGitShowTool).find((d) => d.name === "git_show");
+    const manyPaths = Array.from({ length: 257 }, (_, i) => `f${i}.txt`);
+    const schema = def?.parameters as ZodTypeAny;
+    const result = schema.safeParse({ workspaceRoot: "/tmp", ref: "HEAD", paths: manyPaths });
+    expect(result.success).toBe(false);
+  });
+
+  test("maxBytes truncates oversized diff at a line boundary and sets truncated:true", async () => {
+    const repo = makeRepo();
+    writeFileSync(
+      join(repo, "big.txt"),
+      `${Array.from({ length: 50 }, (_, i) => `line-${i}-${"y".repeat(30)}`).join("\n")}\n`,
+    );
+    gitCmd(repo, "add", "big.txt");
+    gitCmd(repo, "commit", "-m", "feat: add big file");
+
+    const tool = captureTool(registerGitShowTool);
+    const fullText = await tool({ workspaceRoot: repo, ref: "HEAD", format: "json" });
+    const fullParsed = JSON.parse(fullText) as { diff: string };
+    const fullLines = new Set(fullParsed.diff.split("\n"));
+
+    const text = await tool({ workspaceRoot: repo, ref: "HEAD", format: "json", maxBytes: 1024 });
+    const parsed = JSON.parse(text) as { diff: string; truncated?: boolean };
+
+    expect(parsed.truncated).toBe(true);
+    expect(Buffer.byteLength(parsed.diff, "utf8")).toBeLessThanOrEqual(1024);
+    for (const line of parsed.diff.split("\n")) {
+      expect(fullLines.has(line)).toBe(true);
+    }
+  });
+
+  test("subprocess-level buffer truncation returns partial content + truncated:true, not git_show_failed", async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo, "seed.txt"), `${"z".repeat(4000)}\n`);
+    gitCmd(repo, "add", "seed.txt");
+    gitCmd(repo, "commit", "-m", "feat: big seed");
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const tool = captureTool(registerGitShowTool);
+      const text = await tool({ workspaceRoot: repo, ref: "HEAD", format: "json" });
+      const parsed = JSON.parse(text) as { error?: string; truncated?: boolean; message?: string };
+
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.truncated).toBe(true);
+      expect(typeof parsed.message).toBe("string");
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
+  });
+
+  test("merge commit combined diff (diff --cc) is recognized as diff content, not left in the message", async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo, "shared.txt"), "base\n");
+    gitCmd(repo, "add", "shared.txt");
+    gitCmd(repo, "commit", "-m", "chore: base");
+
+    gitCmd(repo, "checkout", "-b", "feature");
+    writeFileSync(join(repo, "shared.txt"), "base\nfeature-line\n");
+    gitCmd(repo, "add", "shared.txt");
+    gitCmd(repo, "commit", "-m", "feat: feature line");
+    gitCmd(repo, "checkout", "main");
+
+    writeFileSync(join(repo, "shared.txt"), "base\nmain-line\n");
+    gitCmd(repo, "add", "shared.txt");
+    gitCmd(repo, "commit", "-m", "chore: main line");
+
+    // Resolve the conflict during merge so the merge commit lands cleanly,
+    // producing a combined ("diff --cc") patch for the conflicting file.
+    try {
+      gitCmd(repo, "merge", "feature", "-q", "-m", "merge: combine");
+    } catch {
+      writeFileSync(join(repo, "shared.txt"), "base\nmain-line\nfeature-line\n");
+      gitCmd(repo, "add", "shared.txt");
+      gitCmd(repo, "commit", "--no-edit");
+    }
+
+    const tool = captureTool(registerGitShowTool);
+    const text = await tool({ workspaceRoot: repo, ref: "HEAD", format: "json" });
+    const parsed = JSON.parse(text) as { message: string; diff?: string };
+
+    expect(parsed.message).toContain("merge: combine");
+    expect(parsed.diff).toBeDefined();
+    expect(parsed.diff ?? "").toContain("diff --cc");
+    // The combined-diff body must not have leaked into the commit message.
+    expect(parsed.message).not.toContain("diff --cc");
   });
 });
