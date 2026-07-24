@@ -5,7 +5,13 @@ import { z } from "zod";
 
 import { assertRelativePathUnderTop, resolvePathForRepo } from "../repo-paths.js";
 import { ERROR_CODES } from "./error-codes.js";
-import { asyncPool, GIT_SUBPROCESS_PARALLELISM, gitTopLevel, spawnGitAsync } from "./git.js";
+import {
+  asyncPool,
+  GIT_SUBPROCESS_PARALLELISM,
+  gitTopLevel,
+  resolveGitSubprocessMaxBufferBytes,
+  spawnGitAsync,
+} from "./git.js";
 import { isSafeGitAncestorRef } from "./git-refs.js";
 import { jsonRespond, spreadDefined, spreadWhen } from "./json.js";
 import { requireGitAndRoots } from "./roots.js";
@@ -18,6 +24,8 @@ import { RootPickSchema } from "./schemas.js";
 const MAX_COMMITS_HARD_CAP = 500;
 const DEFAULT_MAX_COMMITS = 50;
 const DEFAULT_SINCE = "7.days";
+/** Max entries accepted in `paths` per call. */
+const MAX_PATHS = 256;
 
 // Field separator written by git into stdout — we use git's %x01 (SOH) escape.
 // The format string itself is safe ASCII; git emits the byte.
@@ -103,14 +111,18 @@ interface LogResult {
 async function runGitLog(opts: {
   top: string;
   since: string;
+  until: string | undefined;
   paths: string[];
   grep: string | undefined;
+  ignoreCase: boolean;
   author: string | undefined;
   maxCommits: number;
   branch: string | undefined;
   follow: boolean;
+  merges: "only" | "exclude" | undefined;
 }): Promise<LogResult | { error: string; path: string }> {
-  const { top, since, paths, grep, author, maxCommits, branch, follow } = opts;
+  const { top, since, until, paths, grep, ignoreCase, author, maxCommits, branch, follow, merges } =
+    opts;
 
   // Resolve branch first (needed for output metadata).
   const resolvedBranch = await gitCurrentBranch(top, branch);
@@ -127,6 +139,16 @@ async function runGitLog(opts: {
     `--since=${since}`,
   ];
 
+  if (until) {
+    logArgs.push(`--until=${until}`);
+  }
+
+  if (merges === "only") {
+    logArgs.push("--merges");
+  } else if (merges === "exclude") {
+    logArgs.push("--no-merges");
+  }
+
   if (follow) {
     logArgs.push("--follow");
   }
@@ -136,7 +158,8 @@ async function runGitLog(opts: {
   }
 
   if (grep?.trim()) {
-    logArgs.push(`--grep=${grep.trim()}`, "-i");
+    logArgs.push(`--grep=${grep.trim()}`);
+    if (ignoreCase) logArgs.push("-i");
   }
 
   if (author?.trim()) {
@@ -147,8 +170,12 @@ async function runGitLog(opts: {
     logArgs.push("--", ...paths);
   }
 
-  const r = await spawnGitAsync(top, logArgs);
-  if (!r.ok) {
+  const r = await spawnGitAsync(top, logArgs, {
+    maxBufferBytes: resolveGitSubprocessMaxBufferBytes(),
+  });
+  // A subprocess-level buffer cap (r.truncated) still yields usable partial
+  // history — parse and return it instead of failing outright.
+  if (!r.ok && !r.truncated) {
     return {
       error: ERROR_CODES.GIT_LOG_FAILED,
       path: top,
@@ -193,9 +220,10 @@ async function runGitLog(opts: {
     allCommits.push(commit);
   }
 
-  const truncated = allCommits.length > maxCommits;
-  const commits = truncated ? allCommits.slice(0, maxCommits) : allCommits;
-  const omittedCount = truncated ? allCommits.length - maxCommits : 0;
+  const capTruncated = allCommits.length > maxCommits;
+  const commits = capTruncated ? allCommits.slice(0, maxCommits) : allCommits;
+  const omittedCount = capTruncated ? allCommits.length - maxCommits : 0;
+  const truncated = capTruncated || r.truncated === true;
 
   return {
     workspaceRoot: top,
@@ -282,15 +310,36 @@ export function registerGitLogTool(server: FastMCP): void {
         .describe(
           "Passed to `--since=`. ISO timestamp or git relative form (`48.hours`, `2.weeks.ago`). Default: `7.days`.",
         ),
+      until: z.string().optional().describe("Passed to `--until=`. Same format as `since`."),
+      path: z
+        .string()
+        .optional()
+        .describe("Limit to commits touching this path. Unioned with `paths`."),
       paths: z
         .array(z.string())
+        .max(MAX_PATHS)
         .optional()
-        .describe("Limit to commits touching these paths (`-- <paths>`)."),
+        .describe(`Limit to commits touching these paths (max ${MAX_PATHS}, \`-- <paths>\`).`),
       grep: z
         .string()
         .optional()
-        .describe("Filter by commit message regex (git `--grep`, case-insensitive)."),
+        .describe(
+          "Filter by commit message regex (git `--grep`). Case-insensitive by default — see `ignoreCase`.",
+        ),
+      ignoreCase: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe(
+          "Case-sensitivity of `grep` (`-i`). Default true (case-insensitive); set false for case-sensitive matching, aligning with `git_grep`'s case-sensitive-by-default pickaxe.",
+        ),
       author: z.string().optional().describe("Filter by author name or email (`--author=`)."),
+      merges: z
+        .enum(["only", "exclude"])
+        .optional()
+        .describe(
+          "`only`: merge commits only (`--merges`). `exclude`: no merge commits (`--no-merges`). Omit to include both.",
+        ),
       maxCommits: z
         .number()
         .int()
@@ -314,15 +363,26 @@ export function registerGitLogTool(server: FastMCP): void {
       const pre = requireGitAndRoots(server, args, undefined);
       if (!pre.ok) return jsonRespond(pre.error);
 
-      // Validate `since` — reject obvious injection attempts (newlines, semicolons, shell chars).
+      // Validate `since`/`until` — reject obvious injection attempts (newlines, semicolons, shell chars).
       const rawSince = (args.since?.trim() ?? DEFAULT_SINCE) || DEFAULT_SINCE;
       if (/[\n\r;|&`$<>]/.test(rawSince)) {
         return jsonRespond({ error: ERROR_CODES.INVALID_SINCE, since: rawSince });
       }
+      const rawUntil = args.until?.trim() || undefined;
+      if (rawUntil && /[\n\r;|&`$<>]/.test(rawUntil)) {
+        return jsonRespond({ error: ERROR_CODES.INVALID_SINCE, until: rawUntil });
+      }
+
+      // Union singular `path` + `paths` array (dedup, order preserved).
+      const rawPathsInput: string[] = [];
+      if (args.path?.trim()) rawPathsInput.push(args.path.trim());
+      for (const p of args.paths ?? []) {
+        if (p.trim()) rawPathsInput.push(p.trim());
+      }
+      const rawPaths = [...new Set(rawPathsInput)];
 
       // Validate paths — reject anything with null bytes or shell meta.
       // Use charCodeAt(0) === 0 for the null byte to avoid a biome lint on control chars in regex.
-      const rawPaths = args.paths ?? [];
       for (const p of rawPaths) {
         if (p.split("").some((c) => c.charCodeAt(0) === 0) || /[\n\r;|&`$<>]/.test(p)) {
           return jsonRespond({ error: ERROR_CODES.INVALID_PATHS, path: p });
@@ -371,12 +431,15 @@ export function registerGitLogTool(server: FastMCP): void {
         const r = await runGitLog({
           top,
           since: rawSince,
+          until: rawUntil,
           paths: rawPaths,
           grep: args.grep,
+          ignoreCase: args.ignoreCase ?? true,
           author: args.author,
           maxCommits,
           branch: args.branch,
           follow,
+          merges: args.merges,
         });
         if ("error" in r) {
           return { _error: true as const, workspaceRoot: rootInput, error: r.error };
@@ -386,10 +449,12 @@ export function registerGitLogTool(server: FastMCP): void {
 
       // Build filter summary string for markdown.
       const filterParts: string[] = [`since: ${rawSince}`];
+      if (rawUntil) filterParts.push(`until: ${rawUntil}`);
       if (rawPaths.length > 0) filterParts.push(`paths: ${rawPaths.join(", ")}`);
       if (follow) filterParts.push("follow");
       if (args.grep) filterParts.push(`grep: ${args.grep}`);
       if (args.author) filterParts.push(`author: ${args.author}`);
+      if (args.merges) filterParts.push(`merges: ${args.merges}`);
       const filterSummary = filterParts.join(" | ");
 
       if (args.format === "json") {

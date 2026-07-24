@@ -15,9 +15,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ZodTypeAny } from "zod";
 
 import { registerGitLogTool } from "./git-log-tool.js";
-import { captureTool, cleanupTmpPaths, gitCmd, makeRepo, mkTmpDir } from "./test-harness.js";
+import {
+  captureTool,
+  captureToolDefinitions,
+  cleanupTmpPaths,
+  gitCmd,
+  makeRepo,
+  mkTmpDir,
+} from "./test-harness.js";
 
 afterEach(cleanupTmpPaths);
 
@@ -387,5 +395,159 @@ describe("git_log execute handler", () => {
     });
     const parsed = JSON.parse(text) as { groups: Array<{ error?: string }> };
     expect(parsed.groups[0]?.error).toBe("git_log_failed");
+  });
+
+  test("until excludes commits after the window", async () => {
+    const dir = makeRepo();
+    // Commits use GIT_AUTHOR_DATE=2025-01-01.
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const withinText = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      until: "2025-06-01",
+    });
+    const withinParsed = JSON.parse(withinText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    expect(withinParsed.groups[0]?.commits ?? []).toHaveLength(1);
+
+    const beforeText = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      until: "2024-06-01",
+    });
+    const beforeParsed = JSON.parse(beforeText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    expect(beforeParsed.groups[0]?.commits ?? []).toHaveLength(0);
+  });
+
+  test("invalid_since rejects shell metacharacters in until too", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.txt", "feat: a");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      until: "2025-01-01; rm -rf /",
+    });
+    const parsed = JSON.parse(text) as { error: string };
+    expect(parsed.error).toBe("invalid_since");
+  });
+
+  test("merges: only returns just the merge commit; merges: exclude drops it", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "base.txt", "feat: base");
+    gitCmd(dir, "checkout", "-b", "feature");
+    addCommit(dir, "feature.txt", "feat: on feature");
+    gitCmd(dir, "checkout", "main");
+    addCommit(dir, "main.txt", "feat: on main");
+    gitCmd(dir, "merge", "feature", "--no-ff", "-m", "merge: combine feature");
+
+    const run = captureTool(registerGitLogTool);
+    const onlyText = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      merges: "only",
+    });
+    const onlyParsed = JSON.parse(onlyText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const onlySubjects = (onlyParsed.groups[0]?.commits ?? []).map((c) => c.subject);
+    expect(onlySubjects).toEqual(["merge: combine feature"]);
+
+    const excludeText = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      merges: "exclude",
+    });
+    const excludeParsed = JSON.parse(excludeText) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const excludeSubjects = (excludeParsed.groups[0]?.commits ?? []).map((c) => c.subject);
+    expect(excludeSubjects).not.toContain("merge: combine feature");
+  });
+
+  test("path (singular) is unioned with paths, deduplicated", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.ts", "feat: a");
+    addCommit(dir, "b.ts", "feat: b");
+    addCommit(dir, "c.ts", "feat: c");
+
+    const run = captureTool(registerGitLogTool);
+    const text = await run({
+      root: dir,
+      format: "json",
+      since: SINCE_WIDE,
+      path: "a.ts",
+      paths: ["b.ts", "a.ts"],
+    });
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ commits: Array<{ subject: string }> }>;
+    };
+    const subjects = (parsed.groups[0]?.commits ?? []).map((c) => c.subject);
+    expect(subjects).toContain("feat: a");
+    expect(subjects).toContain("feat: b");
+    expect(subjects).not.toContain("feat: c");
+  });
+
+  test("ignoreCase: false makes grep case-sensitive", async () => {
+    const dir = makeRepo();
+    addCommit(dir, "a.ts", "feat: Add Widget");
+
+    const run = captureTool(registerGitLogTool);
+    const insensitive = JSON.parse(
+      await run({ root: dir, format: "json", since: SINCE_WIDE, grep: "add widget" }),
+    ) as { groups: Array<{ commits: Array<{ subject: string }> }> };
+    expect(insensitive.groups[0]?.commits ?? []).toHaveLength(1);
+
+    const sensitive = JSON.parse(
+      await run({
+        root: dir,
+        format: "json",
+        since: SINCE_WIDE,
+        grep: "add widget",
+        ignoreCase: false,
+      }),
+    ) as { groups: Array<{ commits: Array<{ subject: string }> }> };
+    expect(sensitive.groups[0]?.commits ?? []).toHaveLength(0);
+  });
+
+  test("paths array schema rejects more than the max cap", () => {
+    const def = captureToolDefinitions(registerGitLogTool).find((d) => d.name === "git_log");
+    const manyPaths = Array.from({ length: 257 }, (_, i) => `f${i}.txt`);
+    const schema = def?.parameters as ZodTypeAny;
+    const result = schema.safeParse({ root: "/tmp", paths: manyPaths });
+    expect(result.success).toBe(false);
+  });
+
+  test("subprocess-level buffer truncation returns partial groups + truncated:true, not a group error", async () => {
+    const dir = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      addCommit(dir, `f${i}.txt`, `feat: commit number ${i} with some extra padding text here`);
+    }
+
+    const prevEnv = process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+    process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = "1024";
+    try {
+      const run = captureTool(registerGitLogTool);
+      const text = await run({ root: dir, format: "json", since: SINCE_WIDE });
+      const parsed = JSON.parse(text) as {
+        groups: Array<{ error?: string; truncated?: boolean; commits?: unknown[] }>;
+      };
+      expect(parsed.groups[0]?.error).toBeUndefined();
+      expect(parsed.groups[0]?.truncated).toBe(true);
+      expect(Array.isArray(parsed.groups[0]?.commits)).toBe(true);
+    } finally {
+      if (prevEnv === undefined) delete process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES;
+      else process.env.GIT_SUBPROCESS_MAX_BUFFER_BYTES = prevEnv;
+    }
   });
 });
