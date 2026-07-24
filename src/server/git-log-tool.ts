@@ -101,8 +101,8 @@ interface LogResult {
   repo: string;
   branch: string;
   commits: CommitJson[];
-  truncated: boolean;
-  omittedCount: number;
+  truncated?: boolean;
+  omittedCount?: number;
 }
 
 /**
@@ -230,8 +230,8 @@ async function runGitLog(opts: {
     repo: basename(top),
     branch: resolvedBranch,
     commits,
-    truncated,
-    omittedCount,
+    ...spreadWhen(truncated, { truncated: true }),
+    ...spreadWhen(omittedCount > 0, { omittedCount }),
   };
 }
 
@@ -251,7 +251,7 @@ function renderLogOneline(group: LogResult, multiRoot: boolean): string {
     lines.push("(no commits)");
   }
   if (group.truncated) {
-    lines.push(`(+${group.omittedCount} more)`);
+    lines.push(`(+${group.omittedCount ?? 0} more)`);
   }
   return lines.join("\n");
 }
@@ -275,7 +275,7 @@ function renderLogMarkdown(group: LogResult, filterSummary: string): string {
   if (group.truncated) {
     lines.push("");
     lines.push(
-      `_(truncated — ${group.omittedCount} more commit(s) not shown; lower \`since\` or \`maxCommits\`)_`,
+      `_(truncated — ${group.omittedCount ?? 0} more commit(s) not shown; lower \`since\` or \`maxCommits\`)_`,
     );
   }
 
@@ -469,10 +469,7 @@ export function registerGitLogTool(server: FastMCP): void {
             } as unknown as LogGroupJson;
           }
           const { _error: _e, ...rest } = r;
-          return {
-            ...rest,
-            ...spreadWhen(r.truncated, { truncated: true, omittedCount: r.omittedCount }),
-          } as LogGroupJson;
+          return { ...rest } as LogGroupJson;
         });
         return jsonRespond({ groups } as unknown as Record<string, unknown>);
       }
