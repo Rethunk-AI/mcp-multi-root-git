@@ -97,7 +97,7 @@ jobs:
       - name: Assert Node.js version
         run: node -e "const v=+process.version.slice(1).split('.')[0]; if(v<22)process.exit(1)"
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist-${{ github.sha }}
           path: dist
